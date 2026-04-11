@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Ada Coach cerulean palette
+     * primary cerulean  #9BB7D4  → hsl(211 37% 72%)
+     * deep cerulean     #1B4F72  → hsl(206 62% 28%)
+     * white             #FFFFFF  → hsl(0 0% 100%)
+     * near-black        #0A0A0A  → hsl(0 0% 4%)
+     * gold accent       #C9A84C  → hsl(43 53% 54%)
+     */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 206 62% 28%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 211 37% 72%;
+    --secondary-foreground: 0 0% 4%;
+    --muted: 211 37% 95%;
+    --muted-foreground: 206 20% 35%;
+    --accent: 43 53% 54%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 211 37% 88%;
+    --input: 211 37% 88%;
+    --ring: 206 62% 28%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --card: 206 30% 10%;
+    --card-foreground: 0 0% 100%;
+    --popover: 206 30% 10%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 211 37% 72%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 206 62% 28%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 206 30% 15%;
+    --muted-foreground: 211 37% 72%;
+    --accent: 43 53% 54%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 206 30% 18%;
+    --input: 206 30% 18%;
+    --ring: 211 37% 72%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#1B4F72] to-[#9BB7D4];
+  }
+}
