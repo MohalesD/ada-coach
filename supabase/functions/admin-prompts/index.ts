@@ -1,5 +1,6 @@
 // Admin endpoint for managing Ada's coaching prompts.
-// Requires x-admin-key header matching ADMIN_KEY secret.
+// Requires the caller's Supabase Auth JWT (Authorization: Bearer ...);
+// access is gated to user_profiles.role in ('admin','owner').
 //
 // GET                            → list all prompts (newest first)
 // POST                           → create a prompt; auto-increments version
@@ -9,27 +10,22 @@
 // DELETE ?id=<uuid>              → delete (400 if prompt is currently active)
 
 import "@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { assertAdmin, corsHeaders, jsonResponse } from "../_shared/admin.ts";
+import {
+  corsHeaders,
+  getServiceClient,
+  jsonResponse,
+  requireAdmin,
+} from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authErr = assertAdmin(req);
-  if (authErr) return authErr;
+  const authResult = await requireAdmin(req);
+  if (authResult.error) return authResult.error;
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ error: "Supabase env not configured" }, 500);
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
+  const supabase = getServiceClient();
 
   const url = new URL(req.url);
   const id = url.searchParams.get("id");

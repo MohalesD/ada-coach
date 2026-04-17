@@ -397,7 +397,7 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.chat]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/chat/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -408,7 +408,7 @@ entrypoint = "./functions/chat/index.ts"
 
 [functions.admin-conversations]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/admin-conversations/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -419,7 +419,7 @@ entrypoint = "./functions/admin-conversations/index.ts"
 
 [functions.admin-prompts]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/admin-prompts/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

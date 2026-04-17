@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { isAdmin, useAuth } from '@/lib/auth-context';
+import ConversationSidebar from '@/components/ConversationSidebar';
 
 type ChatMessage = {
   id: string;
@@ -22,11 +25,14 @@ type ChatResponse = {
 const ERROR_MESSAGE = 'Ada is taking a moment. Please try again.';
 
 export default function Index() {
+  const { user, profile, signOut } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +70,7 @@ export default function Index() {
         return;
       }
 
+      const isNew = conversationId !== data.conversation_id;
       setConversationId(data.conversation_id);
       setMessages((prev) => [
         ...prev,
@@ -73,6 +80,8 @@ export default function Index() {
           content: data.reply,
         },
       ]);
+      if (isNew) setSidebarRefreshKey((k) => k + 1);
+      else setSidebarRefreshKey((k) => k + 1); // bump so updated_at re-sorts
     } catch {
       setError(ERROR_MESSAGE);
     } finally {
@@ -91,84 +100,145 @@ export default function Index() {
     setMessages([]);
     setConversationId(null);
     setError(null);
+    setInput('');
+  };
+
+  const loadConversation = async (id: string) => {
+    if (id === conversationId || isLoadingHistory) return;
+    setIsLoadingHistory(true);
+    setError(null);
+    setConversationId(id);
+    setMessages([]);
+
+    const { data, error: queryErr } = await supabase
+      .from('messages')
+      .select('id, role, content')
+      .eq('conversation_id', id)
+      .in('role', ['user', 'assistant'])
+      .order('created_at', { ascending: true });
+
+    if (queryErr) {
+      console.error('load conversation error:', queryErr);
+      setError('Could not load this conversation.');
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    setMessages((data ?? []) as ChatMessage[]);
+    setIsLoadingHistory(false);
   };
 
   const hasMessages = messages.length > 0;
+  const showAdminLink = isAdmin(profile);
+  const displayName = profile?.display_name || user?.email || 'You';
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-background text-foreground">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <h1 className="text-xl font-extrabold tracking-tight">
-            <span className="gradient-text">Ada</span>{' '}
-            <span className="text-muted-foreground text-sm font-medium">
-              · Customer Discovery Coach
-            </span>
-          </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={newConversation}
-            disabled={!hasMessages || isLoading}
-          >
-            New Conversation
-          </Button>
-        </div>
-      </header>
+    <div className="flex h-[100dvh] bg-background text-foreground">
+      <ConversationSidebar
+        currentConversationId={conversationId}
+        onSelect={(id) => void loadConversation(id)}
+        onNew={newConversation}
+        onArchived={(id) => {
+          if (id === conversationId) newConversation();
+        }}
+        refreshKey={sidebarRefreshKey}
+      />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 px-6 py-8">
-          {!hasMessages && !isLoading && (
-            <div className="m-auto max-w-md text-center">
-              <p className="text-accent text-[11px] font-semibold uppercase tracking-[0.2em]">
-                Start a session
-              </p>
-              <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-                Tell Ada about your product idea, a customer you're trying to
-                understand, or an assumption you want to pressure-test.
-              </p>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="border-b border-border">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
+            <h1 className="truncate text-xl font-extrabold tracking-tight">
+              <span className="gradient-text">Ada</span>{' '}
+              <span className="text-muted-foreground text-sm font-medium">
+                · Customer Discovery Coach
+              </span>
+            </h1>
+            <div className="flex items-center gap-3">
+              {showAdminLink && (
+                <Link
+                  to="/admin"
+                  className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
+                >
+                  Admin
+                </Link>
+              )}
+              <span
+                className="hidden max-w-[160px] truncate text-sm text-muted-foreground sm:inline"
+                title={user?.email ?? undefined}
+              >
+                {displayName}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void signOut()}
+              >
+                Log out
+              </Button>
             </div>
-          )}
+          </div>
+        </header>
 
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 px-6 py-8">
+            {!hasMessages && !isLoading && !isLoadingHistory && (
+              <div className="m-auto max-w-md text-center">
+                <p className="text-accent text-[11px] font-semibold uppercase tracking-[0.2em]">
+                  Start a session
+                </p>
+                <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+                  Tell Ada about your product idea, a customer you're trying to
+                  understand, or an assumption you want to pressure-test.
+                </p>
+              </div>
+            )}
 
-          {isLoading && <TypingIndicator />}
+            {isLoadingHistory && (
+              <p className="m-auto text-sm text-muted-foreground">
+                Loading conversation...
+              </p>
+            )}
 
-          {error && (
-            <div
-              role="alert"
-              className="mr-auto max-w-[80%] rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+
+            {isLoading && <TypingIndicator />}
+
+            {error && (
+              <div
+                role="alert"
+                className="mr-auto max-w-[80%] rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {error}
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+        </main>
+
+        <footer className="border-t border-border bg-background">
+          <div className="mx-auto flex max-w-3xl items-end gap-3 px-6 py-4">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask Ada anything about customer discovery..."
+              rows={1}
+              disabled={isLoading}
+              className="min-h-[44px] resize-none"
+            />
+            <Button
+              onClick={() => void send()}
+              disabled={!input.trim() || isLoading}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {error}
-            </div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-      </main>
-
-      <footer className="border-t border-border bg-background">
-        <div className="mx-auto flex max-w-3xl items-end gap-3 px-6 py-4">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask Ada anything about customer discovery..."
-            rows={1}
-            disabled={isLoading}
-            className="min-h-[44px] resize-none"
-          />
-          <Button
-            onClick={() => void send()}
-            disabled={!input.trim() || isLoading}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Send
-          </Button>
-        </div>
-      </footer>
+              Send
+            </Button>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

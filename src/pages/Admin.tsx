@@ -4,6 +4,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,35 +40,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 import {
   activatePrompt,
-  clearAdminKey,
   createPrompt,
   deletePrompt,
-  getAdminKey,
   getConversation,
   listConversations,
   listPrompts,
-  setAdminKey,
   updateConversationStatus,
   updatePrompt,
-  verifyAdminKey,
   type CoachingPrompt,
   type ConversationDetail,
   type ConversationSummary,
 } from '@/lib/admin-api';
 
 export default function Admin() {
-  const [authed, setAuthed] = useState<boolean>(() => !!getAdminKey());
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
 
-  const handleLogout = useCallback(() => {
-    clearAdminKey();
-    setAuthed(false);
-  }, []);
-
-  if (!authed) {
-    return <LoginScreen onSuccess={() => setAuthed(true)} />;
-  }
+  const handleUnauthorized = useCallback(() => {
+    // Server rejected us (token expired or role revoked) — bounce to chat.
+    navigate('/', { replace: true });
+  }, [navigate]);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -81,9 +76,17 @@ export default function Admin() {
               <span className="gradient-text">Ada</span> Control Panel
             </h1>
           </div>
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            Log out
-          </Button>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              ← Back to chat
+            </Link>
+            <Button variant="outline" size="sm" onClick={() => void signOut()}>
+              Log out
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -95,90 +98,14 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="conversations" className="mt-6">
-            <ConversationsTab onUnauthorized={handleLogout} />
+            <ConversationsTab onUnauthorized={handleUnauthorized} />
           </TabsContent>
 
           <TabsContent value="prompts" className="mt-6">
-            <PromptsTab onUnauthorized={handleLogout} />
+            <PromptsTab onUnauthorized={handleUnauthorized} />
           </TabsContent>
         </Tabs>
       </main>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────
-// Login screen
-// ──────────────────────────────────────────────────────────────────
-
-function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!password || isLoading) return;
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const ok = await verifyAdminKey(password);
-      if (!ok) {
-        setError('Incorrect password.');
-        return;
-      }
-      setAdminKey(password);
-      onSuccess();
-    } catch {
-      setError('Could not reach the admin service. Try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
-            Admin Access
-          </p>
-          <CardTitle>
-            <span className="gradient-text">Ada</span> Control Panel
-          </CardTitle>
-          <CardDescription>
-            Enter the admin password to manage conversations and prompts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="admin-password">Password</Label>
-              <Input
-                id="admin-password"
-                type="password"
-                autoFocus
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-            {error && (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            )}
-            <Button
-              type="submit"
-              disabled={!password || isLoading}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {isLoading ? 'Checking...' : 'Enter'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
 }

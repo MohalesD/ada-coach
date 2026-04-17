@@ -1,16 +1,18 @@
 // Ada Coach /chat Edge Function
 // Accepts a PM's message, calls Claude with the active coaching prompt,
 // persists the exchange, returns the reply.
+//
+// Auth: requires a valid Supabase Auth JWT in the Authorization header.
+// - userClient (anon + JWT) enforces RLS for ownership checks.
+// - serviceClient (service_role) writes messages and touches conversations.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "content-type, authorization, apikey, x-client-info",
-};
+import {
+  corsHeaders,
+  getServiceClient,
+  jsonResponse,
+  requireUser,
+} from "../_shared/auth.ts";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5-20251001";
@@ -24,13 +26,6 @@ type ChatRequest = {
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "content-type": "application/json" },
-  });
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -39,6 +34,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
+
+  const authResult = await requireUser(req);
+  if (authResult.error) return authResult.error;
+  const { user, userClient } = authResult;
 
   try {
     const body = (await req.json()) as ChatRequest;
@@ -50,28 +49,41 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "message is required" }, 400);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-
-    if (!supabaseUrl || !serviceRoleKey || !anthropicKey) {
-      console.error("Missing required environment variables");
+    if (!anthropicKey) {
+      console.error("Missing ANTHROPIC_API_KEY");
       return jsonResponse(
         { error: "Ada is not configured correctly. Please try again later." },
         500,
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
+    const service = getServiceClient();
 
-    // 1. Resolve or create the conversation
+    // 1. Resolve or create the conversation (ownership enforced by RLS)
     let conversationId = conversationIdInput;
-    if (!conversationId) {
-      const { data: newConv, error: convErr } = await supabase
+    if (conversationId) {
+      // RLS: returns the row only if user_id = auth.uid()
+      const { data: existing, error: ownErr } = await userClient
         .from("conversations")
-        .insert({ title: message.slice(0, 50) })
+        .select("id")
+        .eq("id", conversationId)
+        .maybeSingle();
+
+      if (ownErr) {
+        console.error("ownership check failed:", ownErr);
+        return jsonResponse({ error: "Could not load conversation." }, 500);
+      }
+      if (!existing) {
+        return jsonResponse({ error: "Conversation not found" }, 404);
+      }
+    } else {
+      const { data: newConv, error: convErr } = await service
+        .from("conversations")
+        .insert({
+          title: message.slice(0, 50),
+          user_id: user.id,
+        })
         .select("id")
         .single();
 
@@ -85,8 +97,9 @@ Deno.serve(async (req) => {
       conversationId = newConv.id;
     }
 
-    // 2. Fetch last N messages for context
-    const { data: history, error: historyErr } = await supabase
+    // 2. Fetch last N messages for context (service role; conversation
+    //    already verified to belong to this user above).
+    const { data: history, error: historyErr } = await service
       .from("messages")
       .select("role, content")
       .eq("conversation_id", conversationId)
@@ -100,7 +113,7 @@ Deno.serve(async (req) => {
     }
 
     // 3. Fetch the active coaching prompt
-    const { data: activePrompt, error: promptErr } = await supabase
+    const { data: activePrompt, error: promptErr } = await service
       .from("coaching_prompts")
       .select("prompt_text")
       .eq("is_active", true)
@@ -175,7 +188,7 @@ Deno.serve(async (req) => {
         : null;
 
     // 5. Persist user message
-    const { error: userMsgErr } = await supabase.from("messages").insert({
+    const { error: userMsgErr } = await service.from("messages").insert({
       conversation_id: conversationId,
       role: "user",
       content: message,
@@ -188,7 +201,7 @@ Deno.serve(async (req) => {
     }
 
     // 6. Persist assistant message
-    const { data: assistantMsg, error: assistantMsgErr } = await supabase
+    const { data: assistantMsg, error: assistantMsgErr } = await service
       .from("messages")
       .insert({
         conversation_id: conversationId,
@@ -204,8 +217,8 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Could not save Ada's reply." }, 500);
     }
 
-    // 7. Touch conversation updated_at so it sorts to the top in admin lists
-    await supabase
+    // 7. Touch conversation updated_at so it sorts to the top
+    await service
       .from("conversations")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId);

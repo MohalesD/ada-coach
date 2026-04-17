@@ -1,19 +1,8 @@
-// Thin client for the admin-* Edge Functions. Stores the admin key
-// (password) in sessionStorage so it clears when the tab closes.
+// Thin client for the admin-* Edge Functions.
+// Auth: forwards the current Supabase Auth session JWT. Role gating
+// (admin/owner) happens server-side via requireAdmin.
 
-const ADMIN_KEY_STORAGE = 'ada-admin-key';
-
-export function getAdminKey(): string | null {
-  return sessionStorage.getItem(ADMIN_KEY_STORAGE);
-}
-
-export function setAdminKey(key: string): void {
-  sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
-}
-
-export function clearAdminKey(): void {
-  sessionStorage.removeItem(ADMIN_KEY_STORAGE);
-}
+import { supabase } from './supabase';
 
 export class UnauthorizedError extends Error {
   constructor() {
@@ -26,15 +15,15 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   params?: Record<string, string>;
   body?: unknown;
-  adminKeyOverride?: string;
 };
 
 async function adminFetch<T>(
   functionName: string,
   opts: RequestOptions = {},
 ): Promise<T> {
-  const key = opts.adminKeyOverride ?? getAdminKey();
-  if (!key) throw new UnauthorizedError();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new UnauthorizedError();
 
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -51,14 +40,13 @@ async function adminFetch<T>(
     method: opts.method ?? 'GET',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${anonKey}`,
-      'x-admin-key': key,
+      authorization: `Bearer ${token}`,
+      apikey: anonKey,
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
 
-  if (response.status === 401) {
-    clearAdminKey();
+  if (response.status === 401 || response.status === 403) {
     throw new UnauthorizedError();
   }
 
@@ -108,18 +96,6 @@ export type CoachingPrompt = {
   updated_at: string;
   notes: string | null;
 };
-
-// ── Auth probe ────────────────────────────────────────────────────
-
-export async function verifyAdminKey(key: string): Promise<boolean> {
-  try {
-    await adminFetch('admin-conversations', { adminKeyOverride: key });
-    return true;
-  } catch (err) {
-    if (err instanceof UnauthorizedError) return false;
-    throw err;
-  }
-}
 
 // ── Conversations ─────────────────────────────────────────────────
 
