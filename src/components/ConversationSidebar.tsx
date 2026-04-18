@@ -318,8 +318,8 @@ function PinIcon({ active }: { active: boolean }) {
       width="13"
       height="13"
       viewBox="0 0 24 24"
-      fill={active ? '#9BB7D4' : 'none'}
-      stroke={active ? '#9BB7D4' : 'currentColor'}
+      fill={active ? '#C9A84C' : 'none'}
+      stroke={active ? '#C9A84C' : 'currentColor'}
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
