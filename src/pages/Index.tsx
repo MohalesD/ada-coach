@@ -18,6 +18,7 @@ import { isAdmin, useAuth, type UserProfile } from '@/lib/auth-context';
 import type { User } from '@supabase/supabase-js';
 import ConversationSidebar from '@/components/ConversationSidebar';
 import { useFeedback, type FeedbackValue } from '@/hooks/use-feedback';
+import { exportConversation } from '@/lib/export';
 
 type MessageKind = 'message' | 'summary';
 
@@ -39,6 +40,8 @@ type ChatResponse = {
 
 const ERROR_MESSAGE = 'Ada is taking a moment. Please try again.';
 const SUMMARY_SENTINEL = '__SUMMARY__';
+
+type ConversationMeta = { id: string; title: string | null; created_at: string };
 
 // ─── Scenarios ────────────────────────────────────────────────────────────────
 
@@ -106,6 +109,7 @@ export default function Index() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const [conversationMeta, setConversationMeta] = useState<ConversationMeta | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -157,8 +161,15 @@ export default function Index() {
           content: data.reply,
         },
       ]);
-      if (isNew) setSidebarRefreshKey((k) => k + 1);
-      else setSidebarRefreshKey((k) => k + 1);
+      setSidebarRefreshKey((k) => k + 1);
+      if (isNew) {
+        const { data: meta } = await supabase
+          .from('conversations')
+          .select('id, title, created_at')
+          .eq('id', data.conversation_id)
+          .maybeSingle();
+        if (meta) setConversationMeta(meta as ConversationMeta);
+      }
     } catch {
       setError(ERROR_MESSAGE);
     } finally {
@@ -203,6 +214,16 @@ export default function Index() {
     }
   };
 
+  const handleExport = () => {
+    if (!conversationMeta) return;
+    try {
+      exportConversation(conversationMeta, messages);
+      toast.success('Session exported successfully.');
+    } catch {
+      toast.error('Could not export session. Please try again.');
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -213,6 +234,7 @@ export default function Index() {
   const newConversation = () => {
     setMessages([]);
     setConversationId(null);
+    setConversationMeta(null);
     setError(null);
     setInput('');
   };
@@ -222,30 +244,39 @@ export default function Index() {
     setIsLoadingHistory(true);
     setError(null);
     setConversationId(id);
+    setConversationMeta(null);
     setMessages([]);
 
-    const { data, error: queryErr } = await supabase
-      .from('messages')
-      .select('id, role, content, feedback, kind')
-      .eq('conversation_id', id)
-      .in('role', ['user', 'assistant'])
-      .order('created_at', { ascending: true });
+    const [messagesResult, metaResult] = await Promise.all([
+      supabase
+        .from('messages')
+        .select('id, role, content, feedback, kind')
+        .eq('conversation_id', id)
+        .in('role', ['user', 'assistant'])
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('conversations')
+        .select('id, title, created_at')
+        .eq('id', id)
+        .maybeSingle(),
+    ]);
 
-    if (queryErr) {
-      console.error('load conversation error:', queryErr);
+    if (messagesResult.error) {
+      console.error('load conversation error:', messagesResult.error);
       setError('Could not load this conversation.');
       setIsLoadingHistory(false);
       return;
     }
 
-    setMessages((data ?? []) as ChatMessage[]);
+    setMessages((messagesResult.data ?? []) as ChatMessage[]);
+    if (metaResult.data) setConversationMeta(metaResult.data as ConversationMeta);
     setIsLoadingHistory(false);
   };
 
   const selectScenario = (scenario: Scenario) => {
-    // Reset to a clean new conversation then fire the opening message
     setMessages([]);
     setConversationId(null);
+    setConversationMeta(null);
     setError(null);
     setInput('');
     void send(scenario.openingMessage);
@@ -317,22 +348,40 @@ export default function Index() {
 
         <footer className="border-t border-border bg-background">
           <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-4">
-            {messages.length >= 4 && (
-              <div className="flex">
+            {messages.length >= 2 && (
+              <div className="flex flex-wrap gap-2">
+                {messages.length >= 4 && (
+                  <button
+                    type="button"
+                    onClick={() => void requestSummary()}
+                    disabled={isBusy}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border border-[#9BB7D4]/40 bg-background px-3 py-1.5',
+                      'text-xs font-medium text-muted-foreground transition-colors',
+                      'hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/5 hover:text-[#1B4F72]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+                      'disabled:cursor-not-allowed disabled:opacity-50',
+                    )}
+                  >
+                    <SummaryIcon />
+                    {isSummarizing ? 'Summarizing…' : 'Summarize session'}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => void requestSummary()}
-                  disabled={isBusy}
+                  onClick={handleExport}
+                  disabled={isBusy || !conversationMeta}
+                  title={!conversationMeta ? 'Send a message first to enable export' : undefined}
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-md border border-[#9BB7D4]/40 bg-background px-3 py-1.5',
                     'text-xs font-medium text-muted-foreground transition-colors',
-                    'hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/5 hover:text-[#1B4F72]',
+                    'hover:border-[#9BB7D4]/60 hover:bg-[#9BB7D4]/5 hover:text-[#1B4F72]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                   )}
                 >
-                  <SummaryIcon />
-                  {isSummarizing ? 'Summarizing…' : 'Summarize session'}
+                  <ExportIcon />
+                  Export session
                 </button>
               </div>
             )}
@@ -683,6 +732,16 @@ function SummaryIcon() {
       <polyline points="14 2 14 8 20 8" />
       <line x1="8" y1="13" x2="16" y2="13" />
       <line x1="8" y1="17" x2="13" y2="17" />
+    </svg>
+  );
+}
+
+function ExportIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
     </svg>
   );
 }
