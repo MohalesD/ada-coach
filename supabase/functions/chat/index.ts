@@ -143,12 +143,13 @@ Deno.serve(async (req) => {
 
     // 3. Resolve the system prompt
     let systemPrompt: string;
+    let activePromptId: string | null = null;
     if (isSummary) {
       systemPrompt = SUMMARY_SYSTEM_PROMPT;
     } else {
       const { data: activePrompt, error: promptErr } = await service
         .from("coaching_prompts")
-        .select("prompt_text")
+        .select("id, prompt_text")
         .eq("is_active", true)
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -167,6 +168,7 @@ Deno.serve(async (req) => {
         );
       }
       systemPrompt = activePrompt.prompt_text;
+      activePromptId = activePrompt.id;
     }
 
     // 4. Build Anthropic request. For summary requests we append a
@@ -253,6 +255,7 @@ Deno.serve(async (req) => {
         content: replyText,
         token_count: outputTokens,
         kind: isSummary ? "summary" : "message",
+        coaching_prompt_id: activePromptId,
       })
       .select("id")
       .single();

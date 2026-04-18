@@ -171,3 +171,57 @@ export async function deletePrompt(id: string): Promise<void> {
     params: { id },
   });
 }
+
+// ── Insights ──────────────────────────────────────────────────────
+
+export type ConversationStat = {
+  conversation_id: string;
+  title: string | null;
+  message_count: number;
+  positive: number;
+  negative: number;
+};
+
+export type PromptStat = {
+  prompt_id: string | null;
+  name: string;
+  version: number | null;
+  responses: number;
+  positive: number;
+  negative: number;
+  positive_rate: number;
+};
+
+export type RecentFeedbackEvent = {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string | null;
+  excerpt: string;
+  feedback: 'positive' | 'negative';
+  created_at: string;
+};
+
+export type InsightsResponse = {
+  totals: {
+    conversations: number;
+    messages: number;
+    assistant_messages: number;
+    feedback_count: number;
+    positive: number;
+    negative: number;
+  };
+  rates: {
+    feedback_rate: number;
+    positive_rate: number;
+  };
+  per_conversation: ConversationStat[];
+  per_prompt: PromptStat[];
+  top_positive: ConversationStat[];
+  top_negative: ConversationStat[];
+  recent_feedback: RecentFeedbackEvent[];
+  generated_at: string;
+};
+
+export async function getInsights(): Promise<InsightsResponse> {
+  return await adminFetch<InsightsResponse>('admin-insights');
+}

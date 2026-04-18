@@ -46,23 +46,34 @@ import {
   createPrompt,
   deletePrompt,
   getConversation,
+  getInsights,
   listConversations,
   listPrompts,
   updateConversationStatus,
   updatePrompt,
   type CoachingPrompt,
   type ConversationDetail,
+  type ConversationStat,
   type ConversationSummary,
+  type InsightsResponse,
+  type PromptStat,
+  type RecentFeedbackEvent,
 } from '@/lib/admin-api';
 
 export default function Admin() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('conversations');
+  const [pendingExpandId, setPendingExpandId] = useState<string | null>(null);
 
   const handleUnauthorized = useCallback(() => {
-    // Server rejected us (token expired or role revoked) — bounce to chat.
     navigate('/', { replace: true });
   }, [navigate]);
+
+  const handleDeepLink = useCallback((conversationId: string) => {
+    setActiveTab('conversations');
+    setPendingExpandId(conversationId);
+  }, []);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -91,18 +102,30 @@ export default function Admin() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
-        <Tabs defaultValue="conversations" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList>
             <TabsTrigger value="conversations">Conversations</TabsTrigger>
             <TabsTrigger value="prompts">Coaching Prompts</TabsTrigger>
+            <TabsTrigger value="insights">Insights</TabsTrigger>
           </TabsList>
 
           <TabsContent value="conversations" className="mt-6">
-            <ConversationsTab onUnauthorized={handleUnauthorized} />
+            <ConversationsTab
+              onUnauthorized={handleUnauthorized}
+              pendingExpandId={pendingExpandId}
+              onConsume={() => setPendingExpandId(null)}
+            />
           </TabsContent>
 
           <TabsContent value="prompts" className="mt-6">
             <PromptsTab onUnauthorized={handleUnauthorized} />
+          </TabsContent>
+
+          <TabsContent value="insights" className="mt-6">
+            <InsightsTab
+              onUnauthorized={handleUnauthorized}
+              onDeepLink={handleDeepLink}
+            />
           </TabsContent>
         </Tabs>
       </main>
@@ -114,7 +137,15 @@ export default function Admin() {
 // Conversations tab
 // ──────────────────────────────────────────────────────────────────
 
-function ConversationsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+function ConversationsTab({
+  onUnauthorized,
+  pendingExpandId,
+  onConsume,
+}: {
+  onUnauthorized: () => void;
+  pendingExpandId?: string | null;
+  onConsume?: () => void;
+}) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<ConversationDetail | null>(
@@ -144,6 +175,32 @@ function ConversationsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Deep-link from Insights tab: always expand (no toggle) once initial
+  // load is done, then clear the pending id so re-clicks re-trigger it.
+  useEffect(() => {
+    if (!pendingExpandId || isLoading) return;
+    const targetId = pendingExpandId;
+    onConsume?.();
+    setExpandedId(targetId);
+    setExpandedDetail(null);
+    setIsDetailLoading(true);
+    (async () => {
+      try {
+        const detail = await getConversation(targetId);
+        setExpandedDetail(detail);
+      } catch (err) {
+        if ((err as Error).name === 'UnauthorizedError') {
+          onUnauthorized();
+          return;
+        }
+        setError((err as Error).message);
+      } finally {
+        setIsDetailLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingExpandId, isLoading]);
 
   const handleExpand = async (id: string) => {
     if (expandedId === id) {
@@ -652,6 +709,539 @@ function PromptRow({
       </div>
     </div>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Insights tab
+// ──────────────────────────────────────────────────────────────────
+
+function InsightsTab({
+  onUnauthorized,
+  onDeepLink,
+}: {
+  onUnauthorized: () => void;
+  onDeepLink: (conversationId: string) => void;
+}) {
+  const [data, setData] = useState<InsightsResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await getInsights();
+      setData(res);
+      setLastUpdated(new Date());
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      setError((err as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const isEmpty =
+    data &&
+    data.totals.assistant_messages === 0 &&
+    data.totals.feedback_count === 0;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Insights</h2>
+          <p className="text-xs text-muted-foreground">
+            {lastUpdated
+              ? `Updated ${formatRelative(lastUpdated)}`
+              : isLoading
+                ? 'Loading…'
+                : 'Not yet loaded'}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void refresh()}
+          disabled={isLoading}
+          aria-label="Refresh insights"
+        >
+          <RefreshIcon spinning={isLoading} />
+          <span className="ml-1.5">{isLoading ? 'Refreshing…' : 'Refresh'}</span>
+        </Button>
+      </div>
+
+      {/* Error */}
+      {error && !isLoading && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div>
+              <p className="text-sm font-semibold text-destructive">
+                Could not load insights
+              </p>
+              <p className="text-xs text-muted-foreground">{error}</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void refresh()}
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading skeleton */}
+      {isLoading && !data && <InsightsSkeleton />}
+
+      {/* Empty */}
+      {!isLoading && !error && isEmpty && (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-sm font-medium text-foreground">
+              No feedback data yet.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Share Ada with users and encourage them to rate responses.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loaded */}
+      {!isLoading && !error && data && !isEmpty && (
+        <>
+          {/* Top metric cards */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Coaching sessions"
+              value={data.totals.conversations.toLocaleString()}
+              subtext="Total conversations"
+            />
+            <MetricCard
+              label="Feedback rate"
+              value={formatPercent(data.rates.feedback_rate)}
+              subtext={`${data.totals.feedback_count.toLocaleString()} of ${data.totals.assistant_messages.toLocaleString()} responses rated`}
+            />
+            <MetricCard
+              label="Positive rate"
+              value={formatPercent(data.rates.positive_rate)}
+              subtext={`${data.totals.positive.toLocaleString()} positive · ${data.totals.negative.toLocaleString()} negative`}
+              accent={
+                data.totals.feedback_count > 0 && data.rates.positive_rate >= 0.8
+                  ? 'gold'
+                  : undefined
+              }
+            />
+            <MetricCard
+              label="Messages exchanged"
+              value={data.totals.messages.toLocaleString()}
+              subtext="All roles, all conversations"
+            />
+          </div>
+
+          {/* Middle: prompt performance + recent feedback */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PromptPerformanceCard prompts={data.per_prompt} />
+            <RecentFeedbackCard
+              events={data.recent_feedback}
+              onDeepLink={onDeepLink}
+            />
+          </div>
+
+          {/* Bottom: conversation quality ranking */}
+          <ConversationRankingCard
+            topPositive={data.top_positive}
+            topNegative={data.top_negative}
+            onDeepLink={onDeepLink}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Metric card ────────────────────────────────────────────────────
+
+function MetricCard({
+  label,
+  value,
+  subtext,
+  accent,
+}: {
+  label: string;
+  value: string;
+  subtext: string;
+  accent?: 'gold';
+}) {
+  return (
+    <Card
+      className={cn(
+        'border-[#9BB7D4]/40',
+        accent === 'gold' && 'border-[#C9A84C] bg-[#C9A84C]/5',
+      )}
+    >
+      <CardContent className="py-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={cn(
+            'mt-1 text-3xl font-bold tracking-tight',
+            accent === 'gold' ? 'text-[#C9A84C]' : 'text-foreground',
+          )}
+        >
+          {value}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{subtext}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Prompt performance ────────────────────────────────────────────
+
+function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Coaching prompt performance</CardTitle>
+        <CardDescription>
+          Responses generated per prompt and how they were rated
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {prompts.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">
+            No assistant responses yet.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Prompt</TableHead>
+                <TableHead className="w-20 text-right">Responses</TableHead>
+                <TableHead className="w-24 text-right">Positive %</TableHead>
+                <TableHead className="w-20 text-right">Negative</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {prompts.map((p) => {
+                const hasFeedback = p.positive + p.negative > 0;
+                return (
+                  <TableRow key={p.prompt_id ?? '__untagged__'}>
+                    <TableCell>
+                      <div className="font-medium">{p.name}</div>
+                      {p.version !== null && (
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          v{p.version}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{p.responses}</TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right font-medium',
+                        hasFeedback && p.positive_rate >= 0.8
+                          ? 'text-[#C9A84C]'
+                          : !hasFeedback
+                            ? 'text-muted-foreground'
+                            : 'text-foreground',
+                      )}
+                    >
+                      {hasFeedback ? formatPercent(p.positive_rate) : '—'}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right',
+                        p.negative > 0 ? 'text-[#C2185B]' : 'text-muted-foreground',
+                      )}
+                    >
+                      {p.negative}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Recent feedback ───────────────────────────────────────────────
+
+function RecentFeedbackCard({
+  events,
+  onDeepLink,
+}: {
+  events: RecentFeedbackEvent[];
+  onDeepLink: (conversationId: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Recent feedback</CardTitle>
+        <CardDescription>
+          Last {events.length} ratings from PMs · approximate (ordered by message time)
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {events.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">
+            No feedback yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {events.map((e) => (
+              <li
+                key={e.message_id}
+                className="flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3"
+              >
+                <span
+                  className={cn(
+                    'mt-0.5 shrink-0',
+                    e.feedback === 'positive' ? 'text-[#C9A84C]' : 'text-[#C2185B]',
+                  )}
+                  aria-label={e.feedback === 'positive' ? 'Positive' : 'Negative'}
+                  title={e.feedback === 'positive' ? 'Positive' : 'Negative'}
+                >
+                  {e.feedback === 'positive' ? (
+                    <ThumbUpIcon />
+                  ) : (
+                    <ThumbDownIcon />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-xs leading-relaxed text-foreground">
+                    {e.excerpt}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={() => onDeepLink(e.conversation_id)}
+                      className="font-semibold text-[#1B4F72] hover:underline"
+                    >
+                      {e.conversation_title?.trim() || '(untitled)'}
+                    </button>
+                    <span>·</span>
+                    <span>{formatRelative(new Date(e.created_at))}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Conversation ranking ──────────────────────────────────────────
+
+function ConversationRankingCard({
+  topPositive,
+  topNegative,
+  onDeepLink,
+}: {
+  topPositive: ConversationStat[];
+  topNegative: ConversationStat[];
+  onDeepLink: (conversationId: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Conversation quality ranking</CardTitle>
+        <CardDescription>
+          Click a row to jump to that conversation
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <RankingColumn
+            label="Top rated"
+            empty="No positively rated conversations yet."
+            tone="positive"
+            items={topPositive}
+            onDeepLink={onDeepLink}
+          />
+          <RankingColumn
+            label="Lowest rated"
+            empty="No negatively rated conversations yet."
+            tone="negative"
+            items={topNegative}
+            onDeepLink={onDeepLink}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RankingColumn({
+  label,
+  empty,
+  tone,
+  items,
+  onDeepLink,
+}: {
+  label: string;
+  empty: string;
+  tone: 'positive' | 'negative';
+  items: ConversationStat[];
+  onDeepLink: (id: string) => void;
+}) {
+  const borderClass =
+    tone === 'positive'
+      ? 'border-l-[#C9A84C]'
+      : 'border-l-[#C2185B]/60';
+  const scoreClass =
+    tone === 'positive' ? 'text-[#C9A84C]' : 'text-[#C2185B]';
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      {items.length === 0 ? (
+        <p className="rounded-lg border border-border bg-background/40 px-3 py-4 text-center text-xs text-muted-foreground">
+          {empty}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {items.map((c) => {
+            const score = tone === 'positive' ? c.positive : c.negative;
+            return (
+              <li key={c.conversation_id}>
+                <button
+                  type="button"
+                  onClick={() => onDeepLink(c.conversation_id)}
+                  className={cn(
+                    'group flex w-full items-center gap-3 rounded-md border-l-4 bg-background/40 py-2 pl-3 pr-2 text-left transition-colors hover:bg-muted',
+                    borderClass,
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground group-hover:text-[#1B4F72]">
+                      {c.title?.trim() || '(untitled)'}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {c.message_count} msg{c.message_count === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <span className={cn('shrink-0 text-sm font-bold', scoreClass)}>
+                    {tone === 'positive' ? '+' : ''}
+                    {score}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────
+
+function InsightsSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading insights">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Card key={i} className="border-[#9BB7D4]/40">
+            <CardContent className="py-5">
+              <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+              <div className="mt-2 h-7 w-20 animate-pulse rounded bg-muted/80" />
+              <div className="mt-2 h-3 w-32 animate-pulse rounded bg-muted/60" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {[0, 1].map((i) => (
+          <Card key={i}>
+            <CardContent className="py-5">
+              <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+              <div className="mt-4 space-y-2">
+                {[0, 1, 2, 3].map((j) => (
+                  <div key={j} className="h-8 w-full animate-pulse rounded bg-muted/60" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Insights icons + helpers ───────────────────────────────────────
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn('inline-block', spinning && 'animate-spin')}
+    >
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </svg>
+  );
+}
+
+function ThumbUpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z" />
+      <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+    </svg>
+  );
+}
+
+function ThumbDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z" />
+      <path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
+    </svg>
+  );
+}
+
+function formatPercent(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+function formatRelative(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) return 'just now';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return formatDate(date.toISOString());
 }
 
 // ──────────────────────────────────────────────────────────────────
