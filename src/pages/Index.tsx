@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
@@ -18,21 +19,26 @@ import type { User } from '@supabase/supabase-js';
 import ConversationSidebar from '@/components/ConversationSidebar';
 import { useFeedback, type FeedbackValue } from '@/hooks/use-feedback';
 
+type MessageKind = 'message' | 'summary';
+
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   feedback?: FeedbackValue;
+  kind?: MessageKind;
 };
 
 type ChatResponse = {
   reply: string;
   conversation_id: string;
   message_id: string;
+  kind?: MessageKind;
   error?: string;
 };
 
 const ERROR_MESSAGE = 'Ada is taking a moment. Please try again.';
+const SUMMARY_SENTINEL = '__SUMMARY__';
 
 // ─── Scenarios ────────────────────────────────────────────────────────────────
 
@@ -96,6 +102,7 @@ export default function Index() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
@@ -103,13 +110,15 @@ export default function Index() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isSummarizing]);
+
+  const isBusy = isLoading || isSummarizing;
 
   // Core send — accepts an optional message override so scenarios can inject
   // their opening message without coupling to the input field state.
   const send = async (override?: string) => {
     const trimmed = (override ?? input).trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isBusy) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -157,6 +166,43 @@ export default function Index() {
     }
   };
 
+  const requestSummary = async () => {
+    if (!conversationId || isBusy) return;
+    setError(null);
+    setIsSummarizing(true);
+    try {
+      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>(
+        'chat',
+        {
+          body: {
+            message: SUMMARY_SENTINEL,
+            conversation_id: conversationId,
+          },
+        },
+      );
+
+      if (invokeErr || !data || data.error || !data.reply) {
+        toast.error("Couldn't generate a summary. Please try again.");
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: data.message_id,
+          role: 'assistant',
+          content: data.reply,
+          kind: data.kind ?? 'summary',
+        },
+      ]);
+      setSidebarRefreshKey((k) => k + 1);
+    } catch {
+      toast.error("Couldn't generate a summary. Please try again.");
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -180,7 +226,7 @@ export default function Index() {
 
     const { data, error: queryErr } = await supabase
       .from('messages')
-      .select('id, role, content, feedback')
+      .select('id, role, content, feedback, kind')
       .eq('conversation_id', id)
       .in('role', ['user', 'assistant'])
       .order('created_at', { ascending: true });
@@ -254,7 +300,7 @@ export default function Index() {
               <MessageBubble key={m.id} message={m} />
             ))}
 
-            {isLoading && <TypingIndicator />}
+            {(isLoading || isSummarizing) && <TypingIndicator />}
 
             {error && (
               <div
@@ -270,23 +316,48 @@ export default function Index() {
         </main>
 
         <footer className="border-t border-border bg-background">
-          <div className="mx-auto flex max-w-3xl items-end gap-3 px-6 py-4">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask Ada anything about customer discovery..."
-              rows={1}
-              disabled={isLoading}
-              className="min-h-[44px] resize-none"
-            />
-            <Button
-              onClick={() => void send()}
-              disabled={!input.trim() || isLoading}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Send
-            </Button>
+          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-4">
+            {messages.length >= 4 && (
+              <div className="flex">
+                <button
+                  type="button"
+                  onClick={() => void requestSummary()}
+                  disabled={isBusy}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md border border-[#9BB7D4]/40 bg-background px-3 py-1.5',
+                    'text-xs font-medium text-muted-foreground transition-colors',
+                    'hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/5 hover:text-[#1B4F72]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  <SummaryIcon />
+                  {isSummarizing ? 'Summarizing…' : 'Summarize session'}
+                </button>
+              </div>
+            )}
+            <div className="flex items-end gap-3">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isSummarizing
+                    ? 'Ada is summarizing your session...'
+                    : 'Ask Ada anything about customer discovery...'
+                }
+                rows={1}
+                disabled={isBusy}
+                className="min-h-[44px] resize-none"
+              />
+              <Button
+                onClick={() => void send()}
+                disabled={!input.trim() || isBusy}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Send
+              </Button>
+            </div>
           </div>
         </footer>
       </div>
@@ -552,23 +623,42 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     );
   }
 
+  const isSummary = message.kind === 'summary';
+  const proseClasses = cn(
+    'prose prose-sm max-w-none text-foreground',
+    '[&_p]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0',
+    '[&_strong]:font-semibold [&_strong]:text-foreground',
+    '[&_em]:italic',
+    '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
+    '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
+    '[&_li]:my-1',
+    '[&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]',
+    '[&_a]:text-primary [&_a]:underline',
+  );
+
   return (
-    <div className="group mr-auto flex max-w-[80%] flex-col items-start gap-1">
+    <div
+      className={cn(
+        'group mr-auto flex flex-col items-start gap-1',
+        isSummary ? 'max-w-[92%]' : 'max-w-[80%]',
+      )}
+    >
       <div className="flex w-full items-start gap-2">
-        <div className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
-          <div
-            className={cn(
-              'prose prose-sm max-w-none text-foreground',
-              '[&_p]:my-2 first:[&_p]:mt-0 last:[&_p]:mb-0',
-              '[&_strong]:font-semibold [&_strong]:text-foreground',
-              '[&_em]:italic',
-              '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
-              '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
-              '[&_li]:my-1',
-              '[&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]',
-              '[&_a]:text-primary [&_a]:underline',
-            )}
-          >
+        <div
+          className={cn(
+            'rounded-2xl px-4 py-3 text-sm leading-relaxed text-foreground',
+            isSummary
+              ? 'border border-[#9BB7D4]/30 bg-[#9BB7D4]/10'
+              : 'bg-muted',
+          )}
+        >
+          {isSummary && (
+            <div className="mb-2 inline-flex items-center gap-1 rounded-md bg-[#C9A84C]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#C9A84C]">
+              <SummaryIcon />
+              Summary
+            </div>
+          )}
+          <div className={proseClasses}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {message.content}
             </ReactMarkdown>
@@ -576,11 +666,24 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         </div>
         <CopyButton text={message.content} />
       </div>
-      <FeedbackButtons
-        messageId={message.id}
-        initial={message.feedback ?? null}
-      />
+      {!isSummary && (
+        <FeedbackButtons
+          messageId={message.id}
+          initial={message.feedback ?? null}
+        />
+      )}
     </div>
+  );
+}
+
+function SummaryIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="13" y2="17" />
+    </svg>
   );
 }
 

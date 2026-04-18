@@ -17,7 +17,25 @@ import {
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 500;
+const SUMMARY_MAX_TOKENS = 800;
 const HISTORY_LIMIT = 20;
+
+const SUMMARY_SENTINEL = "__SUMMARY__";
+
+const SUMMARY_SYSTEM_PROMPT = `You are Ada, an AI Customer Discovery Coach. The user has asked for a session summary. Review the conversation history and provide a structured summary in this format:
+
+**Product/Idea Explored:** [one sentence]
+
+**Key Assumptions Identified:** [bullet list of 3-5 assumptions the PM made or that were surfaced]
+
+**Discovery Questions Raised:** [bullet list of 2-4 questions that need answering]
+
+**Suggested Next Steps:** [bullet list of 2-3 concrete actions]
+
+Be concise and actionable. This summary is a PM artifact the user will take away from the session.`;
+
+const SUMMARY_USER_DIRECTIVE =
+  "Please summarize this discovery session using the format in your instructions.";
 
 type ChatRequest = {
   message?: unknown;
@@ -47,6 +65,17 @@ Deno.serve(async (req) => {
 
     if (!message) {
       return jsonResponse({ error: "message is required" }, 400);
+    }
+
+    const isSummary = message === SUMMARY_SENTINEL;
+
+    // Summary requests must target an existing conversation — we have
+    // nothing to summarize without prior history.
+    if (isSummary && !conversationIdInput) {
+      return jsonResponse(
+        { error: "Cannot summarize without an existing conversation." },
+        400,
+      );
     }
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -112,32 +141,44 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Could not load conversation history." }, 500);
     }
 
-    // 3. Fetch the active coaching prompt
-    const { data: activePrompt, error: promptErr } = await service
-      .from("coaching_prompts")
-      .select("prompt_text")
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 3. Resolve the system prompt
+    let systemPrompt: string;
+    if (isSummary) {
+      systemPrompt = SUMMARY_SYSTEM_PROMPT;
+    } else {
+      const { data: activePrompt, error: promptErr } = await service
+        .from("coaching_prompts")
+        .select("prompt_text")
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (promptErr) {
-      console.error("Failed to fetch active prompt:", promptErr);
-      return jsonResponse({ error: "Could not load coaching prompt." }, 500);
+      if (promptErr) {
+        console.error("Failed to fetch active prompt:", promptErr);
+        return jsonResponse({ error: "Could not load coaching prompt." }, 500);
+      }
+
+      if (!activePrompt?.prompt_text) {
+        console.error("No active coaching prompt found");
+        return jsonResponse(
+          { error: "Ada is not configured correctly. Please try again later." },
+          500,
+        );
+      }
+      systemPrompt = activePrompt.prompt_text;
     }
 
-    if (!activePrompt?.prompt_text) {
-      console.error("No active coaching prompt found");
-      return jsonResponse(
-        { error: "Ada is not configured correctly. Please try again later." },
-        500,
-      );
-    }
+    // 4. Build Anthropic request. For summary requests we append a
+    // synthetic user directive (not persisted) since Anthropic requires
+    // the conversation to end on a user turn.
+    const trailingUser: ChatMessage = isSummary
+      ? { role: "user", content: SUMMARY_USER_DIRECTIVE }
+      : { role: "user", content: message };
 
-    // 4. Build Anthropic request
     const chatMessages: ChatMessage[] = [
       ...((history ?? []) as ChatMessage[]),
-      { role: "user", content: message },
+      trailingUser,
     ];
 
     const anthropicRes = await fetch(ANTHROPIC_URL, {
@@ -149,8 +190,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: activePrompt.prompt_text,
+        max_tokens: isSummary ? SUMMARY_MAX_TOKENS : MAX_TOKENS,
+        system: systemPrompt,
         messages: chatMessages,
       }),
     });
@@ -187,20 +228,23 @@ Deno.serve(async (req) => {
         ? anthropicData.usage.input_tokens
         : null;
 
-    // 5. Persist user message
-    const { error: userMsgErr } = await service.from("messages").insert({
-      conversation_id: conversationId,
-      role: "user",
-      content: message,
-      token_count: inputTokens,
-    });
+    // 5. Persist user message (skipped for summary requests — the
+    //    summary is an action, not a chat turn)
+    if (!isSummary) {
+      const { error: userMsgErr } = await service.from("messages").insert({
+        conversation_id: conversationId,
+        role: "user",
+        content: message,
+        token_count: inputTokens,
+      });
 
-    if (userMsgErr) {
-      console.error("Failed to save user message:", userMsgErr);
-      return jsonResponse({ error: "Could not save your message." }, 500);
+      if (userMsgErr) {
+        console.error("Failed to save user message:", userMsgErr);
+        return jsonResponse({ error: "Could not save your message." }, 500);
+      }
     }
 
-    // 6. Persist assistant message
+    // 6. Persist assistant message (tagged 'summary' when applicable)
     const { data: assistantMsg, error: assistantMsgErr } = await service
       .from("messages")
       .insert({
@@ -208,6 +252,7 @@ Deno.serve(async (req) => {
         role: "assistant",
         content: replyText,
         token_count: outputTokens,
+        kind: isSummary ? "summary" : "message",
       })
       .select("id")
       .single();
@@ -227,6 +272,7 @@ Deno.serve(async (req) => {
       reply: replyText,
       conversation_id: conversationId,
       message_id: assistantMsg.id,
+      kind: isSummary ? "summary" : "message",
     });
   } catch (err) {
     console.error("chat function unhandled error:", err);
