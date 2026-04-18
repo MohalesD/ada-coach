@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { isAdmin, useAuth } from '@/lib/auth-context';
+import { isAdmin, useAuth, type UserProfile } from '@/lib/auth-context';
+import type { User } from '@supabase/supabase-js';
 import ConversationSidebar from '@/components/ConversationSidebar';
 
 type ChatMessage = {
@@ -81,6 +89,7 @@ const SCENARIOS: Scenario[] = [
 
 export default function Index() {
   const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -195,8 +204,6 @@ export default function Index() {
   };
 
   const hasMessages = messages.length > 0;
-  const showAdminLink = isAdmin(profile);
-  const displayName = profile?.display_name || user?.email || 'You';
 
   return (
     <div className="flex h-[100dvh] bg-background text-foreground">
@@ -219,29 +226,12 @@ export default function Index() {
                 · Customer Discovery Coach
               </span>
             </h1>
-            <div className="flex items-center gap-3">
-              {showAdminLink && (
-                <Link
-                  to="/admin"
-                  className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
-                >
-                  Admin
-                </Link>
-              )}
-              <span
-                className="hidden max-w-[160px] truncate text-sm text-muted-foreground sm:inline"
-                title={user?.email ?? undefined}
-              >
-                {displayName}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void signOut()}
-              >
-                Log out
-              </Button>
-            </div>
+            <UserMenu
+              user={user}
+              profile={profile}
+              onNavigate={navigate}
+              onSignOut={() => void signOut()}
+            />
           </div>
         </header>
 
@@ -300,6 +290,82 @@ export default function Index() {
       </div>
     </div>
   );
+}
+
+// ─── User menu ────────────────────────────────────────────────────────────────
+
+function UserMenu({
+  user,
+  profile,
+  onNavigate,
+  onSignOut,
+}: {
+  user: User | null;
+  profile: UserProfile | null;
+  onNavigate: (path: string) => void;
+  onSignOut: () => void;
+}) {
+  const displayName = profile?.display_name || user?.email || 'You';
+  const email = user?.email ?? '';
+  const initials = getInitials(profile?.display_name, user?.email);
+  const showAdmin = isAdmin(profile);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open user menu"
+          className={cn(
+            'flex h-9 w-9 items-center justify-center rounded-full',
+            'border border-[#9BB7D4]/50 bg-background text-sm font-semibold uppercase text-[#1B4F72]',
+            'transition-colors hover:border-[#1B4F72] hover:bg-[#9BB7D4]/15',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+          )}
+        >
+          {initials}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <div className="px-2 py-1.5">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {displayName}
+          </p>
+          {email && (
+            <p className="truncate text-xs text-muted-foreground" title={email}>
+              {email}
+            </p>
+          )}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onNavigate('/settings')}>
+          Settings
+        </DropdownMenuItem>
+        {showAdmin && (
+          <DropdownMenuItem onSelect={() => onNavigate('/admin')}>
+            Admin
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={onSignOut}
+          className="text-destructive focus:text-destructive"
+        >
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function getInitials(name?: string | null, email?: string | null): string {
+  const source = (name ?? '').trim() || email || '';
+  if (!source) return '?';
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return source[0].toUpperCase();
 }
 
 // ─── Scenario selection screen ────────────────────────────────────────────────
@@ -475,18 +541,18 @@ function ExploreIcon() {
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
+
+  if (isUser) {
+    return (
+      <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-2xl bg-secondary px-4 py-3 text-sm leading-relaxed text-secondary-foreground">
+        {message.content}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        'max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-        isUser
-          ? 'ml-auto whitespace-pre-wrap bg-secondary text-secondary-foreground'
-          : 'mr-auto bg-muted text-foreground',
-      )}
-    >
-      {isUser ? (
-        message.content
-      ) : (
+    <div className="group mr-auto flex max-w-[80%] items-start gap-2">
+      <div className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed text-foreground">
         <div
           className={cn(
             'prose prose-sm max-w-none text-foreground',
@@ -504,8 +570,78 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             {message.content}
           </ReactMarkdown>
         </div>
-      )}
+      </div>
+      <CopyButton text={message.content} />
     </div>
+  );
+}
+
+// ─── Copy button ──────────────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard write can fail in insecure contexts — fail silently.
+    }
+  };
+
+  return (
+    <div className="relative mt-2 shrink-0">
+      <button
+        type="button"
+        onClick={() => void handleCopy()}
+        aria-label={copied ? 'Copied' : 'Copy message'}
+        className={cn(
+          'flex h-7 w-7 items-center justify-center rounded-md border border-[#9BB7D4]/40 bg-background/60 text-[#1B4F72] transition-all duration-150',
+          'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+          'hover:border-[#C9A84C]/70 hover:bg-[#C9A84C]/10 hover:text-[#C9A84C]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+          copied && 'border-[#C9A84C]/70 bg-[#C9A84C]/10 text-[#C9A84C] opacity-100',
+        )}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </button>
+      <span
+        aria-hidden={!copied}
+        className={cn(
+          'pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#1B4F72] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#C9A84C] shadow-sm transition-opacity duration-300',
+          copied ? 'opacity-100' : 'opacity-0',
+        )}
+      >
+        Copied!
+      </span>
+    </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
 

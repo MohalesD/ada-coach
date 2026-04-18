@@ -1,9 +1,11 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/lib/auth-context';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { Toaster } from '@/components/ui/sonner';
 import Index from './pages/Index';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
+import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -21,6 +23,14 @@ function App() {
             }
           />
           <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requireRole="admin">
@@ -30,6 +40,7 @@ function App() {
           />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <Toaster position="top-center" richColors closeButton />
       </AuthProvider>
     </Router>
   );

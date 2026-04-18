@@ -21,6 +21,12 @@ export type UserProfile = {
 
 type AuthResult = { error: string | null };
 
+export type SignUpResult = {
+  error: string | null;
+  code?: 'email_exists';
+  needsEmailConfirmation: boolean;
+};
+
 type AuthContextValue = {
   user: User | null;
   profile: UserProfile | null;
@@ -30,9 +36,14 @@ type AuthContextValue = {
     email: string,
     password: string,
     displayName?: string,
-  ) => Promise<AuthResult>;
+  ) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (patch: { display_name?: string }) => Promise<AuthResult>;
+  updatePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<AuthResult>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -114,15 +125,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string,
       displayName?: string,
-    ): Promise<AuthResult> => {
-      const { error } = await supabase.auth.signUp({
+    ): Promise<SignUpResult> => {
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: displayName ? { display_name: displayName } : undefined,
         },
       });
-      return { error: error?.message ?? null };
+
+      if (error) {
+        const msg = error.message ?? '';
+        const isDuplicate =
+          /already registered|already.*exists|user already/i.test(msg);
+        return {
+          error: msg,
+          code: isDuplicate ? 'email_exists' : undefined,
+          needsEmailConfirmation: false,
+        };
+      }
+
+      // When email confirmation is enabled in Supabase, signUp returns
+      // a user but no session — the user must click the email link first.
+      const needsEmailConfirmation = !data.session;
+      return { error: null, needsEmailConfirmation };
     },
     [],
   );
@@ -133,6 +159,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }, []);
 
+  const updateProfile = useCallback(
+    async (patch: { display_name?: string }): Promise<AuthResult> => {
+      if (!user) return { error: 'Not signed in' };
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(patch)
+        .eq('id', user.id);
+      if (error) return { error: error.message };
+      await refreshProfile();
+      return { error: null };
+    },
+    [user, refreshProfile],
+  );
+
+  const updatePassword = useCallback(
+    async (
+      currentPassword: string,
+      newPassword: string,
+    ): Promise<AuthResult> => {
+      if (!user?.email) return { error: 'Not signed in' };
+
+      // Verify the current password by attempting a sign-in. Supabase has
+      // no built-in current-password check on updateUser.
+      const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (verifyErr) {
+        return { error: 'Current password is incorrect' };
+      }
+
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateErr) return { error: updateErr.message };
+      return { error: null };
+    },
+    [user],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -142,8 +208,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
       refreshProfile,
+      updateProfile,
+      updatePassword,
     }),
-    [user, profile, loading, signIn, signUp, signOut, refreshProfile],
+    [
+      user,
+      profile,
+      loading,
+      signIn,
+      signUp,
+      signOut,
+      refreshProfile,
+      updateProfile,
+      updatePassword,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

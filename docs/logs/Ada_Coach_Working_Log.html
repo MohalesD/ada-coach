@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ada Coach — Working Log</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f7; color: #1a1a1a; padding: 2rem 1rem; }
+  .log-wrap { max-width: 780px; margin: 0 auto; }
+  .log-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; border-bottom: 0.5px solid #e0e0da; padding-bottom: 1rem; flex-wrap: wrap; gap: 8px; }
+  .log-title { font-size: 20px; font-weight: 500; color: #1a1a1a; }
+  .log-subtitle { font-size: 13px; color: #888; }
+  .entry { background: #fff; border: 0.5px solid #e0e0da; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .entry-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 8px; }
+  .badge-decision { background: #e6f1fb; color: #185fa5; }
+  .badge-bug { background: #fcebeb; color: #a32d2d; }
+  .badge-lesson { background: #eaf3de; color: #3b6d11; }
+  .badge-security { background: #faeeda; color: #854f0b; }
+  .entry-date { font-size: 12px; color: #aaa; }
+  .entry-title { font-size: 15px; font-weight: 500; color: #1a1a1a; margin-bottom: 6px; }
+  .entry-body { font-size: 14px; color: #555; line-height: 1.6; }
+  .entry-body p { margin: 0 0 8px; }
+  .entry-body p:last-child { margin: 0; }
+  .soundbite { background: #f5f5f3; border-left: 3px solid #b5d4f4; border-radius: 0; padding: 10px 14px; margin-top: 10px; font-size: 13px; color: #666; font-style: italic; line-height: 1.6; }
+  .soundbite-label { font-size: 11px; font-weight: 500; color: #185fa5; font-style: normal; display: block; margin-bottom: 4px; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .filter-btn { font-size: 12px; padding: 5px 12px; border-radius: 8px; cursor: pointer; border: 0.5px solid #ccc; background: #fff; color: #666; transition: all 0.15s; }
+  .filter-btn:hover { background: #f0f0ee; }
+  .filter-btn.active { background: #e6f1fb; color: #185fa5; border-color: transparent; }
+  .brand-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 2rem; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: #9BB7D4; }
+  .brand-name { font-size: 14px; font-weight: 500; color: #1B4F72; letter-spacing: 0.02em; }
+  .brand-tag { font-size: 12px; color: #888; }
+  @media (max-width: 600px) {
+    .log-header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="log-wrap">
+
+  <div class="brand-bar">
+    <div class="brand-dot"></div>
+    <span class="brand-name">Ada Coach</span>
+    <span class="brand-tag">by Poprouser Inc.</span>
+  </div>
+
+  <div class="log-header">
+    <div>
+      <div class="log-title">Working Log</div>
+      <div class="log-subtitle">Build decisions, bugs, lessons, and interview material</div>
+    </div>
+    <div class="log-subtitle">Week 2 &middot; April 2026</div>
+  </div>
+
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="filter(this, 'all')">All</button>
+    <button class="filter-btn" onclick="filter(this, 'decision')">Decisions</button>
+    <button class="filter-btn" onclick="filter(this, 'bug')">Bugs</button>
+    <button class="filter-btn" onclick="filter(this, 'lesson')">Lessons</button>
+    <button class="filter-btn" onclick="filter(this, 'security')">Security</button>
+  </div>
+
+  <div id="log-entries">
+
+    <div class="entry" data-type="bug">
+      <div class="entry-meta">
+        <span class="badge badge-bug">Bug resolved</span>
+        <span class="entry-date">Apr 15, 2026</span>
+      </div>
+      <div class="entry-title">JWT gateway conflict blocking all chat requests</div>
+      <div class="entry-body">
+        <p>Symptom: every chat message returned "Ada is taking a moment. Please try again." Edge Function logs showed nothing because the code never executed. Root cause: Supabase's gateway had <code>verify_jwt = true</code> in config.toml, which told it to validate JWT tokens before passing requests to the function. The gateway's token format expectations didn't match how the Supabase JS client sends auth headers via <code>fetchWithAuth</code>. Every valid request was rejected at the gate with a 401 before our code ran.</p>
+        <p>Fix: set <code>verify_jwt = false</code> for all three Edge Functions. Auth is still fully enforced inside the function via <code>requireUser()</code> and <code>requireAdmin()</code>, which call <code>service.auth.getUser(jwt)</code> and validate properly. The gateway check was redundant and broken. Redeployed all functions.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We hit a JWT verification conflict where Supabase's gateway was rejecting valid tokens before our Edge Function code could execute. The format the gateway expected didn't match how the client was sending tokens. We resolved it by moving JWT verification inside the function itself — same security, better placement."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="bug">
+      <div class="entry-meta">
+        <span class="badge badge-bug">Bug resolved</span>
+        <span class="entry-date">Apr 15, 2026</span>
+      </div>
+      <div class="entry-title">Admin panel race condition — flash redirect before profile loads</div>
+      <div class="entry-body">
+        <p>Symptom: clicking /admin caused the page to flash briefly then redirect back to chat. The Control Panel appeared for less than a second. Root cause: a frontend race condition. The ProtectedRoute component checked the user's role before <code>auth-context.tsx</code> finished fetching the profile from the database. It saw an undefined role and treated it as "unauthorized," bouncing the user before the real role data arrived.</p>
+        <p>Fix: updated ProtectedRoute to wait until <code>loading</code> is false before evaluating role. While loading, it shows a spinner instead of redirecting. Once profile data is confirmed, role check runs and admin users pass through.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We had a race condition in our route guard where the role check fired before the async profile fetch completed. The fix was ensuring the guard holds in a loading state until the profile is fully resolved — never make an access decision on undefined data."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="security">
+      <div class="entry-meta">
+        <span class="badge badge-security">Security</span>
+        <span class="entry-date">Apr 12, 2026</span>
+      </div>
+      <div class="entry-title">API key nearly pasted into Claude Code terminal — caught and rotated</div>
+      <div class="entry-body">
+        <p>During the <code>supabase secrets set</code> step, the Anthropic API key was pasted directly into the Claude Code terminal prompt. Claude Code flagged this immediately as a security concern, noting the key would appear in terminal history and session logs. The key was rotated at console.anthropic.com before any potential exposure could be exploited.</p>
+        <p>Correct method: create a <code>.env.local</code> file, store the key there, add <code>.env.local</code> to <code>.gitignore</code>, then run <code>supabase secrets set --env-file .env.local</code>. The file is never committed to Git. The key is never typed or pasted in plain text.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We store all API keys as Supabase secrets loaded from a gitignored .env.local file, never pasted in the terminal or hardcoded in source. The key never appears in git history, terminal logs, or the browser — it's only accessible server-side via Deno.env.get()."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="decision">
+      <div class="entry-meta">
+        <span class="badge badge-decision">Decision</span>
+        <span class="entry-date">Apr 12, 2026</span>
+      </div>
+      <div class="entry-title">Dual-client auth pattern for Edge Functions</div>
+      <div class="entry-body">
+        <p>Chose the dual-client approach for the /chat Edge Function: one user-scoped Supabase client (with the user's JWT attached) for ownership-scoped database reads, and one service-role client for writes. The user client enforces RLS automatically — if a user tries to read another user's conversation, the database blocks it without any manual code check required. The service role client handles message inserts which need elevated permissions.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We use a dual-client pattern in our Edge Functions: a user-scoped client where RLS enforces data ownership automatically, and a service-role client for trusted writes. Defense in depth — the database enforces security, not just our application code."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="decision">
+      <div class="entry-meta">
+        <span class="badge badge-decision">Decision</span>
+        <span class="entry-date">Apr 12, 2026</span>
+      </div>
+      <div class="entry-title">pgvector over Pinecone for RAG (Layer 2)</div>
+      <div class="entry-body">
+        <p>Chose Supabase's native pgvector extension for vector similarity search instead of adding Pinecone as a separate third-party service. pgvector runs inside the same Postgres database, keeping all data in one place, eliminating a second vendor dependency, and reducing architectural complexity for the MVP. Pinecone would add cost, another API key to manage, and network latency between two separate services.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We used pgvector for RAG retrieval instead of a dedicated vector database. Keeping vectors in the same Postgres instance as our app data reduced operational complexity, eliminated a vendor dependency, and made the architecture easier to reason about at MVP scale."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="lesson">
+      <div class="entry-meta">
+        <span class="badge badge-lesson">Lesson learned</span>
+        <span class="entry-date">Apr 15, 2026</span>
+      </div>
+      <div class="entry-title">Migration order matters — seed data must come after the user exists</div>
+      <div class="entry-body">
+        <p>Migration 004 was designed to set mohalesdeis@gmail.com as role='owner' in user_profiles. But the migration ran before the account was created via signup. The UPDATE found zero matching rows and silently did nothing — no error, no warning. The role was never set, so the admin link never appeared.</p>
+        <p>The fix was running the UPDATE manually via SQL after signing up. For future migrations that depend on specific user data: either make them re-runnable (idempotent), trigger them via a database function after user creation, or document the manual step clearly.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "We learned that migrations are stateless — they run once at a point in time. A migration that sets a role for a specific user must be designed idempotently, since if it runs before the user exists, it silently no-ops. We now document data-dependent migrations with explicit post-signup steps."
+        </div>
+      </div>
+    </div>
+
+    <div class="entry" data-type="lesson">
+      <div class="entry-meta">
+        <span class="badge badge-lesson">Lesson learned</span>
+        <span class="entry-date">Apr 11–12, 2026</span>
+      </div>
+      <div class="entry-title">Scope discipline — RAG features folded into Ada's roadmap, not a new product</div>
+      <div class="entry-body">
+        <p>During Week 2 planning, a detailed People Ops Copilot project plan was generated as an alternative to Ada Coach. The features (RAG, document ingestion, admin upload, evaluation rubrics) were compelling. The temptation to pivot or build both simultaneously was real. Decision: stay with Ada Coach and fold the RAG architecture into Ada's Layer 2 roadmap. The product already had a landing page, brand, and coaching system prompt. Splitting focus would have produced two mediocre products instead of one strong one.</p>
+        <div class="soundbite">
+          <span class="soundbite-label">Interview sound bite</span>
+          "When a compelling adjacent idea emerged mid-sprint, we evaluated it against our existing roadmap and found the core features could be incorporated as a future layer rather than a separate product. Scope discipline means recognizing when a new idea strengthens your existing product versus pulls you away from it."
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function filter(btn, type) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.entry').forEach(e => {
+    e.style.display = (type === 'all' || e.dataset.type === type) ? 'block' : 'none';
+  });
+}
+</script>
+
+</body>
+</html>

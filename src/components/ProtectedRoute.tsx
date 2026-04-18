@@ -10,7 +10,11 @@ type Props = {
 export default function ProtectedRoute({ children, requireRole }: Props) {
   const { user, profile, loading } = useAuth();
 
-  if (loading || (user && !profile)) {
+  // Only block on profile load when we need it for a role check —
+  // otherwise let the user through even if their profile row is missing
+  // or slow to load (Index.tsx falls back to email for display name).
+  const needsProfile = requireRole !== undefined;
+  if (loading || (needsProfile && user && !profile)) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-background">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -71,19 +71,27 @@ All shared auth helpers live in `supabase/functions/_shared/auth.ts`.
 
 Admin link appears in the chat header only for admin/owner users. The admin panel uses `src/lib/admin-api.ts` which forwards the user's JWT to admin Edge Functions.
 
+### Conversation sidebar (`src/components/ConversationSidebar.tsx`)
+
+The sidebar supports search, scenario-based entry points (pre-seeded starter prompts), pin/rename/archive, and optimistic re-sort. Sort order: pinned first, then by `updated_at` desc. Archive sets `status = 'archived'` (soft-delete) — rows stay in the DB so admin can still see them.
+
 ## Database Schema
 
-Four migrations in `supabase/migrations/`:
+Migrations in `supabase/migrations/` (applied in filename order):
 
-**Core tables (001):**
-- `conversations` — coaching sessions (id, title, status, user_id, timestamps)
+**Core tables — `core_schema`:**
+- `conversations` — coaching sessions (id, title, status, user_id, is_pinned, timestamps). `status` supports `active`/`archived`; `is_pinned` drives sidebar sort order.
 - `messages` — individual turns (role: user/assistant/system, content, token_count)
 - `coaching_prompts` — versioned system prompts with `is_active` flag (exactly one active)
 
-**Auth tables (003):**
+**Auth tables — `auth_schema` + `grant_owner`:**
 - `user_profiles` — id (FK → auth.users), email, display_name, role (user/admin/owner)
 - Auto-created by `handle_new_user()` trigger on `auth.users` insert
 - `conversations.user_id` — FK → auth.users, added as NOT NULL
+- `grant_owner` elevates a seed user to the `owner` role
+
+**Pin support — `pin_conversations`:**
+- Adds `conversations.is_pinned BOOLEAN NOT NULL DEFAULT false`. No new RLS policy needed — the existing "update own conversations" policy covers it.
 
 **RLS posture:**
 - Authenticated users see only their own conversations/messages (via `user_id = auth.uid()`)
@@ -106,6 +114,12 @@ Key constraints to preserve when editing the system prompt:
 - Ask **one** focused follow-up question at a time (not a list)
 - Keep responses concise: 2–4 sentences + one question
 - Redirect non-discovery questions back to coaching context
+
+## Docs
+
+- `docs/Ada_Coach_Backlog.md` — full backlog (source of truth for B-xxx IDs below)
+- `docs/prds/` — weekly PRDs
+- `docs/logs/` — working session log
 
 ## Backlog
 
