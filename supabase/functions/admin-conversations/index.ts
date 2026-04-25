@@ -33,7 +33,7 @@ type ConversationRow = {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   const authResult = await requireAdmin(req);
@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
 
       if (convErr) {
         console.error("conversation fetch error:", convErr);
-        return jsonResponse({ error: "Failed to load conversation" }, 500);
+        return jsonResponse({ error: "Failed to load conversation" }, 500, req);
       }
-      if (!conv) return jsonResponse({ error: "Not found" }, 404);
+      if (!conv) return jsonResponse({ error: "Not found" }, 404, req);
 
       const { data: messages, error: msgErr } = await supabase
         .from("messages")
@@ -66,12 +66,14 @@ Deno.serve(async (req) => {
 
       if (msgErr) {
         console.error("messages fetch error:", msgErr);
-        return jsonResponse({ error: "Failed to load messages" }, 500);
+        return jsonResponse({ error: "Failed to load messages" }, 500, req);
       }
 
-      return jsonResponse({
-        conversation: { ...conv, messages: messages ?? [] },
-      });
+      return jsonResponse(
+        { conversation: { ...conv, messages: messages ?? [] } },
+        200,
+        req,
+      );
     }
 
     if (req.method === "GET") {
@@ -84,7 +86,7 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("list conversations error:", error);
-        return jsonResponse({ error: "Failed to list conversations" }, 500);
+        return jsonResponse({ error: "Failed to list conversations" }, 500, req);
       }
 
       const list = ((data ?? []) as ConversationRow[]).map((c) => {
@@ -107,11 +109,11 @@ Deno.serve(async (req) => {
         };
       });
 
-      return jsonResponse({ conversations: list });
+      return jsonResponse({ conversations: list }, 200, req);
     }
 
     if (req.method === "PATCH") {
-      if (!id) return jsonResponse({ error: "id query param required" }, 400);
+      if (!id) return jsonResponse({ error: "id query param required" }, 400, req);
 
       const body = await req.json().catch(() => null);
       const status = body?.status;
@@ -122,6 +124,7 @@ Deno.serve(async (req) => {
         return jsonResponse(
           { error: "status must be one of: active, archived, deleted" },
           400,
+          req,
         );
       }
 
@@ -134,16 +137,16 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("patch conversation error:", error);
-        return jsonResponse({ error: "Update failed" }, 500);
+        return jsonResponse({ error: "Update failed" }, 500, req);
       }
-      if (!data) return jsonResponse({ error: "Not found" }, 404);
+      if (!data) return jsonResponse({ error: "Not found" }, 404, req);
 
-      return jsonResponse({ conversation: data });
+      return jsonResponse({ conversation: data }, 200, req);
     }
 
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "Method not allowed" }, 405, req);
   } catch (err) {
     console.error("admin-conversations error:", err);
-    return jsonResponse({ error: "Server error" }, 500);
+    return jsonResponse({ error: "Server error" }, 500, req);
   }
 });

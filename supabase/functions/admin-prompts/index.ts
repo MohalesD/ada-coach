@@ -19,7 +19,7 @@ import {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   const authResult = await requireAdmin(req);
@@ -40,9 +40,9 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("list prompts error:", error);
-        return jsonResponse({ error: "Failed to list prompts" }, 500);
+        return jsonResponse({ error: "Failed to list prompts" }, 500, req);
       }
-      return jsonResponse({ prompts: data ?? [] });
+      return jsonResponse({ prompts: data ?? [] }, 200, req);
     }
 
     if (req.method === "POST" && id && action === "activate") {
@@ -53,9 +53,9 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (fetchErr) {
         console.error("activate fetch error:", fetchErr);
-        return jsonResponse({ error: "Activate failed" }, 500);
+        return jsonResponse({ error: "Activate failed" }, 500, req);
       }
-      if (!target) return jsonResponse({ error: "Not found" }, 404);
+      if (!target) return jsonResponse({ error: "Not found" }, 404, req);
 
       const now = new Date().toISOString();
 
@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
         .eq("is_active", true);
       if (deactErr) {
         console.error("deactivate error:", deactErr);
-        return jsonResponse({ error: "Activate failed" }, 500);
+        return jsonResponse({ error: "Activate failed" }, 500, req);
       }
 
       const { error: actErr } = await supabase
@@ -74,10 +74,10 @@ Deno.serve(async (req) => {
         .eq("id", id);
       if (actErr) {
         console.error("activate error:", actErr);
-        return jsonResponse({ error: "Activate failed" }, 500);
+        return jsonResponse({ error: "Activate failed" }, 500, req);
       }
 
-      return jsonResponse({ ok: true });
+      return jsonResponse({ ok: true }, 200, req);
     }
 
     if (req.method === "POST") {
@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
         return jsonResponse(
           { error: "name and prompt_text are required" },
           400,
+          req,
         );
       }
 
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
 
       if (versionErr) {
         console.error("version lookup error:", versionErr);
-        return jsonResponse({ error: "Create failed" }, 500);
+        return jsonResponse({ error: "Create failed" }, 500, req);
       }
 
       const nextVersion =
@@ -123,13 +124,13 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("create prompt error:", error);
-        return jsonResponse({ error: "Create failed" }, 500);
+        return jsonResponse({ error: "Create failed" }, 500, req);
       }
-      return jsonResponse({ prompt: data });
+      return jsonResponse({ prompt: data }, 200, req);
     }
 
     if (req.method === "PUT") {
-      if (!id) return jsonResponse({ error: "id query param required" }, 400);
+      if (!id) return jsonResponse({ error: "id query param required" }, 400, req);
       const body = await req.json().catch(() => null);
 
       const updates: Record<string, unknown> = {
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
       }
 
       if (Object.keys(updates).length <= 1) {
-        return jsonResponse({ error: "No updates provided" }, 400);
+        return jsonResponse({ error: "No updates provided" }, 400, req);
       }
 
       const { data, error } = await supabase
@@ -156,15 +157,15 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("update prompt error:", error);
-        return jsonResponse({ error: "Update failed" }, 500);
+        return jsonResponse({ error: "Update failed" }, 500, req);
       }
-      if (!data) return jsonResponse({ error: "Not found" }, 404);
+      if (!data) return jsonResponse({ error: "Not found" }, 404, req);
 
-      return jsonResponse({ prompt: data });
+      return jsonResponse({ prompt: data }, 200, req);
     }
 
     if (req.method === "DELETE") {
-      if (!id) return jsonResponse({ error: "id query param required" }, 400);
+      if (!id) return jsonResponse({ error: "id query param required" }, 400, req);
 
       const { data: existing, error: fetchErr } = await supabase
         .from("coaching_prompts")
@@ -174,13 +175,14 @@ Deno.serve(async (req) => {
 
       if (fetchErr) {
         console.error("delete fetch error:", fetchErr);
-        return jsonResponse({ error: "Delete failed" }, 500);
+        return jsonResponse({ error: "Delete failed" }, 500, req);
       }
-      if (!existing) return jsonResponse({ error: "Not found" }, 404);
+      if (!existing) return jsonResponse({ error: "Not found" }, 404, req);
       if (existing.is_active) {
         return jsonResponse(
           { error: "Cannot delete the currently active prompt" },
           400,
+          req,
         );
       }
 
@@ -191,14 +193,14 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("delete prompt error:", error);
-        return jsonResponse({ error: "Delete failed" }, 500);
+        return jsonResponse({ error: "Delete failed" }, 500, req);
       }
-      return jsonResponse({ ok: true });
+      return jsonResponse({ ok: true }, 200, req);
     }
 
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "Method not allowed" }, 405, req);
   } catch (err) {
     console.error("admin-prompts error:", err);
-    return jsonResponse({ error: "Server error" }, 500);
+    return jsonResponse({ error: "Server error" }, 500, req);
   }
 });

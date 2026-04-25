@@ -6,18 +6,47 @@
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+// Origin allowlist for CORS. Set ALLOWED_ORIGINS in Supabase secrets as a
+// comma-separated list, e.g.:
+//   supabase secrets set ALLOWED_ORIGINS="http://localhost:5175,https://ada-coach.vercel.app"
+// Defaults to localhost dev only when unset.
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "http://localhost:5175")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const CORS_BASE_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "content-type, authorization, apikey, x-client-info",
+  Vary: "Origin",
 };
 
-export function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "content-type": "application/json" },
-  });
+// Returns CORS headers for the request. Echoes the Origin only when it's in
+// the allowlist; otherwise omits Allow-Origin so the browser fails the
+// preflight (and the actual request never goes out).
+//
+// Server-to-server calls without an Origin header just get no CORS headers,
+// which is fine — CORS only matters for browsers.
+export function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin");
+  const headers: Record<string, string> = { ...CORS_BASE_HEADERS };
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
+}
+
+export function jsonResponse(
+  body: unknown,
+  status = 200,
+  req?: Request,
+): Response {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (req) Object.assign(headers, corsHeaders(req));
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 function envOrThrow(name: string): string {
@@ -62,14 +91,14 @@ export type RequireUserResult =
 export async function requireUser(req: Request): Promise<RequireUserResult> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return { error: jsonResponse({ error: "Unauthorized" }, 401) };
+    return { error: jsonResponse({ error: "Unauthorized" }, 401, req) };
   }
 
   const jwt = authHeader.replace(/^bearer\s+/i, "");
   const service = getServiceClient();
   const { data, error } = await service.auth.getUser(jwt);
   if (error || !data.user) {
-    return { error: jsonResponse({ error: "Unauthorized" }, 401) };
+    return { error: jsonResponse({ error: "Unauthorized" }, 401, req) };
   }
 
   const userClient = getUserClient(req);
@@ -113,11 +142,11 @@ export async function requireAdmin(req: Request): Promise<RequireAdminResult> {
 
   if (profileErr) {
     console.error("requireAdmin profile lookup failed:", profileErr);
-    return { error: jsonResponse({ error: "Server error" }, 500) };
+    return { error: jsonResponse({ error: "Server error" }, 500, req) };
   }
 
   if (!profile || (profile.role !== "admin" && profile.role !== "owner")) {
-    return { error: jsonResponse({ error: "Forbidden" }, 403) };
+    return { error: jsonResponse({ error: "Forbidden" }, 403, req) };
   }
 
   return {
