@@ -1316,7 +1316,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 
     const { error: dbErr } = await supabase
       .from('documents')
-      .insert({ filename: file.name, file_path: path, status: 'uploaded' });
+      .insert({ user_id: user.id, filename: file.name, file_path: path, status: 'uploaded' });
     if (dbErr) {
       // Storage succeeded but DB insert failed — remove the orphaned object.
       await supabase.storage.from('documents').remove([path]);
