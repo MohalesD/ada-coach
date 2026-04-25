@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from 'react';
@@ -41,6 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase';
 import {
   activatePrompt,
   createPrompt,
@@ -61,7 +63,7 @@ import {
 } from '@/lib/admin-api';
 
 export default function Admin() {
-  const { signOut } = useAuth();
+  const { signOut, profile } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('conversations');
   const [pendingExpandId, setPendingExpandId] = useState<string | null>(null);
@@ -107,6 +109,9 @@ export default function Admin() {
             <TabsTrigger value="conversations">Conversations</TabsTrigger>
             <TabsTrigger value="prompts">Coaching Prompts</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
+            {profile?.role === 'owner' && (
+              <TabsTrigger value="documents">Documents</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="conversations" className="mt-6">
@@ -127,6 +132,12 @@ export default function Admin() {
               onDeepLink={handleDeepLink}
             />
           </TabsContent>
+
+          {profile?.role === 'owner' && (
+            <TabsContent value="documents" className="mt-6">
+              <DocumentsTab onUnauthorized={handleUnauthorized} />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>
@@ -1242,6 +1253,202 @@ function formatRelative(date: Date): string {
   const hr = Math.floor(min / 60);
   if (hr < 24) return `${hr}h ago`;
   return formatDate(date.toISOString());
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Documents tab (owner-only)
+// ──────────────────────────────────────────────────────────────────
+
+type DocumentRow = {
+  id: string;
+  filename: string;
+  file_path: string;
+  status: 'uploaded' | 'processing' | 'ready' | 'error';
+  created_at: string;
+  chunk_count: number | null;
+};
+
+function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const { user } = useAuth();
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    const { data, error: fetchErr } = await supabase
+      .from('documents')
+      .select('id, filename, file_path, status, created_at, chunk_count')
+      .order('created_at', { ascending: false });
+    if (fetchErr) {
+      if (fetchErr.code === 'PGRST301') { onUnauthorized(); return; }
+      setError(fetchErr.message);
+    } else {
+      setDocuments((data as DocumentRow[]) ?? []);
+    }
+    setIsLoading(false);
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleUpload = async (file: File) => {
+    if (!user) return;
+    setIsUploading(true);
+    setUploadError(null);
+
+    const uniqueName = `${crypto.randomUUID()}_${file.name}`;
+    const path = `${user.id}/${uniqueName}`;
+
+    const { error: storageErr } = await supabase.storage
+      .from('documents')
+      .upload(path, file);
+    if (storageErr) {
+      setUploadError(storageErr.message);
+      setIsUploading(false);
+      return;
+    }
+
+    const { error: dbErr } = await supabase
+      .from('documents')
+      .insert({ user_id: user.id, filename: file.name, file_path: path, status: 'uploaded' });
+    if (dbErr) {
+      // Storage succeeded but DB insert failed — remove the orphaned object.
+      await supabase.storage.from('documents').remove([path]);
+      setUploadError(dbErr.message);
+      setIsUploading(false);
+      return;
+    }
+
+    await refresh();
+    setIsUploading(false);
+  };
+
+  const handleDelete = async (doc: DocumentRow) => {
+    await supabase.storage.from('documents').remove([doc.file_path]);
+    const { error: dbErr } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', doc.id);
+    if (dbErr) {
+      setError(dbErr.message);
+      return;
+    }
+    await refresh();
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+        <div>
+          <CardTitle>Documents</CardTitle>
+          <CardDescription>
+            {documents.length} uploaded · owner-only knowledge base
+          </CardDescription>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refresh()}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <Button
+            size="sm"
+            disabled={isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {isUploading ? 'Uploading...' : 'Upload Document'}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleUpload(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      </CardHeader>
+      <CardContent>
+        {(error || uploadError) && (
+          <p className="mb-4 text-sm text-destructive" role="alert">
+            {uploadError ?? error}
+          </p>
+        )}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Filename</TableHead>
+              <TableHead className="w-28">Status</TableHead>
+              <TableHead className="w-40">Uploaded</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {documents.length === 0 && !isLoading && (
+              <TableRow>
+                <TableCell
+                  colSpan={4}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No documents uploaded yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {documents.map((doc) => (
+              <TableRow key={doc.id}>
+                <TableCell className="font-medium">{doc.filename}</TableCell>
+                <TableCell>
+                  <DocumentStatusBadge status={doc.status} />
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {formatDate(doc.created_at)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleDelete(doc)}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentStatusBadge({ status }: { status: DocumentRow['status'] }) {
+  if (status === 'ready') {
+    return (
+      <Badge className="border-[#C9A84C] bg-[#C9A84C]/10 text-[#C9A84C]">
+        ready
+      </Badge>
+    );
+  }
+  const variant =
+    status === 'error'
+      ? 'destructive'
+      : status === 'processing'
+        ? 'outline'
+        : 'secondary';
+  return <Badge variant={variant}>{status}</Badge>;
 }
 
 // ──────────────────────────────────────────────────────────────────
