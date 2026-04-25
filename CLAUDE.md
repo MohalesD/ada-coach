@@ -109,6 +109,8 @@ Migrations in `supabase/migrations/` (applied in filename order):
 
 All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist — set `ALLOWED_ORIGINS` (comma-separated) in Supabase secrets *before* deploying, or browser calls will fail preflight. Default allows only `http://localhost:5175`.
 
+**Vercel preview URLs are blocked by default.** Vercel preview deploys get a unique origin (e.g. `https://ada-coach-git-<branch>-<scope>.vercel.app`) that is not in the default allowlist. If you need to test against the real Supabase backend from a preview URL, add that origin to `ALLOWED_ORIGINS` before testing: `supabase secrets set ALLOWED_ORIGINS="http://localhost:5175,https://ada-coach.vercel.app,https://ada-coach-git-<branch>-<scope>.vercel.app"`. Remember to remove ephemeral preview origins once the branch is merged.
+
 - **`chat`** — `POST { message, conversation_id? }`. Verifies ownership (RLS), fetches active prompt + last 20 messages, calls Claude, persists both turns, returns `{ reply, conversation_id, message_id, kind }`. Tags assistant messages with `coaching_prompt_id` (for analytics).
   - **Summary sentinel**: when `message === '__SUMMARY__'`, the function swaps in `SUMMARY_SYSTEM_PROMPT`, requires an existing `conversation_id`, **does not** persist the synthetic user turn, and stores the assistant reply with `kind = 'summary'`. Anthropic requires a trailing user turn, so a non-persisted directive is appended to the request only.
 - **`admin-conversations`** — `GET` (list with counts), `GET ?id=` (full messages), `PATCH ?id=` (update status). Requires admin/owner.
