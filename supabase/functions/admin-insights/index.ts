@@ -65,11 +65,11 @@ const FETCH_LIMIT = 5000; // safety cap; default Supabase row limit is 1000
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   if (req.method !== "GET") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "Method not allowed" }, 405, req);
   }
 
   const authResult = await requireAdmin(req);
@@ -92,19 +92,19 @@ Deno.serve(async (req) => {
 
     if (conversationsRes.error) {
       console.error("conversations fetch error:", conversationsRes.error);
-      return jsonResponse({ error: "Failed to load conversations" }, 500);
+      return jsonResponse({ error: "Failed to load conversations" }, 500, req);
     }
     if (promptsRes.error) {
       console.error("prompts fetch error:", promptsRes.error);
-      return jsonResponse({ error: "Failed to load prompts" }, 500);
+      return jsonResponse({ error: "Failed to load prompts" }, 500, req);
     }
     if (assistantRes.error) {
       console.error("assistant messages fetch error:", assistantRes.error);
-      return jsonResponse({ error: "Failed to load messages" }, 500);
+      return jsonResponse({ error: "Failed to load messages" }, 500, req);
     }
     if (totalMessagesRes.error) {
       console.error("messages count error:", totalMessagesRes.error);
-      return jsonResponse({ error: "Failed to count messages" }, 500);
+      return jsonResponse({ error: "Failed to count messages" }, 500, req);
     }
 
     const conversations = (conversationsRes.data ?? []) as ConversationRow[];
@@ -205,28 +205,32 @@ Deno.serve(async (req) => {
         created_at: m.created_at,
       }));
 
-    return jsonResponse({
-      totals: {
-        conversations: conversations.length,
-        messages: totalMessages,
-        assistant_messages: assistantCount,
-        feedback_count: feedbackCount,
-        positive,
-        negative,
+    return jsonResponse(
+      {
+        totals: {
+          conversations: conversations.length,
+          messages: totalMessages,
+          assistant_messages: assistantCount,
+          feedback_count: feedbackCount,
+          positive,
+          negative,
+        },
+        rates: {
+          feedback_rate: feedbackRate,
+          positive_rate: positiveRate,
+        },
+        per_conversation: perConversation,
+        per_prompt: perPrompt,
+        top_positive: topPositive,
+        top_negative: topNegative,
+        recent_feedback: recentFeedback,
+        generated_at: new Date().toISOString(),
       },
-      rates: {
-        feedback_rate: feedbackRate,
-        positive_rate: positiveRate,
-      },
-      per_conversation: perConversation,
-      per_prompt: perPrompt,
-      top_positive: topPositive,
-      top_negative: topNegative,
-      recent_feedback: recentFeedback,
-      generated_at: new Date().toISOString(),
-    });
+      200,
+      req,
+    );
   } catch (err) {
     console.error("admin-insights error:", err);
-    return jsonResponse({ error: "Server error" }, 500);
+    return jsonResponse({ error: "Server error" }, 500, req);
   }
 });

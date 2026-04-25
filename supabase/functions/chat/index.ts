@@ -46,11 +46,11 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+    return jsonResponse({ error: "Method not allowed" }, 405, req);
   }
 
   const authResult = await requireUser(req);
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       typeof body.conversation_id === "string" ? body.conversation_id : null;
 
     if (!message) {
-      return jsonResponse({ error: "message is required" }, 400);
+      return jsonResponse({ error: "message is required" }, 400, req);
     }
 
     const isSummary = message === SUMMARY_SENTINEL;
@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         { error: "Cannot summarize without an existing conversation." },
         400,
+        req,
       );
     }
 
@@ -84,6 +85,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         { error: "Ada is not configured correctly. Please try again later." },
         500,
+        req,
       );
     }
 
@@ -101,10 +103,10 @@ Deno.serve(async (req) => {
 
       if (ownErr) {
         console.error("ownership check failed:", ownErr);
-        return jsonResponse({ error: "Could not load conversation." }, 500);
+        return jsonResponse({ error: "Could not load conversation." }, 500, req);
       }
       if (!existing) {
-        return jsonResponse({ error: "Conversation not found" }, 404);
+        return jsonResponse({ error: "Conversation not found" }, 404, req);
       }
     } else {
       const { data: newConv, error: convErr } = await service
@@ -121,6 +123,7 @@ Deno.serve(async (req) => {
         return jsonResponse(
           { error: "Could not start a new conversation." },
           500,
+          req,
         );
       }
       conversationId = newConv.id;
@@ -138,7 +141,7 @@ Deno.serve(async (req) => {
 
     if (historyErr) {
       console.error("Failed to fetch history:", historyErr);
-      return jsonResponse({ error: "Could not load conversation history." }, 500);
+      return jsonResponse({ error: "Could not load conversation history." }, 500, req);
     }
 
     // 3. Resolve the system prompt
@@ -157,7 +160,7 @@ Deno.serve(async (req) => {
 
       if (promptErr) {
         console.error("Failed to fetch active prompt:", promptErr);
-        return jsonResponse({ error: "Could not load coaching prompt." }, 500);
+        return jsonResponse({ error: "Could not load coaching prompt." }, 500, req);
       }
 
       if (!activePrompt?.prompt_text) {
@@ -165,6 +168,7 @@ Deno.serve(async (req) => {
         return jsonResponse(
           { error: "Ada is not configured correctly. Please try again later." },
           500,
+          req,
         );
       }
       systemPrompt = activePrompt.prompt_text;
@@ -204,6 +208,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         { error: "Ada is having trouble responding right now. Please try again." },
         500,
+        req,
       );
     }
 
@@ -218,6 +223,7 @@ Deno.serve(async (req) => {
       return jsonResponse(
         { error: "Ada didn't produce a response. Please try again." },
         500,
+        req,
       );
     }
 
@@ -242,7 +248,7 @@ Deno.serve(async (req) => {
 
       if (userMsgErr) {
         console.error("Failed to save user message:", userMsgErr);
-        return jsonResponse({ error: "Could not save your message." }, 500);
+        return jsonResponse({ error: "Could not save your message." }, 500, req);
       }
     }
 
@@ -262,7 +268,7 @@ Deno.serve(async (req) => {
 
     if (assistantMsgErr || !assistantMsg) {
       console.error("Failed to save assistant message:", assistantMsgErr);
-      return jsonResponse({ error: "Could not save Ada's reply." }, 500);
+      return jsonResponse({ error: "Could not save Ada's reply." }, 500, req);
     }
 
     // 7. Touch conversation updated_at so it sorts to the top
@@ -271,17 +277,22 @@ Deno.serve(async (req) => {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId);
 
-    return jsonResponse({
-      reply: replyText,
-      conversation_id: conversationId,
-      message_id: assistantMsg.id,
-      kind: isSummary ? "summary" : "message",
-    });
+    return jsonResponse(
+      {
+        reply: replyText,
+        conversation_id: conversationId,
+        message_id: assistantMsg.id,
+        kind: isSummary ? "summary" : "message",
+      },
+      200,
+      req,
+    );
   } catch (err) {
     console.error("chat function unhandled error:", err);
     return jsonResponse(
       { error: "Something went wrong. Please try again." },
       500,
+      req,
     );
   }
 });
