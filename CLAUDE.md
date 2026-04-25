@@ -141,6 +141,6 @@ Key constraints to preserve when editing the system prompt:
 ## Backlog
 
 Key future items that affect architecture decisions today:
-- **B-002** (Week 3): Token usage dashboard — `token_count` column on `messages` is already planned for this.
-- **B-003** (Week 4): Rate limiting per user.
-- **B-005** (post-Week 2): Rebrand any remaining "Vera" references to "Ada" / "Ada Coach".
+- **B-002**: Token usage dashboard — `token_count` column already exists on `messages` (shipped in `core_schema`); needs an admin view to surface it.
+- **B-003**: Rate limiting per user.
+- **B-005**: Rebrand any remaining "Vera" references to "Ada" / "Ada Coach".
