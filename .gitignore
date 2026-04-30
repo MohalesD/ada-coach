@@ -4,3 +4,12 @@ node_modules
 .env.*.local
 dist
 .DS_Store
+
+# Generated codebase snapshots
+ada_coach_codebase.pdf
+generate_codebase_pdf.mjs
+generate_codebase_pdf.py
+
+# Claude Code local config
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

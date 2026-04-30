@@ -148,3 +148,62 @@ Key future items that affect architecture decisions today:
 - **B-002**: Token usage dashboard — `token_count` column already exists on `messages` (shipped in `core_schema`); needs an admin view to surface it.
 - **B-003**: Rate limiting per user.
 - **B-005**: Rebrand any remaining "Vera" references to "Ada" / "Ada Coach".
+
+## Development Principles
+
+### Single Responsibility
+Every function, file, and component must do one clearly definable thing.
+If you cannot describe its job in one sentence without using the word "and," refactor it into smaller units.
+This applies to Edge Functions, React components, utility files, and SQL functions.
+One job. One reason to change.
+
+### Plan First
+Use Plan Mode for any task that is 3 or more steps, touches the database schema, or makes an architectural decision.
+Write the plan to tasks/todo.md with checkable items before writing any code.
+Check in with the user before starting implementation.
+Mark items complete as you go.
+Add a review section to tasks/todo.md when done.
+
+### Scope Discipline
+Only touch what is necessary to complete the requested task.
+Do not refactor surrounding code unless explicitly asked.
+Do not add unrequested features or "nice to have" improvements.
+If you notice something worth fixing nearby, flag it as a separate suggestion after completing the task. Do not fix it unilaterally.
+
+### No Speculation
+Never guess at file paths, function names, API signatures, or schema column names.
+Read the relevant file first, then answer or act.
+If genuinely unsure, say so explicitly before proceeding.
+
+### No Sycophancy
+Do not validate the user's approach before answering.
+Disagree when the user is wrong.
+Do not change a correct answer because the user pushes back.
+If the user overrides a recommendation and it introduces risk, note the risk once clearly and proceed.
+
+### Verification — How to Hand Off Testing
+When a task is complete, never auto-run tests or browser checks without being asked.
+Instead, always conclude with a Verification section structured as follows:
+
+**Verification**
+
+How to test this manually:
+1. [Step-by-step instructions written in plain language]
+
+Expected result when working correctly:
+- [What the user should see, read, or confirm at each step]
+
+If Claude Code wants to assist with testing, suggest options like:
+- "I can run the type-check with npm run type-check if you want"
+- "I can open the browser with Claude in Chrome MCP if you have it connected"
+- "I can query the database directly with the Supabase MCP if you want to verify the migration landed"
+
+Do not run any of these without explicit user approval.
+
+### PR Format
+Every pull request description must include three sections:
+- What this does
+- Why we did it
+- How to test it
+
+No Co-Authored-By: Claude line in any commit message, ever.

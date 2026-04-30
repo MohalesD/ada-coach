@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ada Coach — Product Roadmap</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f9f9f7; color: #1a1a1a; padding: 2rem 1rem; }
+  .rm-wrap { max-width: 900px; margin: 0 auto; }
+  .brand-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 2rem; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: #9BB7D4; }
+  .brand-name { font-size: 14px; font-weight: 500; color: #1B4F72; letter-spacing: 0.02em; }
+  .brand-tag { font-size: 12px; color: #888; }
+  .rm-controls { display: flex; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .rm-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-btn { font-size: 12px; padding: 4px 12px; border-radius: 8px; cursor: pointer; border: 0.5px solid #ccc; background: #fff; color: #666; transition: all 0.15s; }
+  .filter-btn:hover { background: #f0f0ee; }
+  .filter-btn.on { background: #1B4F72; color: #E6F1FB; border-color: transparent; }
+  .rm-meta { font-size: 12px; color: #aaa; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #666; }
+  .priority-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .p-critical { background: #E24B4A; }
+  .p-high { background: #EF9F27; }
+  .p-medium { background: #1D9E75; }
+  .p-low { background: #888780; }
+  .sprint-block { margin-bottom: 2.5rem; }
+  .sprint-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; padding-bottom: 8px; border-bottom: 0.5px solid #e0e0da; flex-wrap: wrap; gap: 8px; }
+  .sprint-label { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 8px; }
+  .sprint-w3 { background: #E1F5EE; color: #085041; }
+  .sprint-w4 { background: #E6F1FB; color: #0C447C; }
+  .sprint-w5 { background: #FAEEDA; color: #633806; }
+  .sprint-w6 { background: #EEEDFE; color: #3C3489; }
+  .sprint-title { font-size: 15px; font-weight: 500; color: #1a1a1a; }
+  .sprint-theme { font-size: 12px; color: #888; }
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .item-card { background: #fff; border: 0.5px solid #e0e0da; border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s; }
+  .item-card:hover { border-color: #aaa; }
+  .item-card.expanded { border-color: #9BB7D4; }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .card-title { font-size: 13px; font-weight: 500; color: #1a1a1a; line-height: 1.4; }
+  .cat-badge { font-size: 10px; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; }
+  .cat-feature { background: #E1F5EE; color: #085041; }
+  .cat-ux { background: #EEEDFE; color: #3C3489; }
+  .cat-infra { background: #E6F1FB; color: #0C447C; }
+  .cat-revenue { background: #FAEEDA; color: #633806; }
+  .cat-pm { background: #F1EFE8; color: #444441; }
+  .card-desc { font-size: 12px; color: #666; line-height: 1.5; margin-bottom: 8px; }
+  .card-detail { font-size: 12px; color: #666; line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid #e0e0da; display: none; }
+  .item-card.expanded .card-detail { display: block; }
+  .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .priority-label { font-size: 10px; color: #aaa; }
+  .expand-hint { font-size: 10px; color: #aaa; text-align: center; padding-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="rm-wrap">
+
+  <div class="brand-bar">
+    <div class="brand-dot"></div>
+    <span class="brand-name">Ada Coach</span>
+    <span class="brand-tag">Product Roadmap · Weeks 3-6+</span>
+  </div>
+
+  <div class="rm-controls">
+    <div class="rm-filters">
+      <button class="filter-btn on" onclick="filterCat(this,'all')">All</button>
+      <button class="filter-btn" onclick="filterCat(this,'feature')">Features</button>
+      <button class="filter-btn" onclick="filterCat(this,'ux')">UX/UI</button>
+      <button class="filter-btn" onclick="filterCat(this,'infra')">Infrastructure</button>
+      <button class="filter-btn" onclick="filterCat(this,'revenue')">Revenue</button>
+      <button class="filter-btn" onclick="filterCat(this,'pm')">PM tooling</button>
+    </div>
+    <span class="rm-meta">Click any card to expand details</span>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="priority-dot p-critical"></div>Critical</div>
+    <div class="legend-item"><div class="priority-dot p-high"></div>High</div>
+    <div class="legend-item"><div class="priority-dot p-medium"></div>Medium</div>
+    <div class="legend-item"><div class="priority-dot p-low"></div>Low</div>
+  </div>
+
+  <div class="sprint-block">
+    <div class="sprint-header">
+      <span class="sprint-label sprint-w3">Week 3</span>
+      <span class="sprint-title">Scale and trust</span>
+      <span class="sprint-theme">— First real users, RAG layer, token budgets</span>
+    </div>
+    <div class="cards-grid">
+      <div class="item-card" data-cat="infra" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">RAG with pgvector</span><span class="cat-badge cat-infra">Infra</span></div>
+        <div class="card-desc">Ada references a PM's own documents when coaching. Upload a product brief, get grounded coaching.</div>
+        <div class="card-detail">Supabase pgvector extension. Ingest edge function chunks docs, generates OpenAI embeddings, stores vectors. Chat function retrieves top-5 similar chunks and injects as context. Admin document upload tab. No Pinecone needed.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-critical"></div><span class="priority-label">Critical</span></div></div>
+      </div>
+      <div class="item-card" data-cat="infra" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Token usage dashboard</span><span class="cat-badge cat-infra">Infra</span></div>
+        <div class="card-desc">Users see their usage in settings. Admin sees global and per-user token consumption.</div>
+        <div class="card-detail">token_count column already exists in messages table. Aggregate by user, by day, by conversation. User settings page gets a usage meter. Admin insights tab gets a usage breakdown. Foundation for billing tier enforcement.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-critical"></div><span class="priority-label">Critical</span></div></div>
+      </div>
+      <div class="item-card" data-cat="infra" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Daily/weekly usage limits</span><span class="cat-badge cat-infra">Infra</span></div>
+        <div class="card-desc">Admin sets message caps globally or per user. Users see a warning before hitting their limit.</div>
+        <div class="card-detail">Edge function checks cumulative token usage before calling Claude. Warning toast at 80% of limit. Friendly block message at 100%. Admin panel: global default cap plus per-user override. Backlog items B-002, B-003.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Beta user onboarding</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">First 3-5 real PMs test Ada. Structured feedback collection, onboarding email, invite-only access.</div>
+        <div class="card-detail">Invite code or waitlist gate on signup. Welcome email via Supabase edge function and Resend. First-session guided tour. Post-session NPS prompt after 3rd conversation.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="pm" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Linear + Notion setup</span><span class="cat-badge cat-pm">PM tooling</span></div>
+        <div class="card-desc">Migrate backlog to Linear. Move PRD to Notion. First proper sprint with story points and burndown.</div>
+        <div class="card-detail">Linear workspace with Ada Coach team, labels, sprint cycles. All B-00X backlog items migrated. Notion becomes the documentation hub: PRD, architecture diagram, sprint retros. First burndown chart.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="ux" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Mobile responsive layout</span><span class="cat-badge cat-ux">UX/UI</span></div>
+        <div class="card-desc">Ada works on phones. Sidebar collapses, chat expands, touch-friendly targets throughout.</div>
+        <div class="card-detail">Sidebar becomes a drawer on mobile. Scenario cards stack to single column. Input area stays pinned to bottom. Test on iOS Safari and Android Chrome. PMs use their phones in interviews.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-medium"></div><span class="priority-label">Medium</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sprint-block">
+    <div class="sprint-header">
+      <span class="sprint-label sprint-w4">Week 4</span>
+      <span class="sprint-title">Monetization foundation</span>
+      <span class="sprint-theme">— Stripe, role hierarchy, coaching modes</span>
+    </div>
+    <div class="cards-grid">
+      <div class="item-card" data-cat="revenue" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Stripe integration</span><span class="cat-badge cat-revenue">Revenue</span></div>
+        <div class="card-desc">Free tier with limits, Pro tier with higher limits. Stripe handles billing, Ada enforces tier.</div>
+        <div class="card-detail">Stripe Checkout for subscription. Webhook updates user_profiles with plan tier. Free: 20 messages/day. Pro: unlimited. Owner control panel to override limits. Stripe Customer Portal for self-serve billing management.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="infra" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Full role hierarchy</span><span class="cat-badge cat-infra">Infra</span></div>
+        <div class="card-desc">User, Manager, Admin, Owner roles with distinct permissions and UI surfaces.</div>
+        <div class="card-detail">Backlog item B-001. Roles enum in user_profiles. Owner control panel for app-wide settings. Admin panel for workspace settings. Manager view for reports only. RLS policies per role per table.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Coaching mode switching</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">Ada shifts between Discovery Coach, Assumption Challenger, Interview Prep, and Synthesis Coach modes.</div>
+        <div class="card-detail">Backlog item B-010. Multiple active prompts in coaching_prompts table. User-facing mode selector in chat header. Each mode has a distinct system prompt. Admin creates and manages modes. Mode shown in session export.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-medium"></div><span class="priority-label">Medium</span></div></div>
+      </div>
+      <div class="item-card" data-cat="ux" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Landing page redesign</span><span class="cat-badge cat-ux">UX/UI</span></div>
+        <div class="card-desc">The Week 1 prototype landing page becomes a real product page with live demo widget.</div>
+        <div class="card-detail">New copy positioning Ada for AI PM portfolio use case. Live embedded demo (unauthenticated, limited messages). Testimonials section. Pricing section. Clear CTA to sign up. SEO meta tags.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-medium"></div><span class="priority-label">Medium</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sprint-block">
+    <div class="sprint-header">
+      <span class="sprint-label sprint-w5">Week 5</span>
+      <span class="sprint-title">Evaluation and portfolio</span>
+      <span class="sprint-theme">— Measure Ada, tell the story</span>
+    </div>
+    <div class="cards-grid">
+      <div class="item-card" data-cat="pm" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">RAG evaluation study</span><span class="cat-badge cat-pm">PM tooling</span></div>
+        <div class="card-desc">15-20 benchmark questions comparing Ada with vs without RAG. Grounded answers vs hallucinations.</div>
+        <div class="card-detail">Relevance, groundedness, citation quality, completeness, hallucination rate scored 1-5. Before/after comparison table. 3-5 example Q&As with outputs. Portfolio artifact showing product evaluation mindset.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Assumption map generator</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">Ada generates a visual assumption map from the conversation. PMs export it as a Miro-ready artifact.</div>
+        <div class="card-detail">Ada identifies assumptions, ranks them by risk (desirability, viability, feasibility), generates structured JSON. Frontend renders as a visual card matrix. Export as CSV or structured markdown for Miro import.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-medium"></div><span class="priority-label">Medium</span></div></div>
+      </div>
+      <div class="item-card" data-cat="pm" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Portfolio case study</span><span class="cat-badge cat-pm">PM tooling</span></div>
+        <div class="card-desc">The full Ada Coach story: problem, architecture, tradeoffs, evaluation, metrics, lessons.</div>
+        <div class="card-detail">Problem statement and user. Why RAG. Architecture diagram. Key decisions and tradeoffs. Evaluation results. What you'd do differently. 2-3 minute demo video. LinkedIn writeup.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-high"></div><span class="priority-label">High</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Interview question bank</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">Ada generates a reusable library of discovery questions. PMs build their playbook over time.</div>
+        <div class="card-detail">Each Ada-suggested question can be saved to a personal question bank. Questions tagged by type. Filterable library in a dedicated tab. Export as markdown. Over time, the bank reflects the PM's growing discovery intuition.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-low"></div><span class="priority-label">Low</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sprint-block">
+    <div class="sprint-header">
+      <span class="sprint-label sprint-w6">Week 6+</span>
+      <span class="sprint-title">Growth and intelligence</span>
+      <span class="sprint-theme">— Ada learns, Ada grows</span>
+    </div>
+    <div class="cards-grid">
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Ada remembers you</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">Ada references patterns from past sessions. Cross-session memory makes her a real coach, not a chatbot.</div>
+        <div class="card-detail">Cross-conversation memory via RAG. User's past sessions are chunked and embedded. Ada retrieves relevant past context before coaching. Opt-in privacy setting. This is the feature that truly differentiates Ada.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-medium"></div><span class="priority-label">Medium</span></div></div>
+      </div>
+      <div class="item-card" data-cat="revenue" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Team workspaces</span><span class="cat-badge cat-revenue">Revenue</span></div>
+        <div class="card-desc">PMs invite teammates. Shared conversation history, team question bank, manager visibility.</div>
+        <div class="card-detail">Workspace model: one subscription covers a team. Manager role sees team-wide analytics. Shared coaching prompt library. Team question bank built collaboratively. The enterprise upsell from individual Pro tier.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-low"></div><span class="priority-label">Low</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Cursor IDE transition</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">Switch primary IDE to Cursor for deeper AI-assisted development. Week 3-4 tooling upgrade.</div>
+        <div class="card-detail">Cursor gives inline completions, codebase-aware suggestions, and chat in the editor sidebar. Migrate ada-coach repo and configure. Natural next step after Claude Code fluency is established.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-low"></div><span class="priority-label">Low</span></div></div>
+      </div>
+      <div class="item-card" data-cat="feature" onclick="toggle(this)">
+        <div class="card-top"><span class="card-title">Ada for Slack</span><span class="cat-badge cat-feature">Feature</span></div>
+        <div class="card-desc">PMs get coaching nudges in Slack before customer interviews. Async coaching where they work.</div>
+        <div class="card-detail">Slack app integration. PM types /ada before an interview, gets 3 pressure-tested questions. Or a daily discovery prompt to a channel. Meets PMs where they already are. Long-term differentiator from web-only tools.</div>
+        <div class="card-footer"><div style="display:flex;align-items:center;gap:5px"><div class="priority-dot p-low"></div><span class="priority-label">Low</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem;padding-top:1rem;border-top:0.5px solid #e0e0da;font-size:12px;color:#aaa;text-align:center;">
+    Ada Coach Roadmap · Mohales Deis · Deus AI · Maven AI Coding Course
+  </div>
+
+</div>
+
+<script>
+function toggle(card) { card.classList.toggle('expanded'); }
+function filterCat(btn, cat) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.item-card').forEach(c => {
+    c.style.display = (cat === 'all' || c.dataset.cat === cat) ? 'block' : 'none';
+  });
+}
+</script>
+
+</body>
+</html>
