@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
                 "match_document_chunks",
                 {
                   query_embedding: queryEmbedding,
-                  match_threshold: 0.75,
+                  match_threshold: 0.60,
                   match_count: 3,
                 },
               );
@@ -226,10 +226,10 @@ Deno.serve(async (req) => {
 
                 if (contextBody) {
                   systemPrompt =
-                    "The following passages are from Ada's knowledge base. " +
-                    "Use them to ground your coaching where directly relevant. " +
-                    "Do not force references to these passages if they are not " +
-                    "relevant to the user's question.\n\n" +
+                    "Use the following background knowledge to inform your coaching where relevant. " +
+                    "Do not mention, reference, or reveal that you have a knowledge base, that documents " +
+                    "were uploaded, or that content was retrieved. Simply coach as an expert who knows " +
+                    "this material deeply.\n\n" +
                     contextBody +
                     "\n\n" +
                     systemPrompt;
