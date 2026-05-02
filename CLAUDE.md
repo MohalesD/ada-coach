@@ -98,6 +98,12 @@ Migrations in `supabase/migrations/` (applied in filename order):
 **Pin support — `pin_conversations`:**
 - Adds `conversations.is_pinned BOOLEAN NOT NULL DEFAULT false`. No new RLS policy needed — the existing "update own conversations" policy covers it.
 
+**Documents & RAG — `documents_table`, `fix_documents_insert_policy`, `enable_pgvector`, `document_chunks`:**
+- `documents` — owner-managed knowledge base (id, user_id, filename, file_path, content_text, status, chunk_count). `status` is a state machine: `'uploaded' → 'processing' → 'ready' | 'error'`. `file_path` convention: `{user_id}/{uuid}_{filename}`.
+- `documents` Storage bucket — private, 50 MB cap, `application/pdf` + `text/plain` only. Owner-only RLS on `storage.objects` keyed off the first folder segment (`(storage.foldername(name))[1] = auth.uid()::text`).
+- `document_chunks` — one row per chunk with `embedding extensions.vector(1536)` (OpenAI `text-embedding-3-small`). Indexed with `ivfflat` cosine ops (lists = 100). Re-run `ANALYZE document_chunks` after large bulk loads so the index picks good list assignments. Authenticated UPDATE is revoked — chunks are immutable from clients.
+- **Owner-only, not just admin.** `documents` and `document_chunks` RLS requires `role = 'owner'`. The `ingest` Edge Function additionally enforces this in code (`requireAdmin()` is not sufficient). Mirror this pattern when adding new RAG-adjacent tables.
+
 **RLS posture:**
 - Authenticated users see only their own conversations/messages (via `user_id = auth.uid()`)
 - Authenticated users can read only the active coaching prompt
@@ -120,6 +126,14 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - **`admin-conversations`** — `GET` (list with counts), `GET ?id=` (full messages), `PATCH ?id=` (update status). Requires admin/owner.
 - **`admin-prompts`** — `GET` (list), `POST` (create, auto-versions), `POST ?id=&action=activate`, `PUT ?id=` (update), `DELETE ?id=` (blocked if active). Requires admin/owner.
 - **`admin-insights`** — `GET` returns aggregated feedback analytics (totals, positive/negative rates, per-conversation, per-prompt, top 5 positive/negative messages, recent 10 events). Aggregation is in-memory using the service client; if the dataset grows, move to Postgres aggregations or a materialized view.
+- **`ingest`** — `POST { document_id }`. **Owner-only** (admin alone is rejected with 403). Downloads the file from the `documents` Storage bucket, extracts text (PDF via `unpdf`, plain text via `Blob.text()`), runs a sentence-aware chunker (~300 words / ~50 word overlap), embeds in batches of 96 against OpenAI `text-embedding-3-small`, deletes any prior chunks for that `document_id`, inserts new rows into `document_chunks`, and transitions the document `'uploaded' → 'processing' → 'ready'`. Any failure rolls back chunks and marks the document `'error'`. Re-ingestable: a second invocation produces the same end state, not duplicates. Requires `OPENAI_API_KEY` in Supabase Secrets.
+
+### Required Supabase Secrets
+
+- `ANTHROPIC_API_KEY` — used by `chat` (Claude calls)
+- `OPENAI_API_KEY` — used by `ingest` (embeddings)
+- `ALLOWED_ORIGINS` — comma-separated CORS allowlist
+- `SUPABASE_SERVICE_ROLE_KEY` — auto-injected; consumed by `getServiceClient()`
 
 ## Ada's Coaching Persona (System Prompt)
 
@@ -133,12 +147,16 @@ Key constraints to preserve when editing the system prompt:
 
 - `src/lib/export.ts` — `exportConversation(meta, messages)` writes a markdown file (body messages, then a "Session Summary" section pulled from `kind === 'summary'` rows) and triggers a browser download. No server round-trip.
 - `src/hooks/use-feedback.ts` — owns the DB write + Sonner toast for thumbs up/down on a single message; UI state stays with the caller.
-- `src/lib/admin-api.ts` — thin client for all `admin-*` Edge Functions; throws `UnauthorizedError` if the session has no JWT.
+- `src/lib/admin-api.ts` — thin client for all `admin-*` Edge Functions; throws `UnauthorizedError` if the session has no JWT. Also wraps the documents endpoints used by the admin Documents tab.
+
+## Scripts
+
+- `scripts/smoke-ingest.mjs` — end-to-end smoke test for the `ingest` Edge Function. Mints an owner JWT via `auth/admin/generate_link` (token_hash → email_otp fallback) and POSTs to `/functions/v1/ingest`. Run with `SUPABASE_URL`, `SERVICE_ROLE`, `ANON`, `OWNER_EMAIL`, `DOCUMENT_ID` env vars. Use this to verify a deployed `ingest` function before wiring it into the UI.
 
 ## Docs
 
 - `docs/Ada_Coach_Backlog.md` — full backlog (source of truth for B-xxx IDs below)
-- `docs/prds/` — weekly PRDs
+- `docs/prds/` — weekly PRDs (read the Documents RAG Phase 2 PRD before touching `ingest`, `document_chunks`, or chunking/embedding logic)
 - `docs/logs/` — working session log
 - `docs/security-audit-2026-04-18.md` — auth/authz audit; tracks remediation status (lockdown migration + CORS allowlist already shipped in code)
 

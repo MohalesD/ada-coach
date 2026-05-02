@@ -28,6 +28,7 @@ type ChatMessage = {
   content: string;
   feedback?: FeedbackValue;
   kind?: MessageKind;
+  created_at?: string;
 };
 
 type ChatResponse = {
@@ -128,6 +129,7 @@ export default function Index() {
       id: crypto.randomUUID(),
       role: 'user',
       content: trimmed,
+      created_at: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -159,6 +161,7 @@ export default function Index() {
           id: data.message_id,
           role: 'assistant',
           content: data.reply,
+          created_at: new Date().toISOString(),
         },
       ]);
       setSidebarRefreshKey((k) => k + 1);
@@ -204,6 +207,7 @@ export default function Index() {
           role: 'assistant',
           content: data.reply,
           kind: data.kind ?? 'summary',
+          created_at: new Date().toISOString(),
         },
       ]);
       setSidebarRefreshKey((k) => k + 1);
@@ -250,7 +254,7 @@ export default function Index() {
     const [messagesResult, metaResult] = await Promise.all([
       supabase
         .from('messages')
-        .select('id, role, content, feedback, kind')
+        .select('id, role, content, feedback, kind, created_at')
         .eq('conversation_id', id)
         .in('role', ['user', 'assistant'])
         .order('created_at', { ascending: true }),
@@ -661,13 +665,30 @@ function ExploreIcon() {
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return isToday
+    ? `Today at ${time}`
+    : `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${time}`;
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
 
   if (isUser) {
     return (
-      <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-2xl bg-secondary px-4 py-3 text-sm leading-relaxed text-secondary-foreground">
-        {message.content}
+      <div className="group ml-auto flex max-w-[80%] flex-col items-end gap-0.5">
+        <div className="whitespace-pre-wrap rounded-2xl bg-secondary px-4 py-3 text-sm leading-relaxed text-secondary-foreground">
+          {message.content}
+        </div>
+        {message.created_at && (
+          <span className="pr-1 text-[10px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            {formatTimestamp(message.created_at)}
+          </span>
+        )}
       </div>
     );
   }
@@ -720,6 +741,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           messageId={message.id}
           initial={message.feedback ?? null}
         />
+      )}
+      {message.created_at && (
+        <span className="ml-1 text-[10px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {formatTimestamp(message.created_at)}
+        </span>
       )}
     </div>
   );

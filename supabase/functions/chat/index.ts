@@ -175,6 +175,78 @@ Deno.serve(async (req) => {
       activePromptId = activePrompt.id;
     }
 
+    // 3.5. RAG retrieval — embed the user message and prepend the most
+    // relevant knowledge-base chunks to the system prompt. Best-effort:
+    // any failure falls through so Ada keeps working without context.
+    if (!isSummary) {
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (openaiKey) {
+        try {
+          const embedRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${openaiKey}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "text-embedding-3-small",
+              input: message,
+            }),
+          });
+
+          if (embedRes.ok) {
+            const embedData = await embedRes.json();
+            const queryEmbedding: number[] | undefined =
+              embedData?.data?.[0]?.embedding;
+
+            if (Array.isArray(queryEmbedding)) {
+              const { data: chunks } = await service.rpc(
+                "match_document_chunks",
+                {
+                  query_embedding: queryEmbedding,
+                  match_threshold: 0.75,
+                  match_count: 3,
+                },
+              );
+
+              const chunkCount = chunks?.length ?? 0;
+              let contextBody = "";
+
+              if (chunkCount > 0) {
+                // Cap injected content at ~4000 tokens (≈ 4 chars/token)
+                const charCap = 4000 * 4;
+                for (const chunk of chunks as Array<{
+                  content: string;
+                  similarity: number;
+                }>) {
+                  const sep = contextBody ? "\n\n---\n\n" : "";
+                  if (contextBody.length + sep.length + chunk.content.length > charCap) break;
+                  contextBody += sep + chunk.content;
+                }
+
+                if (contextBody) {
+                  systemPrompt =
+                    "The following passages are from Ada's knowledge base. " +
+                    "Use them to ground your coaching where directly relevant. " +
+                    "Do not force references to these passages if they are not " +
+                    "relevant to the user's question.\n\n" +
+                    contextBody +
+                    "\n\n" +
+                    systemPrompt;
+                }
+              }
+
+              console.log(
+                `RAG: chunks=${chunkCount}, injected=${contextBody.length > 0}`,
+              );
+            }
+          }
+        } catch (ragErr) {
+          console.error("RAG retrieval error, continuing without context:", ragErr);
+        }
+      }
+    }
+
     // 4. Build Anthropic request. For summary requests we append a
     // synthetic user directive (not persisted) since Anthropic requires
     // the conversation to end on a user turn.
