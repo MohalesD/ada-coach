@@ -225,3 +225,51 @@ export type InsightsResponse = {
 export async function getInsights(): Promise<InsightsResponse> {
   return await adminFetch<InsightsResponse>('admin-insights');
 }
+
+// ── Users (owner-only) ────────────────────────────────────────────
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: 'user' | 'admin' | 'owner';
+  credits_remaining: number;
+  last_credit_reset: string; // YYYY-MM-DD
+};
+
+export async function listUsers(): Promise<AdminUser[]> {
+  const { users } = await adminFetch<{ users: AdminUser[] }>('admin-users');
+  return users;
+}
+
+export async function resetUserCredits(id: string): Promise<AdminUser> {
+  const { user } = await adminFetch<{ user: AdminUser }>('admin-users', {
+    method: 'POST',
+    params: { id, action: 'reset' },
+  });
+  return user;
+}
+
+// ── App settings (owner-only via RLS, queried directly) ──────────
+
+export async function getDailyMessageLimit(): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'daily_message_limit')
+    .maybeSingle();
+  if (error || !data) return null;
+  const parsed = parseInt(data.value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export async function setDailyMessageLimit(value: number): Promise<void> {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error('Daily message limit must be a non-negative integer');
+  }
+  const { error } = await supabase
+    .from('app_settings')
+    .update({ value: String(value), updated_at: new Date().toISOString() })
+    .eq('key', 'daily_message_limit');
+  if (error) throw new Error(error.message);
+}

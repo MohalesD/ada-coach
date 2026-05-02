@@ -91,6 +91,61 @@ Deno.serve(async (req) => {
 
     const service = getServiceClient();
 
+    // 0.5. Credit gate — checked before any AI work.
+    // - Owner role is exempt (creditsRemaining stays null → no check, no decrement)
+    // - daily_message_limit = 0 means unlimited (same: null)
+    // - Any DB read failure falls through to unlimited (never punish the user)
+    // - Auto-reset on a new UTC day before evaluating
+    let creditsRemaining: number | null = null;
+
+    const { data: creditProfile } = await service
+      .from("user_profiles")
+      .select("role, credits_remaining, last_credit_reset")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (creditProfile && creditProfile.role !== "owner") {
+      const { data: settingRow } = await service
+        .from("app_settings")
+        .select("value")
+        .eq("key", "daily_message_limit")
+        .maybeSingle();
+
+      let dailyLimit: number | null = null;
+      if (settingRow) {
+        const parsed = parseInt(settingRow.value, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) dailyLimit = parsed;
+      }
+
+      // dailyLimit > 0 → enforce. 0 / null (read failure / bad value) → unlimited.
+      if (dailyLimit !== null && dailyLimit > 0) {
+        creditsRemaining = creditProfile.credits_remaining;
+
+        // Auto-reset on a new UTC day
+        const today = new Date().toISOString().slice(0, 10);
+        if (creditProfile.last_credit_reset < today) {
+          const { error: resetErr } = await service
+            .from("user_profiles")
+            .update({ credits_remaining: dailyLimit, last_credit_reset: today })
+            .eq("id", user.id);
+          if (!resetErr) creditsRemaining = dailyLimit;
+        }
+
+        // Block when exhausted
+        if (creditsRemaining <= 0) {
+          return jsonResponse(
+            {
+              error: "credits_exhausted",
+              credits_remaining: 0,
+              resets_at: "midnight UTC",
+            },
+            429,
+            req,
+          );
+        }
+      }
+    }
+
     // 1. Resolve or create the conversation (ownership enforced by RLS)
     let conversationId = conversationIdInput;
     if (conversationId) {
@@ -349,12 +404,32 @@ Deno.serve(async (req) => {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId);
 
+    // 8. Decrement credits — only when tracked. Best-effort: a DB write
+    //    failure here is logged but never blocks the response, since the
+    //    user already paid the AI cost.
+    let returnedCredits: number | null = null;
+    if (creditsRemaining !== null) {
+      const { data: decremented, error: decErr } = await service
+        .from("user_profiles")
+        .update({ credits_remaining: creditsRemaining - 1 })
+        .eq("id", user.id)
+        .select("credits_remaining")
+        .single();
+      if (decErr) {
+        console.error("Failed to decrement credits:", decErr);
+        returnedCredits = creditsRemaining - 1;
+      } else {
+        returnedCredits = decremented.credits_remaining;
+      }
+    }
+
     return jsonResponse(
       {
         reply: replyText,
         conversation_id: conversationId,
         message_id: assistantMsg.id,
         kind: isSummary ? "summary" : "message",
+        credits_remaining: returnedCredits,
       },
       200,
       req,

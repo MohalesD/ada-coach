@@ -36,8 +36,20 @@ type ChatResponse = {
   conversation_id: string;
   message_id: string;
   kind?: MessageKind;
+  credits_remaining?: number | null;
   error?: string;
 };
+
+// Credits state machine:
+// - loading  : initial fetch in flight
+// - error    : initial fetch failed; badge shows "—"
+// - unlimited: owner role or daily_message_limit = 0; badge hidden
+// - count    : tracked, value is the remaining credit count
+type CreditsState =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'unlimited' }
+  | { kind: 'count'; value: number };
 
 const ERROR_MESSAGE = 'Ada is taking a moment. Please try again.';
 const SUMMARY_SENTINEL = '__SUMMARY__';
@@ -111,7 +123,50 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const [conversationMeta, setConversationMeta] = useState<ConversationMeta | null>(null);
+  const [credits, setCredits] = useState<CreditsState>({ kind: 'loading' });
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Initial credits fetch. Owners are unlimited (chat function returns null
+  // anyway). For everyone else we read the local credits_remaining; if the
+  // chat function later returns null we promote to 'unlimited' (i.e.
+  // daily_message_limit = 0).
+  useEffect(() => {
+    if (!user) return;
+    if (profile?.role === 'owner') {
+      setCredits({ kind: 'unlimited' });
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error: credErr } = await supabase
+        .from('user_profiles')
+        .select('credits_remaining')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (credErr || !data) {
+        setCredits({ kind: 'error' });
+        return;
+      }
+      setCredits({ kind: 'count', value: data.credits_remaining as number });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, profile?.role]);
+
+  // Apply a credits_remaining value pulled from a chat response.
+  const applyCreditsFromResponse = (value: number | null | undefined) => {
+    if (value === undefined) return;
+    if (value === null) {
+      setCredits({ kind: 'unlimited' });
+    } else {
+      setCredits({ kind: 'count', value });
+    }
+  };
+
+  const isOutOfCredits =
+    credits.kind === 'count' && credits.value <= 0;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -123,7 +178,7 @@ export default function Index() {
   // their opening message without coupling to the input field state.
   const send = async (override?: string) => {
     const trimmed = (override ?? input).trim();
-    if (!trimmed || isBusy) return;
+    if (!trimmed || isBusy || isOutOfCredits) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -149,12 +204,33 @@ export default function Index() {
       );
 
       if (invokeErr || !data || data.error || !data.reply) {
-        setError(ERROR_MESSAGE);
+        // 429 / credits_exhausted comes back as invokeErr from supabase.invoke.
+        // Re-fetch credits so the badge stays in sync; show a specific
+        // message when the failure is clearly a credit exhaustion.
+        if (data?.error === 'credits_exhausted') {
+          setCredits({ kind: 'count', value: 0 });
+          setError("You've used all your credits for today. They'll reset at midnight UTC.");
+        } else {
+          setError(ERROR_MESSAGE);
+          if (user && profile?.role !== 'owner') {
+            void supabase
+              .from('user_profiles')
+              .select('credits_remaining')
+              .eq('id', user.id)
+              .maybeSingle()
+              .then(({ data: row }) => {
+                if (row) {
+                  setCredits({ kind: 'count', value: row.credits_remaining as number });
+                }
+              });
+          }
+        }
         return;
       }
 
       const isNew = conversationId !== data.conversation_id;
       setConversationId(data.conversation_id);
+      applyCreditsFromResponse(data.credits_remaining);
       setMessages((prev) => [
         ...prev,
         {
@@ -200,6 +276,7 @@ export default function Index() {
         return;
       }
 
+      applyCreditsFromResponse(data.credits_remaining);
       setMessages((prev) => [
         ...prev,
         {
@@ -309,12 +386,15 @@ export default function Index() {
                 · Customer Discovery Coach
               </span>
             </h1>
-            <UserMenu
-              user={user}
-              profile={profile}
-              onNavigate={navigate}
-              onSignOut={() => void signOut()}
-            />
+            <div className="flex items-center gap-3">
+              <CreditsBadge state={credits} />
+              <UserMenu
+                user={user}
+                profile={profile}
+                onNavigate={navigate}
+                onSignOut={() => void signOut()}
+              />
+            </div>
           </div>
         </header>
 
@@ -395,17 +475,19 @@ export default function Index() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  isSummarizing
-                    ? 'Ada is summarizing your session...'
-                    : 'Ask Ada anything about customer discovery...'
+                  isOutOfCredits
+                    ? 'Credits reset at midnight UTC'
+                    : isSummarizing
+                      ? 'Ada is summarizing your session...'
+                      : 'Ask Ada anything about customer discovery...'
                 }
                 rows={1}
-                disabled={isBusy}
+                disabled={isBusy || isOutOfCredits}
                 className="min-h-[44px] resize-none"
               />
               <Button
                 onClick={() => void send()}
-                disabled={!input.trim() || isBusy}
+                disabled={!input.trim() || isBusy || isOutOfCredits}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 Send
@@ -415,6 +497,41 @@ export default function Index() {
         </footer>
       </div>
     </div>
+  );
+}
+
+// ─── Credits badge ────────────────────────────────────────────────────────────
+
+function CreditsBadge({ state }: { state: CreditsState }) {
+  // Hide entirely for owner / unlimited / loading. Loading is invisible (not
+  // a flash of text) so the layout doesn't jump when credits resolve.
+  if (state.kind === 'unlimited' || state.kind === 'loading') return null;
+
+  const isError = state.kind === 'error';
+  const value = isError ? null : state.value;
+
+  // Tone — cerulean by default, gold when low, muted when zero.
+  const tone =
+    isError
+      ? 'border-[#9BB7D4]/30 bg-background text-muted-foreground'
+      : value === 0
+        ? 'border-muted-foreground/30 bg-muted/40 text-muted-foreground line-through'
+        : value !== null && value <= 3
+          ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10 text-[#C9A84C]'
+          : 'border-[#9BB7D4]/60 bg-[#9BB7D4]/10 text-[#1B4F72]';
+
+  const label = isError ? '— credits' : `${value} credits`;
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider',
+        tone,
+      )}
+      aria-label={`${value ?? '—'} credits remaining`}
+    >
+      {label}
+    </span>
   );
 }
 

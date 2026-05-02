@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -48,11 +49,16 @@ import {
   createPrompt,
   deletePrompt,
   getConversation,
+  getDailyMessageLimit,
   getInsights,
   listConversations,
   listPrompts,
+  listUsers,
+  resetUserCredits,
+  setDailyMessageLimit,
   updateConversationStatus,
   updatePrompt,
+  type AdminUser,
   type CoachingPrompt,
   type ConversationDetail,
   type ConversationStat,
@@ -112,6 +118,12 @@ export default function Admin() {
             {profile?.role === 'owner' && (
               <TabsTrigger value="documents">Documents</TabsTrigger>
             )}
+            {profile?.role === 'owner' && (
+              <TabsTrigger value="users">Users</TabsTrigger>
+            )}
+            {profile?.role === 'owner' && (
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="conversations" className="mt-6">
@@ -136,6 +148,18 @@ export default function Admin() {
           {profile?.role === 'owner' && (
             <TabsContent value="documents" className="mt-6">
               <DocumentsTab onUnauthorized={handleUnauthorized} />
+            </TabsContent>
+          )}
+
+          {profile?.role === 'owner' && (
+            <TabsContent value="users" className="mt-6">
+              <UsersTab onUnauthorized={handleUnauthorized} />
+            </TabsContent>
+          )}
+
+          {profile?.role === 'owner' && (
+            <TabsContent value="settings" className="mt-6">
+              <SettingsTab onUnauthorized={handleUnauthorized} />
             </TabsContent>
           )}
         </Tabs>
@@ -1474,4 +1498,244 @@ function formatDate(iso: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Users tab (owner-only)
+// ──────────────────────────────────────────────────────────────────
+
+function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setUsers(await listUsers());
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      setError((err as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleReset = async (id: string) => {
+    setResettingId(id);
+    try {
+      const updated = await resetUserCredits(id);
+      setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
+      toast.success(`Credits reset for ${updated.email}`);
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      toast.error(`Reset failed: ${(err as Error).message}`);
+    } finally {
+      setResettingId(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+        <div>
+          <CardTitle>Users</CardTitle>
+          <CardDescription>
+            {users.length} total · reset credits to the current daily limit
+          </CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void refresh()}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <p className="mb-4 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead className="w-32">Display name</TableHead>
+              <TableHead className="w-24">Role</TableHead>
+              <TableHead className="w-24 text-right">Credits</TableHead>
+              <TableHead className="w-32">Last reset</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.length === 0 && !isLoading && (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No users found.
+                </TableCell>
+              </TableRow>
+            )}
+            {users.map((u) => (
+              <TableRow key={u.id}>
+                <TableCell className="font-medium">{u.email}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {u.display_name ?? '—'}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={u.role === 'owner' ? 'default' : 'outline'}>
+                    {u.role}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right font-mono">
+                  {u.credits_remaining}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {u.last_credit_reset}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={resettingId === u.id}
+                    onClick={() => void handleReset(u.id)}
+                  >
+                    {resettingId === u.id ? 'Resetting...' : 'Reset'}
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Settings tab (owner-only)
+// ──────────────────────────────────────────────────────────────────
+
+function SettingsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [limit, setLimit] = useState<string>('');
+  const [originalLimit, setOriginalLimit] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const value = await getDailyMessageLimit();
+      if (value !== null) {
+        setLimit(String(value));
+        setOriginalLimit(value);
+      } else {
+        setError('Could not read daily message limit.');
+      }
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      setError((err as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault();
+    const parsed = parseInt(limit, 10);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      toast.error('Daily limit must be a non-negative integer.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await setDailyMessageLimit(parsed);
+      setOriginalLimit(parsed);
+      toast.success('Daily message limit saved.');
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isDirty =
+    originalLimit !== null && limit !== '' && parseInt(limit, 10) !== originalLimit;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Credits & Limits</CardTitle>
+        <CardDescription>
+          Controls how many chat messages a user gets per day.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <p className="mb-4 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+        <form onSubmit={handleSave} className="flex max-w-sm flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="daily-message-limit">
+              Daily message limit per user
+            </Label>
+            <Input
+              id="daily-message-limit"
+              type="number"
+              min={0}
+              step={1}
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              disabled={isLoading || isSaving}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              0 = unlimited. Resets at midnight UTC.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              disabled={isLoading || isSaving || !isDirty}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
 }
