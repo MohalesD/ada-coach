@@ -94,6 +94,19 @@ This is a temporary holding document for feature ideas, enhancements, and techni
 - Architecture diagram added
 - Sprint retrospective template created
 
+### B-008: Time-Based Credit Reset via pg_cron (Revisit)
+**Priority:** Low (revisit when user base grows or stale-badge complaints recur)
+**Epic:** Usage Analytics and Cost Control
+**Decision Date:** 2026-05-05
+**Description:** On 2026-05-05 we discovered the daily credit reset was lazy — it only fired inside the `chat` Edge Function on message send, so users who hit zero saw a stale badge until they tried sending again. We chose **Option A** (extract reset into a Postgres function `fn_reset_credits_if_due` and call it from both the chat function and the frontend's credits-fetch `useEffect` on app load). This keeps the on-demand pattern but plugs the UI gap with no new infra.
+**Why we deferred Option B:** Option B (pg_cron job at 00:00 UTC resetting all users) is more durable — no reliance on user activity to trigger reset, no per-request DB write, simpler mental model. We chose A for smaller blast radius and faster ship. Revisit if: (a) we add features that read credits outside the chat path, (b) we want a clean audit trail of "credits issued per day," or (c) the user count grows past where per-request reset checks feel wasteful.
+**Acceptance Criteria (when revisited):**
+- `pg_cron` extension enabled in Supabase
+- Nightly job at 00:00 UTC resets all non-owner users to current `daily_message_limit`
+- Lazy reset logic in `chat` and frontend removed
+- Backfill plan for users whose `last_credit_reset` is stale at deploy time
+**Dependencies:** None (Option A must already be shipped so we know the lazy path is removable)
+
 ---
 
 ## Epics Summary
@@ -101,7 +114,7 @@ This is a temporary holding document for feature ideas, enhancements, and techni
 | Epic | Items | Target |
 |------|-------|--------|
 | Authentication and Access Control | B-001, B-004 | Weeks 3-4 |
-| Usage Analytics and Cost Control | B-002, B-003 | Weeks 3-4 |
+| Usage Analytics and Cost Control | B-002, B-003, B-008 | Weeks 3-4; B-008 deferred |
 | Brand and Identity | B-005 | Week 2 post-submission |
 | PM Tooling | B-006, B-007 | Monday April 14 |
 

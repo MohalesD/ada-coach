@@ -92,57 +92,34 @@ Deno.serve(async (req) => {
     const service = getServiceClient();
 
     // 0.5. Credit gate — checked before any AI work.
-    // - Owner role is exempt (creditsRemaining stays null → no check, no decrement)
-    // - daily_message_limit = 0 means unlimited (same: null)
-    // - Any DB read failure falls through to unlimited (never punish the user)
-    // - Auto-reset on a new UTC day before evaluating
+    // Delegates to fn_reset_credits_if_due (SECURITY DEFINER) so the
+    // same lazy-reset logic is shared with the frontend's app-load
+    // refresh. The function returns:
+    //   - null  → unlimited (owner role, or daily_message_limit = 0/unset)
+    //   - n     → user's current credits after any due reset
+    // We call via userClient (JWT-bound) so auth.uid() inside the
+    // function resolves to this user.
     let creditsRemaining: number | null = null;
+    const { data: rpcCredits, error: rpcErr } = await userClient.rpc(
+      "fn_reset_credits_if_due",
+    );
 
-    const { data: creditProfile } = await service
-      .from("user_profiles")
-      .select("role, credits_remaining, last_credit_reset")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (creditProfile && creditProfile.role !== "owner") {
-      const { data: settingRow } = await service
-        .from("app_settings")
-        .select("value")
-        .eq("key", "daily_message_limit")
-        .maybeSingle();
-
-      let dailyLimit: number | null = null;
-      if (settingRow) {
-        const parsed = parseInt(settingRow.value, 10);
-        if (Number.isFinite(parsed) && parsed >= 0) dailyLimit = parsed;
-      }
-
-      // dailyLimit > 0 → enforce. 0 / null (read failure / bad value) → unlimited.
-      if (dailyLimit !== null && dailyLimit > 0) {
-        creditsRemaining = creditProfile.credits_remaining;
-
-        // Auto-reset on a new UTC day
-        const today = new Date().toISOString().slice(0, 10);
-        if (creditProfile.last_credit_reset < today) {
-          const { error: resetErr } = await service
-            .from("user_profiles")
-            .update({ credits_remaining: dailyLimit, last_credit_reset: today })
-            .eq("id", user.id);
-          if (!resetErr) creditsRemaining = dailyLimit;
-        }
-
-        // Block when exhausted
-        if (creditsRemaining <= 0) {
-          return jsonResponse(
-            {
-              error: "credits_exhausted",
-              credits_remaining: 0,
-              resets_at: "midnight UTC",
-            },
-            429,
-            req,
-          );
-        }
+    if (rpcErr) {
+      // Best-effort: fall through to unlimited rather than block the user
+      // on a transient DB issue.
+      console.error("fn_reset_credits_if_due failed:", rpcErr);
+    } else if (typeof rpcCredits === "number") {
+      creditsRemaining = rpcCredits;
+      if (creditsRemaining <= 0) {
+        return jsonResponse(
+          {
+            error: "credits_exhausted",
+            credits_remaining: 0,
+            resets_at: "midnight UTC",
+          },
+          429,
+          req,
+        );
       }
     }
 

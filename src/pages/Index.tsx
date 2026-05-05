@@ -135,10 +135,11 @@ export default function Index() {
   const [credits, setCredits] = useState<CreditsState>({ kind: 'loading' });
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Initial credits fetch. Owners are unlimited (chat function returns null
-  // anyway). For everyone else we read the local credits_remaining; if the
-  // chat function later returns null we promote to 'unlimited' (i.e.
-  // daily_message_limit = 0).
+  // Initial credits fetch. Calls fn_reset_credits_if_due (RPC) so a new
+  // UTC day's reset fires the moment the app loads, not just when the
+  // user sends their next message. The function returns null for
+  // unlimited (owner role, or daily_message_limit = 0/unset) and an
+  // integer otherwise.
   useEffect(() => {
     if (!user) return;
     if (profile?.role === 'owner') {
@@ -147,17 +148,17 @@ export default function Index() {
     }
     let cancelled = false;
     (async () => {
-      const { data, error: credErr } = await supabase
-        .from('user_profiles')
-        .select('credits_remaining')
-        .eq('id', user.id)
-        .maybeSingle();
+      const { data, error: credErr } = await supabase.rpc('fn_reset_credits_if_due');
       if (cancelled) return;
-      if (credErr || !data) {
+      if (credErr) {
         setCredits({ kind: 'error' });
         return;
       }
-      setCredits({ kind: 'count', value: data.credits_remaining as number });
+      if (data === null) {
+        setCredits({ kind: 'unlimited' });
+        return;
+      }
+      setCredits({ kind: 'count', value: data as number });
     })();
     return () => {
       cancelled = true;
