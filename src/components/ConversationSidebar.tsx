@@ -6,14 +6,26 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -24,18 +36,18 @@ export type ConversationListItem = {
   is_pinned: boolean;
 };
 
+const UNDO_DURATION_MS = 7000;
+
 // Pure filtering function — no side effects, no DB calls.
 // Returns items whose display title contains `query` (case-insensitive).
 // Pinned items that match always appear before unpinned items that match.
 export function filterConversations(
   items: ConversationListItem[],
-  query: string,
+  query: string
 ): ConversationListItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return items;
-  return items.filter((c) =>
-    (c.title?.trim() || '(untitled)').toLowerCase().includes(q),
-  );
+  return items.filter((c) => (c.title?.trim() || '(untitled)').toLowerCase().includes(q));
 }
 
 type Props = {
@@ -59,6 +71,10 @@ export default function ConversationSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [search, setSearch] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -100,9 +116,7 @@ export default function ConversationSidebar({
     setEditingId(null);
     setEditingValue('');
 
-    setItems((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title: next || null } : c)),
-    );
+    setItems((prev) => prev.map((c) => (c.id === id ? { ...c, title: next || null } : c)));
 
     const { error: updErr } = await supabase
       .from('conversations')
@@ -134,13 +148,8 @@ export default function ConversationSidebar({
     const next = !currentlyPinned;
 
     setItems((prev) => {
-      const updated = prev.map((c) =>
-        c.id === id ? { ...c, is_pinned: next } : c,
-      );
-      return [
-        ...updated.filter((c) => c.is_pinned),
-        ...updated.filter((c) => !c.is_pinned),
-      ];
+      const updated = prev.map((c) => (c.id === id ? { ...c, is_pinned: next } : c));
+      return [...updated.filter((c) => c.is_pinned), ...updated.filter((c) => !c.is_pinned)];
     });
 
     const { error: updErr } = await supabase
@@ -152,6 +161,130 @@ export default function ConversationSidebar({
       console.error('pin error:', updErr);
       void refresh();
     }
+  };
+
+  // ─── Selection mode ─────────────────────────────────────────────────────────
+
+  const enterSelectionMode = () => {
+    setSelectionMode(true);
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Smart pin/unpin: if any selected item is unpinned, the action pins all.
+  // If every selected item is already pinned, the action unpins all.
+  const selectedItems = items.filter((c) => selectedIds.has(c.id));
+  const anyUnpinnedSelected = selectedItems.some((c) => !c.is_pinned);
+  const bulkPinTargetState = anyUnpinnedSelected; // true → set is_pinned = true
+
+  const bulkTogglePin = async () => {
+    if (selectedItems.length === 0 || isBulkBusy) return;
+    setIsBulkBusy(true);
+
+    // Only flip the ones that actually need flipping (smart toggle).
+    const idsToFlip = selectedItems
+      .filter((c) => c.is_pinned !== bulkPinTargetState)
+      .map((c) => c.id);
+
+    if (idsToFlip.length === 0) {
+      setIsBulkBusy(false);
+      return;
+    }
+
+    setItems((prev) => {
+      const updated = prev.map((c) =>
+        idsToFlip.includes(c.id) ? { ...c, is_pinned: bulkPinTargetState } : c
+      );
+      return [...updated.filter((c) => c.is_pinned), ...updated.filter((c) => !c.is_pinned)];
+    });
+
+    const { error: updErr } = await supabase
+      .from('conversations')
+      .update({ is_pinned: bulkPinTargetState })
+      .in('id', idsToFlip);
+
+    if (updErr) {
+      console.error('bulk pin error:', updErr);
+      toast.error('Could not update pin state. Please try again.');
+      void refresh();
+    } else {
+      toast.success(
+        `${idsToFlip.length} conversation${idsToFlip.length === 1 ? '' : 's'} ${
+          bulkPinTargetState ? 'pinned' : 'unpinned'
+        }.`
+      );
+    }
+
+    setIsBulkBusy(false);
+    exitSelectionMode();
+  };
+
+  const undoBulkArchive = async (idsToRestore: string[]) => {
+    const { error: undoErr } = await supabase
+      .from('conversations')
+      .update({ status: 'active' })
+      .in('id', idsToRestore);
+
+    if (undoErr) {
+      console.error('undo archive error:', undoErr);
+      toast.error('Could not restore conversations.');
+      return;
+    }
+    toast.success(
+      `${idsToRestore.length} conversation${idsToRestore.length === 1 ? '' : 's'} restored.`
+    );
+    void refresh();
+  };
+
+  const performBulkArchive = async () => {
+    if (selectedItems.length === 0 || isBulkBusy) return;
+    setIsBulkBusy(true);
+    setArchiveConfirmOpen(false);
+
+    // Snapshot the selection — this is exactly what we'll un-archive on undo.
+    const idsArchived = selectedItems.map((c) => c.id);
+    const includesActive =
+      currentConversationId !== null && idsArchived.includes(currentConversationId);
+
+    setItems((prev) => prev.filter((c) => !idsArchived.includes(c.id)));
+    if (includesActive && currentConversationId) onArchived(currentConversationId);
+
+    const { error: updErr } = await supabase
+      .from('conversations')
+      .update({ status: 'archived' })
+      .in('id', idsArchived);
+
+    if (updErr) {
+      console.error('bulk archive error:', updErr);
+      toast.error('Could not archive conversations. Please try again.');
+      void refresh();
+      setIsBulkBusy(false);
+      return;
+    }
+
+    toast(`${idsArchived.length} conversation${idsArchived.length === 1 ? '' : 's'} archived.`, {
+      duration: UNDO_DURATION_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => void undoBulkArchive(idsArchived),
+      },
+    });
+
+    setIsBulkBusy(false);
+    exitSelectionMode();
   };
 
   const filtered = filterConversations(items, search);
@@ -170,18 +303,32 @@ export default function ConversationSidebar({
     onCommitRename: () => void commitRename(),
     onArchive: () => void archiveConversation(item.id),
     onTogglePin: () => void togglePin(item.id, item.is_pinned),
+    selectionMode,
+    isSelected: selectedIds.has(item.id),
+    onToggleSelect: () => toggleSelected(item.id),
   });
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-muted/30 md:flex">
-      {/* New conversation button */}
-      <div className="border-b border-border px-4 py-3">
+      {/* New conversation + Select toggle */}
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Button
           onClick={onNew}
           size="sm"
-          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+          className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+          disabled={selectionMode}
         >
           + New Conversation
+        </Button>
+        <Button
+          onClick={selectionMode ? exitSelectionMode : enterSelectionMode}
+          size="sm"
+          variant={selectionMode ? 'default' : 'outline'}
+          className="shrink-0"
+          aria-pressed={selectionMode}
+          title={selectionMode ? 'Exit selection mode' : 'Select multiple conversations'}
+        >
+          {selectionMode ? 'Done' : 'Select'}
         </Button>
       </div>
 
@@ -212,7 +359,7 @@ export default function ConversationSidebar({
               'w-full rounded-md bg-background/60 py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground',
               'border border-transparent transition-colors',
               'focus:border-[#9BB7D4]/60 focus:outline-none focus:ring-0',
-              search && 'border-[#9BB7D4]/30',
+              search && 'border-[#9BB7D4]/30'
             )}
           />
 
@@ -253,9 +400,7 @@ export default function ConversationSidebar({
 
         {/* Empty — no conversations at all */}
         {!isLoading && !error && items.length === 0 && (
-          <p className="px-3 py-2 text-xs text-muted-foreground">
-            No past conversations yet.
-          </p>
+          <p className="px-3 py-2 text-xs text-muted-foreground">No past conversations yet.</p>
         )}
 
         {/* Empty — search returned no matches */}
@@ -274,9 +419,7 @@ export default function ConversationSidebar({
             {pinned.map((item) => (
               <Row key={item.id} {...rowProps(item)} />
             ))}
-            {unpinned.length > 0 && (
-              <div className="my-2 border-t border-border" />
-            )}
+            {unpinned.length > 0 && <div className="my-2 border-t border-border" />}
           </>
         )}
 
@@ -285,6 +428,70 @@ export default function ConversationSidebar({
           <Row key={item.id} {...rowProps(item)} />
         ))}
       </div>
+
+      {/* Bulk action bar */}
+      {selectionMode && selectedItems.length > 0 && (
+        <div className="border-t border-border bg-background px-3 py-2.5">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {selectedItems.length} selected
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void bulkTogglePin()}
+              disabled={isBulkBusy}
+              className="text-xs"
+            >
+              {bulkPinTargetState ? 'Pin all' : 'Unpin all'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setArchiveConfirmOpen(true)}
+              disabled={isBulkBusy}
+              className="text-xs text-destructive hover:text-destructive"
+            >
+              Archive
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={exitSelectionMode}
+              disabled={isBulkBusy}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Archive confirmation */}
+      <AlertDialog open={archiveConfirmOpen} onOpenChange={setArchiveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Archive {selectedItems.length} conversation
+              {selectedItems.length === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              They'll be hidden from your sidebar. You can restore them within 7 seconds via the
+              Undo toast.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void performBulkArchive()}
+              disabled={isBulkBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }
@@ -295,14 +502,8 @@ function SkeletonRows() {
   return (
     <div className="space-y-1 px-1 py-1" aria-busy="true" aria-label="Loading conversations">
       {[60, 80, 45, 70, 55].map((w, i) => (
-        <div
-          key={i}
-          className="flex flex-col gap-1.5 rounded-lg px-3 py-2"
-        >
-          <div
-            className="h-3 animate-pulse rounded bg-muted"
-            style={{ width: `${w}%` }}
-          />
+        <div key={i} className="flex flex-col gap-1.5 rounded-lg px-3 py-2">
+          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${w}%` }} />
           <div className="h-2 w-20 animate-pulse rounded bg-muted/60" />
         </div>
       ))}
@@ -344,6 +545,9 @@ function Row({
   onCommitRename,
   onArchive,
   onTogglePin,
+  selectionMode,
+  isSelected,
+  onToggleSelect,
 }: {
   item: ConversationListItem;
   isActive: boolean;
@@ -356,6 +560,9 @@ function Row({
   onCommitRename: () => void;
   onArchive: () => void;
   onTogglePin: () => void;
+  selectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -375,12 +582,12 @@ function Row({
 
   const handleRowClick = (e: MouseEvent) => {
     if (isEditing) return;
-    const target = e.target as HTMLElement;
-    if (
-      target.closest('[data-menu-trigger]') ||
-      target.closest('[data-pin-trigger]')
-    )
+    if (selectionMode) {
+      onToggleSelect();
       return;
+    }
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-menu-trigger]') || target.closest('[data-pin-trigger]')) return;
     onRowClick();
   };
 
@@ -390,12 +597,27 @@ function Row({
       tabIndex={0}
       onClick={handleRowClick}
       className={cn(
-        'group mb-1 flex cursor-pointer items-start gap-1 rounded-lg px-3 py-2 text-sm transition-all duration-200',
-        isActive
-          ? 'bg-primary/10 text-foreground'
-          : 'hover:bg-muted text-muted-foreground hover:text-foreground',
+        'group mb-1 flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+        selectionMode && isSelected
+          ? 'bg-[#9BB7D4]/15 text-foreground'
+          : isActive
+            ? 'bg-primary/10 text-foreground'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
+      {selectionMode && (
+        <div
+          className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={onToggleSelect}
+            aria-label={isSelected ? 'Deselect conversation' : 'Select conversation'}
+          />
+        </div>
+      )}
+
       <div className="min-w-0 flex-1">
         {isEditing ? (
           <Input
@@ -411,8 +633,8 @@ function Row({
           <>
             <p
               className="truncate"
-              onDoubleClick={onStartRename}
-              title="Double-click to rename"
+              onDoubleClick={selectionMode ? undefined : onStartRename}
+              title={selectionMode ? undefined : 'Double-click to rename'}
             >
               {item.title?.trim() || '(untitled)'}
             </p>
@@ -423,7 +645,7 @@ function Row({
         )}
       </div>
 
-      {!isEditing && (
+      {!isEditing && !selectionMode && (
         <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
           <button
             type="button"
@@ -434,9 +656,7 @@ function Row({
             }}
             className={cn(
               'rounded p-1 transition-opacity',
-              item.is_pinned
-                ? 'opacity-100'
-                : 'opacity-0 group-hover:opacity-100',
+              item.is_pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             )}
             aria-label={item.is_pinned ? 'Unpin conversation' : 'Pin conversation'}
             title={item.is_pinned ? 'Unpin' : 'Pin'}
@@ -449,7 +669,7 @@ function Row({
               <button
                 type="button"
                 data-menu-trigger
-                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
+                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 hover:text-foreground"
                 aria-label="Conversation actions"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
@@ -463,9 +683,7 @@ function Row({
               <DropdownMenuItem onSelect={onTogglePin}>
                 {item.is_pinned ? 'Unpin' : 'Pin'}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onStartRename}>
-                Rename
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onStartRename}>Rename</DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={onArchive}
                 className="text-destructive focus:text-destructive"
@@ -474,6 +692,13 @@ function Row({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+      )}
+
+      {/* Pinned indicator stays visible in selection mode (read-only) */}
+      {!isEditing && selectionMode && item.is_pinned && (
+        <div className="mt-0.5 shrink-0 p-1">
+          <PinIcon active={true} />
         </div>
       )}
     </div>

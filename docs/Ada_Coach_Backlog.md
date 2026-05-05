@@ -94,6 +94,20 @@ This is a temporary holding document for feature ideas, enhancements, and techni
 - Architecture diagram added
 - Sprint retrospective template created
 
+### B-009: Mobile Sidebar Drawer
+**Priority:** Medium (follow-up to bulk-select work)
+**Epic:** Mobile / Cross-Platform
+**Decision Date:** 2026-05-05
+**Description:** The conversation sidebar is desktop-only today (`hidden md:flex` in `ConversationSidebar.tsx`). On mobile (`<md` breakpoint), users can't see, switch, or manage their past conversations at all. Add a slide-in drawer (shadcn `Sheet` primitive) opened via a hamburger button in the chat header. Reuse the sidebar component verbatim inside the drawer — same search, list, bulk-select, action bar.
+**Why deferred:** Bulk-select desktop is the priority ship. Mobile drawer is a meaningful add (~0.5 day plus a real touch-target pass) and shouldn't gate getting bulk-select in front of users.
+**Acceptance Criteria:**
+- Hamburger button visible only on `<md`; opens sidebar in a `Sheet` drawer
+- Bulk-select action bar docks to bottom of drawer on mobile
+- Touch targets ≥ 44×44px on rows, checkboxes, pin/⋯ icons
+- Pin and ⋯ icons always visible on touch (no hover-to-reveal)
+- Drawer closes on conversation select; bulk-select mode persists across drawer open/close
+**Dependencies:** Bulk-select feature must ship first (this reuses its components).
+
 ### B-008: Time-Based Credit Reset via pg_cron (Revisit)
 **Priority:** Low (revisit when user base grows or stale-badge complaints recur)
 **Epic:** Usage Analytics and Cost Control
