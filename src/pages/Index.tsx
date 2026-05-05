@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Compass } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -65,6 +66,7 @@ type Scenario = {
   subtitle: string;
   openingMessage: string;
   deemphasized?: boolean;
+  featured?: boolean;
 };
 
 const SCENARIOS: Scenario[] = [
@@ -80,16 +82,14 @@ const SCENARIOS: Scenario[] = [
     icon: <DiscoveryIcon />,
     title: 'Write discovery questions',
     subtitle: 'Get help crafting open-ended interview questions',
-    openingMessage:
-      "Help me write open-ended discovery questions for my customer interviews.",
+    openingMessage: 'Help me write open-ended discovery questions for my customer interviews.',
   },
   {
     id: 'analyze-feedback',
     icon: <AnalyzeIcon />,
     title: 'Analyze customer feedback',
     subtitle: 'Make sense of what your users are telling you',
-    openingMessage:
-      "I have customer feedback I'd like to analyze together. Let's dig in.",
+    openingMessage: "I have customer feedback I'd like to analyze together. Let's dig in.",
   },
   {
     id: 'map-assumptions',
@@ -98,6 +98,15 @@ const SCENARIOS: Scenario[] = [
     subtitle: 'Identify and rank the riskiest assumptions in your plan',
     openingMessage:
       "I want to map and rank the assumptions behind my product. Let's start with assumption mapping.",
+  },
+  {
+    id: 'discovery-sprint',
+    icon: <Compass size={20} strokeWidth={1.75} />,
+    title: 'Run a Discovery Sprint',
+    subtitle: 'Step-by-step assumption mapping and blind spot analysis',
+    openingMessage:
+      'I want to run through a structured Discovery Sprint. Walk me through it step by step: collect my 5 core assumptions one at a time, then give me a blind spot analysis of each one, then build me interview questions for my riskiest assumption.',
+    featured: true,
   },
   {
     id: 'free-exploration',
@@ -165,8 +174,7 @@ export default function Index() {
     }
   };
 
-  const isOutOfCredits =
-    credits.kind === 'count' && credits.value <= 0;
+  const isOutOfCredits = credits.kind === 'count' && credits.value <= 0;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -193,15 +201,12 @@ export default function Index() {
     setIsLoading(true);
 
     try {
-      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>(
-        'chat',
-        {
-          body: {
-            message: trimmed,
-            conversation_id: conversationId ?? undefined,
-          },
+      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>('chat', {
+        body: {
+          message: trimmed,
+          conversation_id: conversationId ?? undefined,
         },
-      );
+      });
 
       if (invokeErr || !data || data.error || !data.reply) {
         // 429 / credits_exhausted comes back as invokeErr from supabase.invoke.
@@ -261,15 +266,12 @@ export default function Index() {
     setError(null);
     setIsSummarizing(true);
     try {
-      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>(
-        'chat',
-        {
-          body: {
-            message: SUMMARY_SENTINEL,
-            conversation_id: conversationId,
-          },
+      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>('chat', {
+        body: {
+          message: SUMMARY_SENTINEL,
+          conversation_id: conversationId,
         },
-      );
+      });
 
       if (invokeErr || !data || data.error || !data.reply) {
         toast.error("Couldn't generate a summary. Please try again.");
@@ -335,11 +337,7 @@ export default function Index() {
         .eq('conversation_id', id)
         .in('role', ['user', 'assistant'])
         .order('created_at', { ascending: true }),
-      supabase
-        .from('conversations')
-        .select('id, title, created_at')
-        .eq('id', id)
-        .maybeSingle(),
+      supabase.from('conversations').select('id, title, created_at').eq('id', id).maybeSingle(),
     ]);
 
     if (messagesResult.error) {
@@ -382,7 +380,7 @@ export default function Index() {
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
             <h1 className="truncate text-xl font-extrabold tracking-tight">
               <span className="gradient-text">Ada</span>{' '}
-              <span className="text-muted-foreground text-sm font-medium">
+              <span className="text-sm font-medium text-muted-foreground">
                 · Customer Discovery Coach
               </span>
             </h1>
@@ -406,9 +404,7 @@ export default function Index() {
             )}
 
             {isLoadingHistory && (
-              <p className="m-auto text-sm text-muted-foreground">
-                Loading conversation...
-              </p>
+              <p className="m-auto text-sm text-muted-foreground">Loading conversation...</p>
             )}
 
             {messages.map((m) => (
@@ -444,7 +440,7 @@ export default function Index() {
                       'text-xs font-medium text-muted-foreground transition-colors',
                       'hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/5 hover:text-[#1B4F72]',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
-                      'disabled:cursor-not-allowed disabled:opacity-50',
+                      'disabled:cursor-not-allowed disabled:opacity-50'
                     )}
                   >
                     <SummaryIcon />
@@ -461,7 +457,7 @@ export default function Index() {
                     'text-xs font-medium text-muted-foreground transition-colors',
                     'hover:border-[#9BB7D4]/60 hover:bg-[#9BB7D4]/5 hover:text-[#1B4F72]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'disabled:cursor-not-allowed disabled:opacity-50'
                   )}
                 >
                   <ExportIcon />
@@ -511,14 +507,13 @@ function CreditsBadge({ state }: { state: CreditsState }) {
   const value = isError ? null : state.value;
 
   // Tone — cerulean by default, gold when low, muted when zero.
-  const tone =
-    isError
-      ? 'border-[#9BB7D4]/30 bg-background text-muted-foreground'
-      : value === 0
-        ? 'border-muted-foreground/30 bg-muted/40 text-muted-foreground line-through'
-        : value !== null && value <= 3
-          ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10 text-[#C9A84C]'
-          : 'border-[#9BB7D4]/60 bg-[#9BB7D4]/10 text-[#1B4F72]';
+  const tone = isError
+    ? 'border-[#9BB7D4]/30 bg-background text-muted-foreground'
+    : value === 0
+      ? 'border-muted-foreground/30 bg-muted/40 text-muted-foreground line-through'
+      : value !== null && value <= 3
+        ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10 text-[#C9A84C]'
+        : 'border-[#9BB7D4]/60 bg-[#9BB7D4]/10 text-[#1B4F72]';
 
   const label = isError ? '— credits' : `${value} credits`;
 
@@ -526,7 +521,7 @@ function CreditsBadge({ state }: { state: CreditsState }) {
     <span
       className={cn(
         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider',
-        tone,
+        tone
       )}
       aria-label={`${value ?? '—'} credits remaining`}
     >
@@ -563,7 +558,7 @@ function UserMenu({
             'flex h-9 w-9 items-center justify-center rounded-full',
             'border border-[#9BB7D4]/50 bg-background text-sm font-semibold uppercase text-[#1B4F72]',
             'transition-colors hover:border-[#1B4F72] hover:bg-[#9BB7D4]/15',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60'
           )}
         >
           {initials}
@@ -571,9 +566,7 @@ function UserMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <div className="px-2 py-1.5">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {displayName}
-          </p>
+          <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
           {email && (
             <p className="truncate text-xs text-muted-foreground" title={email}>
               {email}
@@ -581,19 +574,12 @@ function UserMenu({
           )}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onNavigate('/settings')}>
-          Settings
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onNavigate('/settings')}>Settings</DropdownMenuItem>
         {showAdmin && (
-          <DropdownMenuItem onSelect={() => onNavigate('/admin')}>
-            Admin
-          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onNavigate('/admin')}>Admin</DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={onSignOut}
-          className="text-destructive focus:text-destructive"
-        >
+        <DropdownMenuItem onSelect={onSignOut} className="text-destructive focus:text-destructive">
           Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -620,12 +606,12 @@ function ScenarioScreen({ onSelect }: { onSelect: (s: Scenario) => void }) {
     // Fallback to the original empty state if something went wrong rendering cards
     return (
       <div className="m-auto max-w-md text-center">
-        <p className="text-accent text-[11px] font-semibold uppercase tracking-[0.2em]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
           Start a session
         </p>
         <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-          Tell Ada about your product idea, a customer you're trying to
-          understand, or an assumption you want to pressure-test.
+          Tell Ada about your product idea, a customer you're trying to understand, or an assumption
+          you want to pressure-test.
         </p>
       </div>
     );
@@ -639,11 +625,7 @@ function ScenarioScreen({ onSelect }: { onSelect: (s: Scenario) => void }) {
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {SCENARIOS.map((scenario) => (
-            <ScenarioCard
-              key={scenario.id}
-              scenario={scenario}
-              onSelect={onSelect}
-            />
+            <ScenarioCard key={scenario.id} scenario={scenario} onSelect={onSelect} />
           ))}
         </div>
       </div>
@@ -665,23 +647,30 @@ function ScenarioCard({
       className={cn(
         'group flex items-start gap-3 rounded-xl border px-4 py-4 text-left transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
-        scenario.deemphasized
+        scenario.featured
           ? [
-              'border-[#9BB7D4]/20 bg-background/40',
-              'hover:border-[#9BB7D4]/50 hover:bg-background/60',
+              'border-[#C9A84C]/60 bg-[#C9A84C]/5',
+              'hover:border-[#C9A84C]/90 hover:bg-[#C9A84C]/10 hover:shadow-sm',
             ]
-          : [
-              'border-[#9BB7D4]/50 bg-background/60',
-              'hover:border-[#1B4F72]/70 hover:bg-background/80 hover:shadow-sm',
-            ],
+          : scenario.deemphasized
+            ? [
+                'border-[#9BB7D4]/20 bg-background/40',
+                'hover:border-[#9BB7D4]/50 hover:bg-background/60',
+              ]
+            : [
+                'border-[#9BB7D4]/50 bg-background/60',
+                'hover:border-[#1B4F72]/70 hover:bg-background/80 hover:shadow-sm',
+              ]
       )}
     >
       <span
         className={cn(
           'mt-0.5 shrink-0 transition-colors',
-          scenario.deemphasized
-            ? 'text-muted-foreground/60 group-hover:text-muted-foreground'
-            : 'text-[#9BB7D4] group-hover:text-[#1B4F72]',
+          scenario.featured
+            ? 'text-[#C9A84C] group-hover:text-[#C9A84C]'
+            : scenario.deemphasized
+              ? 'text-muted-foreground/60 group-hover:text-muted-foreground'
+              : 'text-[#9BB7D4] group-hover:text-[#1B4F72]'
         )}
       >
         {scenario.icon}
@@ -690,16 +679,16 @@ function ScenarioCard({
         <p
           className={cn(
             'text-sm font-semibold leading-snug',
-            scenario.deemphasized
-              ? 'text-muted-foreground group-hover:text-foreground'
-              : 'text-foreground',
+            scenario.featured
+              ? 'text-[#C9A84C]'
+              : scenario.deemphasized
+                ? 'text-muted-foreground group-hover:text-foreground'
+                : 'text-foreground'
           )}
         >
           {scenario.title}
         </p>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-          {scenario.subtitle}
-        </p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{scenario.subtitle}</p>
       </div>
     </button>
   );
@@ -731,7 +720,16 @@ class ScenarioErrorBoundary extends Component<
 
 function PressureTestIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -741,7 +739,16 @@ function PressureTestIcon() {
 
 function DiscoveryIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="11" cy="11" r="8" />
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
       <line x1="11" y1="8" x2="11" y2="14" />
@@ -752,7 +759,16 @@ function DiscoveryIcon() {
 
 function AnalyzeIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="18" y1="20" x2="18" y2="10" />
       <line x1="12" y1="20" x2="12" y2="4" />
       <line x1="6" y1="20" x2="6" y2="14" />
@@ -763,7 +779,16 @@ function AnalyzeIcon() {
 
 function MapIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
       <line x1="9" y1="3" x2="9" y2="18" />
       <line x1="15" y1="6" x2="15" y2="21" />
@@ -773,7 +798,16 @@ function MapIcon() {
 
 function ExploreIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
     </svg>
@@ -820,23 +854,21 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
     '[&_li]:my-1',
     '[&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em]',
-    '[&_a]:text-primary [&_a]:underline',
+    '[&_a]:text-primary [&_a]:underline'
   );
 
   return (
     <div
       className={cn(
         'group mr-auto flex flex-col items-start gap-1',
-        isSummary ? 'max-w-[92%]' : 'max-w-[80%]',
+        isSummary ? 'max-w-[92%]' : 'max-w-[80%]'
       )}
     >
       <div className="flex w-full items-start gap-2">
         <div
           className={cn(
             'rounded-2xl px-4 py-3 text-sm leading-relaxed text-foreground',
-            isSummary
-              ? 'border border-[#9BB7D4]/30 bg-[#9BB7D4]/10'
-              : 'bg-muted',
+            isSummary ? 'border border-[#9BB7D4]/30 bg-[#9BB7D4]/10' : 'bg-muted'
           )}
         >
           {isSummary && (
@@ -846,19 +878,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             </div>
           )}
           <div className={proseClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
           </div>
         </div>
         <CopyButton text={message.content} />
       </div>
-      {!isSummary && (
-        <FeedbackButtons
-          messageId={message.id}
-          initial={message.feedback ?? null}
-        />
-      )}
+      {!isSummary && <FeedbackButtons messageId={message.id} initial={message.feedback ?? null} />}
       {message.created_at && (
         <span className="ml-1 text-[10px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
           {formatTimestamp(message.created_at)}
@@ -870,7 +895,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function SummaryIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="8" y1="13" x2="16" y2="13" />
@@ -881,7 +915,16 @@ function SummaryIcon() {
 
 function ExportIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
@@ -923,7 +966,7 @@ function CopyButton({ text }: { text: string }) {
           'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
           'hover:border-[#C9A84C]/70 hover:bg-[#C9A84C]/10 hover:text-[#C9A84C]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
-          copied && 'border-[#C9A84C]/70 bg-[#C9A84C]/10 text-[#C9A84C] opacity-100',
+          copied && 'border-[#C9A84C]/70 bg-[#C9A84C]/10 text-[#C9A84C] opacity-100'
         )}
       >
         {copied ? <CheckIcon /> : <CopyIcon />}
@@ -932,7 +975,7 @@ function CopyButton({ text }: { text: string }) {
         aria-hidden={!copied}
         className={cn(
           'pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#1B4F72] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#C9A84C] shadow-sm transition-opacity duration-300',
-          copied ? 'opacity-100' : 'opacity-0',
+          copied ? 'opacity-100' : 'opacity-0'
         )}
       >
         Copied!
@@ -943,7 +986,16 @@ function CopyButton({ text }: { text: string }) {
 
 function CopyIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
@@ -952,7 +1004,16 @@ function CopyIcon() {
 
 function CheckIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -960,17 +1021,9 @@ function CheckIcon() {
 
 // ─── Feedback buttons ─────────────────────────────────────────────────────────
 
-function FeedbackButtons({
-  messageId,
-  initial,
-}: {
-  messageId: string;
-  initial: FeedbackValue;
-}) {
+function FeedbackButtons({ messageId, initial }: { messageId: string; initial: FeedbackValue }) {
   const [value, setValue] = useState<FeedbackValue>(initial);
-  const [pendingTarget, setPendingTarget] = useState<
-    'positive' | 'negative' | null
-  >(null);
+  const [pendingTarget, setPendingTarget] = useState<'positive' | 'negative' | null>(null);
   const { submit, isSaving } = useFeedback(messageId);
 
   const handleClick = async (target: 'positive' | 'negative') => {
@@ -990,9 +1043,7 @@ function FeedbackButtons({
     <div
       className={cn(
         'ml-1 flex items-center gap-1 transition-opacity duration-150',
-        hasSelection
-          ? 'opacity-100'
-          : 'opacity-30 group-hover:opacity-100 focus-within:opacity-100',
+        hasSelection ? 'opacity-100' : 'opacity-30 focus-within:opacity-100 group-hover:opacity-100'
       )}
     >
       <FeedbackButton
@@ -1051,7 +1102,7 @@ function FeedbackButton({
           ? isPositive
             ? 'text-[#C9A84C] hover:bg-[#C9A84C]/10'
             : 'text-[#C2185B] hover:bg-[#C2185B]/10'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
       {loading ? <SpinnerIcon /> : isPositive ? <ThumbUpIcon /> : <ThumbDownIcon />}
@@ -1061,7 +1112,16 @@ function FeedbackButton({
 
 function ThumbUpIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z" />
       <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
     </svg>
@@ -1070,7 +1130,16 @@ function ThumbUpIcon() {
 
 function ThumbDownIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z" />
       <path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
     </svg>
@@ -1079,7 +1148,17 @@ function ThumbDownIcon() {
 
 function SpinnerIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="animate-spin"
+    >
       <path d="M21 12a9 9 0 1 1-6.22-8.56" />
     </svg>
   );
