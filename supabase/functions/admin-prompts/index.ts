@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from("coaching_prompts")
         .select("*")
+        .order("is_active", { ascending: false })
         .order("updated_at", { ascending: false });
 
       if (error) {
