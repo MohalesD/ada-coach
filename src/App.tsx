@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import Index from './pages/Index';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 
@@ -14,6 +15,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/"
             element={
