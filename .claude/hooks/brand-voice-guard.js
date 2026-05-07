@@ -73,9 +73,14 @@ process.stdin.on('end', () => {
     const lines = contentToScan.toLowerCase().split('\n');
     const violations = [];
 
+    // Word-boundary match so "rag" doesn't false-positive on "drag",
+    // "embedding" doesn't match "embedded", etc. Banned phrases are
+    // already lowercase; lines are lowercased above.
+    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     lines.forEach((line, index) => {
       bannedPhrases.forEach(phrase => {
-        if (line.includes(phrase)) {
+        const re = new RegExp(`\\b${escapeRegex(phrase)}\\b`);
+        if (re.test(line)) {
           violations.push(`  Line ${index + 1}: "${phrase}" found`);
         }
       });
