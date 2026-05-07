@@ -82,7 +82,11 @@ The sidebar supports search, scenario-based entry points (pre-seeded starter pro
 
 ## Database Schema
 
-Migrations in `supabase/migrations/` (applied in filename order):
+Migrations in `supabase/migrations/` (applied in filename order).
+
+> **Migration workflow caveat (B-011):** `supabase db push` currently errors with "Remote migration versions not found in local migrations directory." Several recent migrations were applied via the Supabase MCP `apply_migration` tool, which registers them with timestamps that don't match the local filenames. Until B-011 is resolved, **apply new migrations via the MCP `apply_migration` tool**, not `supabase db push`. Commit the local `.sql` file alongside as the source of truth. Do not run `supabase migration repair` or `supabase db pull` without a planned cleanup — both touch shared migration history.
+
+
 
 **Core tables — `core_schema`:**
 - `conversations` — coaching sessions (id, title, status, user_id, is_pinned, timestamps). `status` supports `active`/`archived`; `is_pinned` drives sidebar sort order.
@@ -97,6 +101,12 @@ Migrations in `supabase/migrations/` (applied in filename order):
 
 **Pin support — `pin_conversations`:**
 - Adds `conversations.is_pinned BOOLEAN NOT NULL DEFAULT false`. No new RLS policy needed — the existing "update own conversations" policy covers it.
+
+**Folders — `folders`:**
+- New table `folders` (id, user_id FK auth.users, name, timestamps). Per-user RLS (own-rows-only mirroring `conversations`).
+- Adds `conversations.folder_id` (nullable FK → `folders(id) ON DELETE SET NULL`) so deleting a folder unfiles its chats rather than cascading.
+- Pinned chats appear in BOTH the Pinned section AND inside their folder when expanded — pinning is a global "always-visible" flag, not a substitute for folder membership.
+- DnD via `@dnd-kit/core`: chat rows are draggable, folder rows + the unfiled section are droppables. Pointer activation distance is 4px so drag doesn't hijack click-to-open.
 
 **Documents & RAG — `documents_table`, `fix_documents_insert_policy`, `enable_pgvector`, `document_chunks`:**
 - `documents` — owner-managed knowledge base (id, user_id, filename, file_path, content_text, status, chunk_count). `status` is a state machine: `'uploaded' → 'processing' → 'ready' | 'error'`. `file_path` convention: `{user_id}/{uuid}_{filename}`.
