@@ -433,3 +433,38 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/admin-insights/deno.json"
 entrypoint = "./functions/admin-insights/index.ts"
+
+# ingest was originally deployed with the platform default (verify_jwt =
+# true); pinned explicitly so redeploys don't flip it.
+[functions.ingest]
+enabled = true
+verify_jwt = true
+import_map = "./functions/ingest/deno.json"
+entrypoint = "./functions/ingest/index.ts"
+
+# Discovery platform Run 1 functions. verify_jwt = false mirrors chat:
+# these are browser-facing, so CORS preflight must pass without a JWT;
+# auth is enforced in-function by requireUser().
+[functions.products]
+enabled = true
+verify_jwt = false
+import_map = "./functions/products/deno.json"
+entrypoint = "./functions/products/index.ts"
+
+[functions.sessions]
+enabled = true
+verify_jwt = false
+import_map = "./functions/sessions/deno.json"
+entrypoint = "./functions/sessions/index.ts"
+
+[functions.assumptions]
+enabled = true
+verify_jwt = false
+import_map = "./functions/assumptions/deno.json"
+entrypoint = "./functions/assumptions/index.ts"
+
+[functions.assumption-mapping]
+enabled = true
+verify_jwt = false
+import_map = "./functions/assumption-mapping/deno.json"
+entrypoint = "./functions/assumption-mapping/index.ts"

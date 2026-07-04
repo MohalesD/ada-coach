@@ -16,8 +16,8 @@ import {
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5-20251001";
-const MAX_TOKENS = 500;
-const SUMMARY_MAX_TOKENS = 800;
+const MAX_TOKENS = 4000;
+const SUMMARY_MAX_TOKENS = 1500;
 const HISTORY_LIMIT = 20;
 
 const SUMMARY_SENTINEL = "__SUMMARY__";
