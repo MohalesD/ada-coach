@@ -1,0 +1,95 @@
+// Config-driven model routing (Run 1, PRD Business Rules → Model routing).
+// The route table lives in app_settings under the key 'model_routing'
+// (JSON text), so the Haiku/Sonnet split can change without a redeploy.
+// Hardcoded defaults below are the fallback when the setting is absent or
+// malformed.
+//
+// Hard rule from the PRD: Fable 5 / Mythos-tier models are build-time only.
+// assertAllowedModel throws before any such call could be made, and the
+// model_usage table's CHECK constraint refuses to record one.
+//
+// No Deno APIs here — resolveModelRoutes/assertAllowedModel are unit-tested
+// by Vitest.
+
+export type CallType =
+  | "stage_classification"
+  | "session_summary"
+  | "assumption_mapping";
+
+export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
+  stage_classification: "claude-haiku-4-5",
+  session_summary: "claude-haiku-4-5",
+  assumption_mapping: "claude-sonnet-4-6",
+};
+
+// USD per million tokens. Source: Anthropic pricing via the claude-api
+// reference (cached 2026-06-24). Unknown models cost out as null.
+export const MODEL_PRICING: Record<
+  string,
+  { inputPerMTok: number; outputPerMTok: number }
+> = {
+  "claude-haiku-4-5": { inputPerMTok: 1.0, outputPerMTok: 5.0 },
+  "claude-sonnet-4-6": { inputPerMTok: 3.0, outputPerMTok: 15.0 },
+};
+
+const MYTHOS_TIER_RE = /fable|mythos/i;
+
+export function assertAllowedModel(model: string): string {
+  if (MYTHOS_TIER_RE.test(model)) {
+    throw new Error(
+      `Blocked model route "${model}": Fable/Mythos-tier models are build-time only and never run in production.`,
+    );
+  }
+  return model;
+}
+
+// Merge the stored routing config (if any) over the defaults. Malformed
+// JSON falls back to defaults — bad config must not take Ada down. A route
+// pointing at a Mythos-tier model throws: that is a misconfiguration we
+// refuse to serve.
+export function resolveModelRoutes(
+  rawSetting: string | null | undefined,
+): Record<CallType, string> {
+  const routes = { ...DEFAULT_MODEL_ROUTES };
+  if (rawSetting) {
+    try {
+      const parsed = JSON.parse(rawSetting) as Record<string, unknown>;
+      for (const key of Object.keys(DEFAULT_MODEL_ROUTES) as CallType[]) {
+        const value = parsed[key];
+        if (typeof value === "string" && value.trim()) {
+          routes[key] = value.trim();
+        }
+      }
+    } catch {
+      console.error("model_routing setting is not valid JSON; using defaults");
+    }
+  }
+  for (const model of Object.values(routes)) assertAllowedModel(model);
+  return routes;
+}
+
+// Minimal structural type so this module stays importable outside Deno.
+type SettingsClient = {
+  from(table: string): {
+    select(columns: string): {
+      eq(
+        column: string,
+        value: string,
+      ): {
+        maybeSingle(): Promise<{ data: { value: string } | null }>;
+      };
+    };
+  };
+};
+
+export async function getModelFor(
+  service: SettingsClient,
+  callType: CallType,
+): Promise<string> {
+  const { data } = await service
+    .from("app_settings")
+    .select("value")
+    .eq("key", "model_routing")
+    .maybeSingle();
+  return resolveModelRoutes(data?.value ?? null)[callType];
+}

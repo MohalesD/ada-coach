@@ -1,10 +1,19 @@
 // Ada Coach /ingest Edge Function
-// Chunks an uploaded document, embeds each chunk with OpenAI, and writes
-// the rows into document_chunks. Owner-only. Drives a document from
-// status 'uploaded' → 'processing' → 'ready' (or 'error' on failure).
+// Turns a grounding source into embedded chunks in document_chunks, driving
+// the document 'uploaded' -> 'processing' -> 'ready' (or 'error').
 //
-// Auth: owner-only. requireAdmin gates admin/owner; we additionally
-// require role === 'owner' to match the documents-table RLS posture.
+// Two modes, one pipeline (chunker/embedder shared via _shared/ingest-core):
+//   POST { document_id }                      — ingest an uploaded file.
+//     Global-corpus documents (session_id null) stay owner-only, exactly as
+//     before. Session-scoped documents (session_id set) only require that
+//     the caller owns the document.
+//   POST { session_id, pasted_text, title? }  — session-scoped pasted text.
+//     The redaction pass (_shared/redact.ts) strips emails and identified
+//     names BEFORE the text is stored or chunked, so no PII ever reaches
+//     the embedding call. Ambiguous name-like tokens are returned in
+//     `flagged` for the PM to review — kept, never silently dropped.
+//
+// Auth: valid Supabase Auth JWT; role requirements are per-mode as above.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { extractText, getDocumentProxy } from "npm:unpdf@0.12.1";
@@ -12,19 +21,25 @@ import {
   corsHeaders,
   getServiceClient,
   jsonResponse,
-  requireAdmin,
+  requireUser,
 } from "../_shared/auth.ts";
-
-const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIM = 1536;
-const CHUNK_WORDS = 300;
-const CHUNK_OVERLAP_WORDS = 50;
-const EMBED_BATCH_SIZE = 96;
+import {
+  chunkText,
+  embedChunks,
+  guessTypeFromFilename,
+} from "../_shared/ingest-core.ts";
+import { redactPII } from "../_shared/redact.ts";
 
 const SUPPORTED_MIME = new Set(["application/pdf", "text/plain"]);
+const PASTED_TEXT_MAX = 50_000; // PRD: pasted text fields cap at 50k chars
+const PASTED_PATH_PREFIX = "pasted/";
 
-type IngestRequest = { document_id?: unknown };
+type IngestRequest = {
+  document_id?: unknown;
+  session_id?: unknown;
+  pasted_text?: unknown;
+  title?: unknown;
+};
 
 type DocumentRow = {
   id: string;
@@ -32,6 +47,8 @@ type DocumentRow = {
   filename: string;
   file_path: string;
   status: string;
+  session_id: string | null;
+  content_text: string | null;
 };
 
 Deno.serve(async (req) => {
@@ -43,27 +60,15 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Method not allowed" }, 405, req);
   }
 
-  // 1. Auth — owner-only (admin alone is not sufficient for documents)
-  const authResult = await requireAdmin(req);
+  const authResult = await requireUser(req);
   if (authResult.error) return authResult.error;
-  const { user, profile } = authResult;
+  const { user, userClient } = authResult;
 
-  if (profile.role !== "owner") {
-    return jsonResponse({ error: "Forbidden" }, 403, req);
-  }
-
-  // 2. Parse + validate body
   let body: IngestRequest;
   try {
     body = (await req.json()) as IngestRequest;
   } catch {
     return jsonResponse({ error: "Invalid JSON body" }, 400, req);
-  }
-
-  const documentId =
-    typeof body.document_id === "string" ? body.document_id.trim() : "";
-  if (!documentId) {
-    return jsonResponse({ error: "document_id is required" }, 400, req);
   }
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
@@ -78,10 +83,104 @@ Deno.serve(async (req) => {
 
   const service = getServiceClient();
 
-  // 3. Fetch document row + verify ownership
+  // ── Mode 1: session-scoped pasted text ────────────────────────────────
+  if (typeof body.pasted_text === "string") {
+    const sessionId =
+      typeof body.session_id === "string" ? body.session_id : "";
+    if (!sessionId) {
+      return jsonResponse(
+        { error: "session_id is required for pasted text" },
+        400,
+        req,
+      );
+    }
+
+    const pasted = body.pasted_text.trim();
+    if (!pasted) {
+      return jsonResponse({ error: "pasted_text is empty" }, 400, req);
+    }
+    if (pasted.length > PASTED_TEXT_MAX) {
+      return jsonResponse(
+        { error: `pasted_text must be at most ${PASTED_TEXT_MAX} characters` },
+        400,
+        req,
+      );
+    }
+
+    // RLS: the session is visible only to its owner.
+    const { data: session, error: sessErr } = await userClient
+      .from("sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (sessErr) {
+      console.error("session lookup failed:", sessErr);
+      return jsonResponse({ error: "Could not load session." }, 500, req);
+    }
+    if (!session) {
+      return jsonResponse({ error: "Session not found" }, 404, req);
+    }
+
+    // Redact BEFORE anything is stored or embedded. Only the redacted text
+    // persists; raw PII never lands in the database or the vector store.
+    const { redactedText, redactions, flagged } = redactPII(pasted);
+
+    const title =
+      typeof body.title === "string" && body.title.trim()
+        ? body.title.trim().slice(0, 200)
+        : "Pasted notes";
+
+    const { data: doc, error: docErr } = await service
+      .from("documents")
+      .insert({
+        user_id: user.id,
+        session_id: sessionId,
+        filename: title,
+        file_path: `${PASTED_PATH_PREFIX}${crypto.randomUUID()}`,
+        content_text: redactedText,
+        status: "processing",
+      })
+      .select("id")
+      .single();
+    if (docErr || !doc) {
+      console.error("pasted document insert failed:", docErr);
+      return jsonResponse({ error: "Could not save pasted text." }, 500, req);
+    }
+
+    try {
+      const chunkCount = await runPipeline(service, doc.id, redactedText, openaiKey);
+      return jsonResponse(
+        {
+          document_id: doc.id,
+          chunk_count: chunkCount,
+          char_count: redactedText.length,
+          redaction: {
+            redacted_count: redactions.length,
+            flagged, // ambiguous tokens left in place for the PM to review
+          },
+        },
+        200,
+        req,
+      );
+    } catch (err) {
+      return await failDocument(service, doc.id, err, req);
+    }
+  }
+
+  // ── Mode 2: previously-uploaded document by id ────────────────────────
+  const documentId =
+    typeof body.document_id === "string" ? body.document_id.trim() : "";
+  if (!documentId) {
+    return jsonResponse(
+      { error: "document_id or pasted_text is required" },
+      400,
+      req,
+    );
+  }
+
   const { data: doc, error: docErr } = await service
     .from("documents")
-    .select("id, user_id, filename, file_path, status")
+    .select("id, user_id, filename, file_path, status, session_id, content_text")
     .eq("id", documentId)
     .maybeSingle<DocumentRow>();
 
@@ -96,7 +195,24 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Forbidden" }, 403, req);
   }
 
-  // 4. Mark processing
+  // Global-corpus documents keep the original owner-only requirement;
+  // session-scoped documents only need ownership (checked above).
+  if (!doc.session_id) {
+    const { data: profile, error: profileErr } = await service
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profileErr) {
+      console.error("profile lookup failed:", profileErr);
+      return jsonResponse({ error: "Server error" }, 500, req);
+    }
+    if (profile?.role !== "owner") {
+      return jsonResponse({ error: "Forbidden" }, 403, req);
+    }
+  }
+
+  // Mark processing
   const { error: procErr } = await service
     .from("documents")
     .update({ status: "processing" })
@@ -109,265 +225,151 @@ Deno.serve(async (req) => {
   // From here on, any failure must mark the document 'error' and clean up
   // any partially-inserted chunks before returning.
   try {
-    // 5. Download the file from Storage
-    const { data: fileBlob, error: dlErr } = await service.storage
-      .from("documents")
-      .download(doc.file_path);
-
-    if (dlErr || !fileBlob) {
-      throw new Error(
-        `Storage download failed: ${dlErr?.message ?? "no body"}`,
-      );
-    }
-
-    // 5a. Detect content type and extract text accordingly. Storage type
-    //     is whatever was set on upload; fall back to filename suffix if
-    //     blob.type is empty (some storage clients omit it on download).
-    const contentType =
-      (fileBlob.type && fileBlob.type.toLowerCase().split(";")[0].trim()) ||
-      guessTypeFromFilename(doc.filename);
-
-    if (!SUPPORTED_MIME.has(contentType)) {
-      // Reset status so the doc isn't stuck on 'processing' for an
-      // unsupported file. A 400 is a client error (wrong file type),
-      // not an ingest pipeline failure, so keep status as 'uploaded'.
-      await service
-        .from("documents")
-        .update({ status: "uploaded" })
-        .eq("id", documentId);
-      return jsonResponse(
-        {
-          error: `Unsupported content type "${contentType}". Only application/pdf and text/plain are supported.`,
-        },
-        400,
-        req,
-      );
-    }
-
     let text: string;
-    if (contentType === "application/pdf") {
-      const buf = new Uint8Array(await fileBlob.arrayBuffer());
-      const pdf = await getDocumentProxy(buf);
-      const extracted = await extractText(pdf, { mergePages: true });
-      text = Array.isArray(extracted.text)
-        ? extracted.text.join("\n\n")
-        : extracted.text;
+
+    if (doc.file_path.startsWith(PASTED_PATH_PREFIX)) {
+      // Re-ingest of a pasted document: content_text is already redacted.
+      text = doc.content_text ?? "";
     } else {
-      text = await fileBlob.text();
+      // Download the file from Storage
+      const { data: fileBlob, error: dlErr } = await service.storage
+        .from("documents")
+        .download(doc.file_path);
+
+      if (dlErr || !fileBlob) {
+        throw new Error(
+          `Storage download failed: ${dlErr?.message ?? "no body"}`,
+        );
+      }
+
+      // Detect content type and extract text accordingly. Storage type
+      // is whatever was set on upload; fall back to filename suffix if
+      // blob.type is empty (some storage clients omit it on download).
+      const contentType =
+        (fileBlob.type && fileBlob.type.toLowerCase().split(";")[0].trim()) ||
+        guessTypeFromFilename(doc.filename);
+
+      if (!SUPPORTED_MIME.has(contentType)) {
+        // Reset status so the doc isn't stuck on 'processing' for an
+        // unsupported file. A 400 is a client error (wrong file type),
+        // not an ingest pipeline failure, so keep status as 'uploaded'.
+        await service
+          .from("documents")
+          .update({ status: "uploaded" })
+          .eq("id", documentId);
+        return jsonResponse(
+          {
+            error: `Unsupported content type "${contentType}". Only application/pdf and text/plain are supported.`,
+          },
+          400,
+          req,
+        );
+      }
+
+      if (contentType === "application/pdf") {
+        const buf = new Uint8Array(await fileBlob.arrayBuffer());
+        const pdf = await getDocumentProxy(buf);
+        const extracted = await extractText(pdf, { mergePages: true });
+        text = Array.isArray(extracted.text)
+          ? extracted.text.join("\n\n")
+          : extracted.text;
+      } else {
+        text = await fileBlob.text();
+      }
     }
 
     const trimmed = text.trim();
     if (!trimmed) {
       throw new Error("Document is empty after extraction.");
     }
-    const charCount = trimmed.length;
 
-    // 6. Chunk
-    const chunks = chunkText(trimmed, CHUNK_WORDS, CHUNK_OVERLAP_WORDS);
-    if (chunks.length === 0) {
-      throw new Error("Chunker produced no chunks.");
-    }
-
-    // 7. Embed (batched)
-    const embeddings: number[][] = [];
-    for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-      const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
-      const batchEmbeddings = await embedBatch(batch, openaiKey);
-      embeddings.push(...batchEmbeddings);
-    }
-
-    if (embeddings.length !== chunks.length) {
-      throw new Error(
-        `Embedding count mismatch: ${embeddings.length} vs ${chunks.length}`,
-      );
-    }
-
-    // 8. Re-ingest guard: clear any prior chunks for this document so a
-    //    second invocation produces the same end state instead of doubling.
-    const { error: clearErr } = await service
-      .from("document_chunks")
-      .delete()
-      .eq("document_id", documentId);
-    if (clearErr) {
-      throw new Error(`Failed to clear prior chunks: ${clearErr.message}`);
-    }
-
-    // 9. Insert all chunks in a single batch (atomic per request)
-    const rows = chunks.map((content, idx) => ({
-      document_id: documentId,
-      chunk_index: idx,
-      content,
-      embedding: embeddings[idx],
-    }));
-
-    const { error: insertErr } = await service
-      .from("document_chunks")
-      .insert(rows);
-
-    if (insertErr) {
-      throw new Error(`Chunk insert failed: ${insertErr.message}`);
-    }
-
-    // 10. Mark ready
-    const { error: readyErr } = await service
-      .from("documents")
-      .update({ status: "ready", chunk_count: chunks.length })
-      .eq("id", documentId);
-
-    if (readyErr) {
-      throw new Error(`Failed to mark ready: ${readyErr.message}`);
-    }
+    const chunkCount = await runPipeline(service, documentId, trimmed, openaiKey);
 
     return jsonResponse(
       {
         document_id: documentId,
-        chunk_count: chunks.length,
-        char_count: charCount,
+        chunk_count: chunkCount,
+        char_count: trimmed.length,
       },
       200,
       req,
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("ingest failed:", message);
-
-    // Roll back: delete any chunks we may have inserted, then flag error.
-    await service.from("document_chunks").delete().eq("document_id", documentId);
-    await service
-      .from("documents")
-      .update({ status: "error", chunk_count: null })
-      .eq("id", documentId);
-
-    return jsonResponse(
-      { error: "Ingest failed. Document marked as error." },
-      500,
-      req,
-    );
+    return await failDocument(service, documentId, err, req);
   }
 });
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Shared pipeline steps ────────────────────────────────────────────────
 
-function guessTypeFromFilename(filename: string): string {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".txt")) return "text/plain";
-  return "";
-}
-
-// Split text into sentences using a simple punctuation-based regex.
-// Falls back to the whole string if no sentence terminators are found.
-function splitSentences(text: string): string[] {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (!cleaned) return [];
-  const matches = cleaned.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
-  if (!matches || matches.length === 0) return [cleaned];
-  return matches.map((s) => s.trim()).filter(Boolean);
-}
-
-function wordCount(text: string): number {
-  if (!text) return 0;
-  return text.split(/\s+/).filter(Boolean).length;
-}
-
-// Sentence-aware sliding window: pack sentences until we hit `targetWords`,
-// emit a chunk, then carry forward the trailing `overlapWords` of words
-// (re-flowed as plain text) into the next chunk.
-function chunkText(
+// Chunk -> embed -> replace chunks -> mark ready. Returns the chunk count.
+// Throwing here is handled by failDocument (rollback + status 'error').
+async function runPipeline(
+  service: ReturnType<typeof getServiceClient>,
+  documentId: string,
   text: string,
-  targetWords: number,
-  overlapWords: number,
-): string[] {
-  const sentences = splitSentences(text);
-  if (sentences.length === 0) return [];
-
-  const chunks: string[] = [];
-  let buffer: string[] = []; // current chunk as a list of sentences
-  let bufferWordCount = 0;
-
-  const flush = () => {
-    if (buffer.length === 0) return;
-    const chunkText = buffer.join(" ").trim();
-    if (chunkText) chunks.push(chunkText);
-  };
-
-  for (const sentence of sentences) {
-    const sw = wordCount(sentence);
-
-    // Sentence alone exceeds target — emit any current buffer, then split
-    // the long sentence by words into ~targetWords pieces.
-    if (sw > targetWords) {
-      flush();
-      buffer = [];
-      bufferWordCount = 0;
-
-      const words = sentence.split(/\s+/).filter(Boolean);
-      for (let i = 0; i < words.length; i += targetWords - overlapWords) {
-        const slice = words.slice(i, i + targetWords).join(" ");
-        if (slice) chunks.push(slice);
-        if (i + targetWords >= words.length) break;
-      }
-      continue;
-    }
-
-    if (bufferWordCount + sw <= targetWords) {
-      buffer.push(sentence);
-      bufferWordCount += sw;
-      continue;
-    }
-
-    // Buffer is full — flush, then seed next buffer with overlap from tail.
-    flush();
-    const tailWords = buffer
-      .join(" ")
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(-overlapWords);
-    const overlapText = tailWords.join(" ");
-    buffer = overlapText ? [overlapText, sentence] : [sentence];
-    bufferWordCount = tailWords.length + sw;
+  openaiKey: string,
+): Promise<number> {
+  const chunks = chunkText(text);
+  if (chunks.length === 0) {
+    throw new Error("Chunker produced no chunks.");
   }
 
-  flush();
-  return chunks;
+  const embeddings = await embedChunks(chunks, openaiKey);
+
+  // Re-ingest guard: clear any prior chunks for this document so a second
+  // invocation produces the same end state instead of doubling.
+  const { error: clearErr } = await service
+    .from("document_chunks")
+    .delete()
+    .eq("document_id", documentId);
+  if (clearErr) {
+    throw new Error(`Failed to clear prior chunks: ${clearErr.message}`);
+  }
+
+  const rows = chunks.map((content, idx) => ({
+    document_id: documentId,
+    chunk_index: idx,
+    content,
+    embedding: embeddings[idx],
+  }));
+
+  const { error: insertErr } = await service
+    .from("document_chunks")
+    .insert(rows);
+  if (insertErr) {
+    throw new Error(`Chunk insert failed: ${insertErr.message}`);
+  }
+
+  const { error: readyErr } = await service
+    .from("documents")
+    .update({ status: "ready", chunk_count: chunks.length })
+    .eq("id", documentId);
+  if (readyErr) {
+    throw new Error(`Failed to mark ready: ${readyErr.message}`);
+  }
+
+  return chunks.length;
 }
 
-async function embedBatch(
-  inputs: string[],
-  apiKey: string,
-): Promise<number[][]> {
-  const res = await fetch(OPENAI_EMBEDDINGS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: inputs,
-    }),
-  });
+// Roll back: delete any chunks we may have inserted, then flag error.
+async function failDocument(
+  service: ReturnType<typeof getServiceClient>,
+  documentId: string,
+  err: unknown,
+  req: Request,
+): Promise<Response> {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("ingest failed:", message);
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`OpenAI embeddings ${res.status}: ${errBody}`);
-  }
+  await service.from("document_chunks").delete().eq("document_id", documentId);
+  await service
+    .from("documents")
+    .update({ status: "error", chunk_count: null })
+    .eq("id", documentId);
 
-  const data = await res.json();
-  const items = Array.isArray(data?.data) ? data.data : [];
-  if (items.length !== inputs.length) {
-    throw new Error(
-      `OpenAI returned ${items.length} embeddings for ${inputs.length} inputs`,
-    );
-  }
-
-  return items.map((item: { embedding: number[] }, i: number) => {
-    const emb = item?.embedding;
-    if (!Array.isArray(emb) || emb.length !== EMBEDDING_DIM) {
-      throw new Error(
-        `Embedding ${i} has wrong shape (expected ${EMBEDDING_DIM} dims)`,
-      );
-    }
-    return emb;
-  });
+  return jsonResponse(
+    { error: "Ingest failed. Document marked as error." },
+    500,
+    req,
+  );
 }

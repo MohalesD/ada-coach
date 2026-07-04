@@ -102,6 +102,11 @@ Migrations in `supabase/migrations/` (applied in filename order).
 **Pin support — `pin_conversations`:**
 - Adds `conversations.is_pinned BOOLEAN NOT NULL DEFAULT false`. No new RLS policy needed — the existing "update own conversations" policy covers it.
 
+**Credits system — `user_credits`, `app_settings`, `reset_credits_fn`:**
+- `user_profiles.credits_remaining` (int, `CHECK >= 0`) and `user_profiles.last_credit_reset` (date) — written only by the service role (chat decrement) or via `fn_reset_credits_if_due()`. They intentionally fall outside the authenticated column-level UPDATE grant on `user_profiles` (which is restricted to `display_name`).
+- `app_settings` — owner-only key/value store. First key is `daily_message_limit` (text-encoded int, `0` = unlimited). Owner-configurable without a code deploy.
+- `fn_reset_credits_if_due()` — `SECURITY DEFINER` RPC. Lazy daily refill keyed off `auth.uid()` (no user_id param — callers can't reset others). Returns the post-reset balance, or `NULL` for unlimited (owner role, or `daily_message_limit` 0/unset). Called by both the `chat` Edge Function and the frontend on app load.
+
 **Folders — `folders`:**
 - New table `folders` (id, user_id FK auth.users, name, timestamps). Per-user RLS (own-rows-only mirroring `conversations`).
 - Adds `conversations.folder_id` (nullable FK → `folders(id) ON DELETE SET NULL`) so deleting a folder unfiles its chats rather than cascading.
@@ -113,6 +118,15 @@ Migrations in `supabase/migrations/` (applied in filename order).
 - `documents` Storage bucket — private, 50 MB cap, `application/pdf` + `text/plain` only. Owner-only RLS on `storage.objects` keyed off the first folder segment (`(storage.foldername(name))[1] = auth.uid()::text`).
 - `document_chunks` — one row per chunk with `embedding extensions.vector(1536)` (OpenAI `text-embedding-3-small`). Indexed with `ivfflat` cosine ops (lists = 100). Re-run `ANALYZE document_chunks` after large bulk loads so the index picks good list assignments. Authenticated UPDATE is revoked — chunks are immutable from clients.
 - **Owner-only, not just admin.** `documents` and `document_chunks` RLS requires `role = 'owner'`. The `ingest` Edge Function additionally enforces this in code (`requireAdmin()` is not sufficient). Mirror this pattern when adding new RAG-adjacent tables.
+- `match_document_chunks(query_embedding, match_threshold, match_count)` — SQL function used by the `chat` function for retrieval. Returns `content + similarity` for top-N chunks across `documents.status = 'ready'`, pre-filtered by cosine similarity threshold.
+
+**Discovery platform Run 1 — `products`, `sessions`, `assumptions`, `model_usage`, `session_documents`, `model_routing` (see `docs/prds/ada-discovery-coach-v2.md` + `docs/logs/build-log-run1.md`):**
+- `products` — the PM's unit of discovery work. Own-rows RLS (mirrors conversations/folders), including delete.
+- `sessions` — Discovery Sprint sessions. `conversation_id` is a **unique NOT NULL FK → conversations ON DELETE CASCADE** (reuses the conversation engine; deleting the conversation purges the session and its session-scoped documents). Status state machine `in_progress → completed | abandoned` is enforced by a BEFORE UPDATE trigger (`enforce_session_transition`) — it binds service-role writes too. Also carries `stage`/`stage_confidence` (Haiku classifier), `current_step` (resume bookmark), `summary` (Haiku, written on completion).
+- `assumptions` — extracted by Sonnet 4.6; `category` CHECK (desirability/viability/feasibility/usability), `confidence`/`impact` integers 1–5, `status` CHECK (untested/validated/challenged/abandoned), `is_prioritized`. Every status change is recorded in **`assumption_status_history`** (append-only) by a SECURITY DEFINER trigger; authenticated has no write path to the history table.
+- `model_usage` — one row per production model call (call_type, model, tokens, cost_usd). Service-role-only writes, select-own reads, and a CHECK `model !~* '(fable|mythos)'` so a Mythos-tier call can't even be recorded.
+- `documents.session_id` (nullable FK → sessions, CASCADE) marks **session-scoped documents**: owned per-user (any authenticated role), excluded from `match_document_chunks` (global RAG now filters `session_id IS NULL`), searchable only via `match_session_chunks(p_session_id, …)`. Global rows (`session_id IS NULL`) remain owner-role-only. Note: the storage bucket policies are still owner-only — session *file* uploads work only for the owner until the backlog item lands; pasted-text ingest needs no storage.
+- `app_settings.model_routing` — JSON text mapping call types to models (defaults: classification/summary → `claude-haiku-4-5`, assumption mapping → `claude-sonnet-4-6`). Edit the row to change routing without a redeploy; `_shared/models.ts` refuses any route matching `/fable|mythos/i`. **Fable/Mythos-tier models are build-time only and must never be routed in production.**
 
 **RLS posture:**
 - Authenticated users see only their own conversations/messages (via `user_id = auth.uid()`)
@@ -131,12 +145,19 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 
 **Vercel preview URLs are blocked by default.** Vercel preview deploys get a unique origin (e.g. `https://ada-coach-git-<branch>-<scope>.vercel.app`) that is not in the default allowlist. If you need to test against the real Supabase backend from a preview URL, add that origin to `ALLOWED_ORIGINS` before testing: `supabase secrets set ALLOWED_ORIGINS="http://localhost:5175,https://ada-coach.vercel.app,https://ada-coach-git-<branch>-<scope>.vercel.app"`. Remember to remove ephemeral preview origins once the branch is merged.
 
-- **`chat`** — `POST { message, conversation_id? }`. Verifies ownership (RLS), fetches active prompt + last 20 messages, calls Claude, persists both turns, returns `{ reply, conversation_id, message_id, kind }`. Tags assistant messages with `coaching_prompt_id` (for analytics).
+- **`chat`** — `POST { message, conversation_id? }`. Verifies ownership (RLS), fetches active prompt + last 20 messages, calls Claude, persists both turns, returns `{ reply, conversation_id, message_id, kind, credits_remaining }`. Tags assistant messages with `coaching_prompt_id` (for analytics).
+  - **Credits**: calls `fn_reset_credits_if_due` before the Claude call. If credits are tracked and `<= 0`, returns 402 `{ error: "credits_exhausted", credits_remaining: 0 }`. Decrements credits (service-role write) after a successful reply and surfaces the new balance in the response. `credits_remaining: null` = unlimited.
+  - **RAG (currently disabled)**: the retrieval block calls `match_document_chunks` via the service client and prepends the top chunks to the user message, but the call is gated by an `ARM B EVAL: RAG DISABLED` flag. Re-enable by removing that gate — do not delete the block.
   - **Summary sentinel**: when `message === '__SUMMARY__'`, the function swaps in `SUMMARY_SYSTEM_PROMPT`, requires an existing `conversation_id`, **does not** persist the synthetic user turn, and stores the assistant reply with `kind = 'summary'`. Anthropic requires a trailing user turn, so a non-persisted directive is appended to the request only.
 - **`admin-conversations`** — `GET` (list with counts), `GET ?id=` (full messages), `PATCH ?id=` (update status). Requires admin/owner.
 - **`admin-prompts`** — `GET` (list), `POST` (create, auto-versions), `POST ?id=&action=activate`, `PUT ?id=` (update), `DELETE ?id=` (blocked if active). Requires admin/owner.
 - **`admin-insights`** — `GET` returns aggregated feedback analytics (totals, positive/negative rates, per-conversation, per-prompt, top 5 positive/negative messages, recent 10 events). Aggregation is in-memory using the service client; if the dataset grows, move to Postgres aggregations or a materialized view.
-- **`ingest`** — `POST { document_id }`. **Owner-only** (admin alone is rejected with 403). Downloads the file from the `documents` Storage bucket, extracts text (PDF via `unpdf`, plain text via `Blob.text()`), runs a sentence-aware chunker (~300 words / ~50 word overlap), embeds in batches of 96 against OpenAI `text-embedding-3-small`, deletes any prior chunks for that `document_id`, inserts new rows into `document_chunks`, and transitions the document `'uploaded' → 'processing' → 'ready'`. Any failure rolls back chunks and marks the document `'error'`. Re-ingestable: a second invocation produces the same end state, not duplicates. Requires `OPENAI_API_KEY` in Supabase Secrets.
+- **`admin-users`** — **Owner-only** (admin alone is rejected with 403). `GET` lists `user_profiles` with credit fields (`credits_remaining`, `last_credit_reset`). `POST ?id=<uuid>&action=reset` resets that user's credits to the current `daily_message_limit` and stamps `last_credit_reset`.
+- **`ingest`** — two modes, one pipeline (chunker/embedder shared via `_shared/ingest-core.ts`). `POST { document_id }`: downloads from Storage, extracts text (PDF via `unpdf`, plain text via `Blob.text()`), sentence-aware chunker (~300 words / ~50 overlap), embeds in batches of 96 (`text-embedding-3-small`), replaces prior chunks, transitions `'uploaded' → 'processing' → 'ready'` (`'error'` + rollback on failure; re-ingestable). Global-corpus docs (`session_id IS NULL`) remain **owner-only**; session-scoped docs only require ownership. `POST { session_id, pasted_text, title? }`: session-scoped pasted text (≤ 50k chars) — **`_shared/redact.ts` strips emails and identified names BEFORE anything is stored or embedded** (only redacted text persists; ambiguous tokens returned in `redaction.flagged` for the PM, never silently dropped). Requires `OPENAI_API_KEY` in Supabase Secrets.
+- **`products`** — `GET` / `POST { name, description? }` / `PATCH ?id=` / `DELETE ?id=`. All through the RLS-bound client; delete also removes the product's sprint conversations.
+- **`sessions`** — `POST { product_id, intake? }` creates a session + linked conversation, persists the intake as the first turn, and runs the Haiku stage classifier (`stage`, `stage_confidence`; failure is non-fatal → `classification_error: true`). A second concurrent sprint on the same product returns the existing one with `resumed: true`. `GET ?id= | ?product_id= |` (none). `PATCH ?id= { action: 'complete' | 'abandon', current_step? }` — completion generates the Haiku summary (stored on the session and as a `kind='summary'` message); invalid transitions → 409.
+- **`assumptions`** — `GET ?id=` (one + full status history), `GET ?session_id= | ?product_id=` (list), `PATCH ?id= { confidence?, impact?, status?, is_prioritized? }` with strict validation. History rows come only from the DB trigger.
+- **`assumption-mapping`** — `POST { session_id, intake? }`. Sonnet 4.6 extracts 5–12 scored assumptions from the intake (or the sprint conversation); strict JSON validation; malformed output → raw response logged server-side + 502 `{ error: 'malformed_model_output', retryable: true }`, nothing inserted. Every model call in these functions is recorded in `model_usage` via `_shared/usage.ts`.
 
 ### Required Supabase Secrets
 
@@ -192,6 +213,28 @@ Check in with the user before starting implementation.
 Mark items complete as you go.
 Add a review section to tasks/todo.md when done.
 
+## Fable 5 sessions
+
+For any Fable 5 or `/goal`-driven run, load the `fable5-prompting` skill
+first, plus its `references/design-and-voice-philosophy.md` for anything
+touching UI or interaction design. That reference is written mainly from
+RecruiterOS, Argo, and CrackedHR examples (dashboards, pickers, dense
+operational surfaces). Ada is a turn-based chat product, not a dashboard.
+Apply the underlying principles (control near the object it affects,
+minimal interaction travel cost, clear feedback on state changes) where
+they genuinely transfer to chat and sidebar UI. Don't force dashboard-
+specific patterns (multi-panel pickers, hover-reveal actions) onto a
+conversational surface just because the doc describes them there.
+
+Standing rule, negotiated 2026-07-03 (Kellan / Marcus / Priya): while Mo
+is the sole user, ordinary RLS (Row-Level Security) and schema work goes
+through normal Plan Mode review, no extra gate. Batch-audit with Opus or
+Codex after the fact is fine. Hard trigger, non-negotiable: before any
+real external user's data touches the app (beta, paid, or otherwise), a
+full RLS/auth/isolation audit runs first, regardless of effort level or
+goal state. This is the one thing that still pauses for review. It
+satisfies "Plan First" above; it doesn't replace it.
+
 ### Scope Discipline
 Only touch what is necessary to complete the requested task.
 Do not refactor surrounding code unless explicitly asked.
@@ -234,4 +277,4 @@ Every pull request description must include three sections:
 - Why we did it
 - How to test it
 
-No Co-Authored-By: Claude line in any commit message, ever.
+
