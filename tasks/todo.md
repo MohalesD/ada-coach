@@ -7,6 +7,164 @@ platform expansion are Run 2+).
 
 ---
 
+## ✅ Shipped 2026-07-05 — Run 4: Intake router + Portfolio coaching track
+
+Branch `feat/discovery-platform-run4`. Source of truth:
+`docs/prds/ada-discovery-coach-v3.md` (RUN 4 section) +
+`docs/prds/ada-discovery-coach-v3-addendum.md` (JTBD 1–5, endpoints 1–8,
+Run 4 diagrams). RUN 5 (market/competitive intel) is explicitly OUT of
+scope this run. Build log: `docs/logs/build-log-run4.md` (MD as we go;
+DOCX at the end).
+
+### Key decisions (advisor-reviewed before writing code)
+
+- **RLS on both new tables is own-rows** (`user_id = auth.uid()`), NOT
+  the `documents`/`document_chunks` `role = 'owner'` pattern — CLAUDE.md's
+  "owner-only RLS" phrase is table-specific to that older pattern; the
+  PRD's own done-criteria ("two-user query proves zero cross-user reads
+  in both directions") is only coherent under own-rows isolation, and the
+  whole point of the portfolio track is serving non-owner aspiring PMs.
+- **Both `portfolio_profiles` and `portfolio_projects` are service-role-
+  only writes** (own-rows `select`, `revoke insert/update/delete from
+  authenticated`) — mirrors `reports`/`blind_spots`/`model_usage`, not
+  `products`/`assumptions`. Reason: `portfolio_profiles.resume_text` must
+  pass through `redactPII` before storage; if `authenticated` had a direct
+  INSERT path via PostgREST, redaction could be bypassed entirely.
+- **Single-conversation-per-profile.** The PRD's endpoint table puts
+  `session_id` on `portfolio_projects` but endpoint 2 creates the
+  conversation at *profile* creation, before any project exists — an
+  internal inconsistency. Resolved as: `portfolio_profiles.conversation_id`
+  (unique, NOT NULL, FK → conversations ON DELETE CASCADE), created at
+  profile-creation time, holds both ideation and coaching turns.
+  `portfolio_projects` reaches it via `portfolio_profile_id` — no
+  duplicate FK column.
+- **Share via a `share_token` column on `portfolio_projects`** + a new
+  `portfolio-project-public` function mirroring `report-public` exactly.
+  Not touching `reports` (its `session_id` FK is tightly typed to
+  `sessions`; polymorphism there is surgery on tested code, and the goal
+  only enumerates two new tables).
+- **No ingest chunk/embed pipeline for the resume.** Portfolio needs
+  extracted text, not RAG. Reuse `redactPII` directly; PDF resume upload
+  (optional, alongside paste) factors `unpdf`'s `extractText` into a tiny
+  new `_shared/text-extract.ts` helper — does not route through `ingest`.
+- **Router is stateless.** No new table. `portfolio-route` (Haiku)
+  classifies free-text answers to 2–4 fixed questions and returns a
+  recommendation; the client owns navigation. "Skip — take me to the
+  platform" is always visible on the router screen itself. Contradictory
+  answers → recommend both tracks, never silently guess.
+- **AI-native lens must show up in generated content**, not just an
+  `ai_angle` column — idea generation, artifact coaching, and the effort
+  plan all need visible AI framing in their prose output.
+
+### New tables (migrations via Supabase MCP `apply_migration`, per B-011)
+
+- [x] `portfolio_profiles` — user_id, conversation_id (unique FK →
+      conversations CASCADE), resume_text, background, target_companies,
+      target_archetype, timestamps. Own-rows select RLS, service-role-only
+      writes.
+- [x] `portfolio_projects` — user_id, portfolio_profile_id FK CASCADE,
+      idea_title, ai_angle, chosen bool, artifact_type CHECK
+      (prd/brief/prototype_spec), artifact_content jsonb, effort_estimate
+      jsonb, status CHECK (proposed/in_progress/complete), share_token
+      unique nullable, timestamps. Same RLS pattern.
+- [x] `model_routing` update — add `portfolio_route`,
+      `portfolio_profile_extraction` → Haiku;
+      `portfolio_idea_generation`, `portfolio_artifact_coaching`,
+      `portfolio_plan_generation` → Sonnet 4.6.
+
+### Shared modules
+
+- [x] `models.ts` — extend `CallType` + `DEFAULT_MODEL_ROUTES` with the
+      5 new call types above
+- [x] `text-extract.ts` — small helper factoring PDF/plain-text
+      extraction out of `ingest` for reuse (no chunking/embedding)
+- [x] `portfolio-coaching-prompt.ts` or inline system prompts per
+      function — AI-native lens instruction baked into every prompt
+
+### Edge Functions
+
+- [x] `portfolio-route` — POST { answers/text }: Haiku classifies
+      persona + context → { recommended_track, confidence }; no writes
+- [x] `portfolio-sessions` — POST: create portfolio_profiles + linked
+      conversation; GET list/one (own rows)
+- [x] `portfolio-profile` — POST ?id=: redact resume/background (paste
+      or uploaded doc via text-extract), Haiku field extraction, write profile
+- [x] `portfolio-ideas` — POST ?id=: Sonnet 4.6, 3–5 ideas + AI-native
+      angle each, writes portfolio_projects rows
+- [x] `portfolio-projects` — GET list/one; PATCH ?id= (`choose` /
+      `share` actions)
+- [x] `portfolio-coach` — POST ?id=: Sonnet 4.6 multi-turn artifact
+      coaching, grounded in profile + prior turns, updates artifact_content
+- [x] `portfolio-plan` — POST ?id=: Sonnet 4.6 tool rec + effort
+      estimate (hours/cadence/timeline), AI-native framing included
+- [x] `portfolio-project-public` — GET ?token=: mirrors report-public,
+      verify_jwt false
+- [x] `config.toml` entries (verify_jwt=false) + `deno.json` per function
+
+### Frontend
+
+- [x] `types/portfolio.ts` + `lib/portfolio-api.ts` (new files, mirrors
+      discovery-api.ts patterns — not bolted onto the discovery files)
+- [x] `/start` router screen — 2–4 questions, persistent "Skip — take me
+      to the platform," Haiku-backed recommendation, navigates to
+      `/portfolio` or `/discovery`
+- [x] New scenario card on Index routing to `/start`
+- [x] `/portfolio` dashboard — profile intake (paste + optional file),
+      idea cards, choose flow
+- [x] `/portfolio/projects/:id` — artifact workspace: chat-first coaching
+      (mirrors Sprint.tsx StepCard pattern), artifact preview, effort plan,
+      export/share actions, all in the amber identity
+- [x] `/portfolio/share/:token` — public artifact view, outside
+      ProtectedRoute (mirrors ShareReport.tsx)
+- [x] `src/lib/portfolio-pdf.ts` — client-side jsPDF export (mirrors
+      report-pdf.ts)
+
+### Verification
+
+- [x] Vitest for any new pure logic; `npm run type-check`; `npm run build`
+- [x] Deploy migrations (MCP) + functions
+- [x] RLS isolation proof: two throwaway users, SQL both directions on
+      both new tables (the Run 1 standard) + live API 404 checks
+- [x] Directly read `model_usage` rows for all 5 new call types post-run
+      (Run 2's gap — don't repeat it)
+- [x] Playwright: full router → portfolio track → artifact → export/share
+      flow at 375px + 1440px, hover/loading/error states; cleanup test user
+- [x] Build log MD + DOCX (python-docx, no pandoc available); commit; PR
+
+### Review — Run 4 (2026-07-05)
+
+Built: 3 migrations (portfolio_profiles with unique conversation FK,
+portfolio_projects with artifact/effort jsonb + share_token, model_routing
+merge for 5 new call types), 4 shared modules (routing/extraction/
+classifier/text-extract), 8 Edge Functions (router, sessions, profile
+with redaction-before-everything, ideas with the mandatory-AI-angle
+gate, projects choose/share, delimiter-protocol coach, honest-effort
+plan, public artifact endpoint), and 5 frontend surfaces (typographic
+router at /start, portfolio dashboard, two-pane artifact workspace,
+public share view, portfolio PDF export) + the home-screen entry points.
+10 new Vitest tests (34 total).
+
+Verified (full record in `docs/logs/build-log-run4.md` §4): 22/22
+backend E2E steps including both router personas placed correctly, 8
+redactions with zero PII surviving to storage, 4 ideas all AI-angled, a
+coached section landing via the delimiter protocol, an 18-hour honest
+plan, stable share tokens served logged-out, and four cross-user 404s.
+RLS proven by SQL both directions on both tables (zero cross-user
+reads) plus a write-path probe showing authenticated INSERT/UPDATE
+refused. All 5 new call types read directly from model_usage with costs
+recomputed exactly — no Fable/Mythos anywhere. Full UI E2E through
+Playwright at 1440px and 375px including hover/loading/error states;
+PDF export parsed (2 pages, all sections in the text layer); console
+clean. All test users cascade-deleted to zero rows.
+
+Known gaps (deliberate, log §5): resume FILE upload not browser-driven
+end to end (pasted path verified twice); needs_more thin-profile branch
+built but not observed live; one-profile-per-user is behavioral, not a
+schema constraint; workspace two-tab concurrency unguarded (the Run 3
+pattern is the known fix).
+
+---
+
 ## ✅ Shipped 2026-07-04 — Run 3: Hardening
 
 Branch `feat/discovery-platform-run3` (stacked on Run 2's branch / PR #2).

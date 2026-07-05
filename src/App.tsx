@@ -11,6 +11,10 @@ import Discovery from './pages/Discovery';
 import Sprint from './pages/Sprint';
 import ReportPage from './pages/ReportPage';
 import ShareReport from './pages/ShareReport';
+import StartRouter from './pages/StartRouter';
+import Portfolio from './pages/Portfolio';
+import PortfolioWorkspace from './pages/PortfolioWorkspace';
+import SharePortfolio from './pages/SharePortfolio';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -22,6 +26,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           {/* Public by design: share links open for logged-out visitors. */}
           <Route path="/share/:token" element={<ShareReport />} />
+          <Route path="/portfolio/share/:token" element={<SharePortfolio />} />
           <Route
             path="/"
             element={
@@ -43,6 +48,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <Discovery />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/start"
+            element={
+              <ProtectedRoute>
+                <StartRouter />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/portfolio"
+            element={
+              <ProtectedRoute>
+                <Portfolio />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/portfolio/project/:projectId"
+            element={
+              <ProtectedRoute>
+                <PortfolioWorkspace />
               </ProtectedRoute>
             }
           />

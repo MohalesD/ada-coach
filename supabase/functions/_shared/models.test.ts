@@ -106,3 +106,31 @@ describe("Run 2 routing defaults", () => {
     ).toThrow(/build-time only/);
   });
 });
+
+describe("Run 4 routing defaults (portfolio coaching track)", () => {
+  it("routes classification/extraction to Haiku, synthesis to Sonnet 4.6", () => {
+    const routes = resolveModelRoutes(null);
+    expect(routes.portfolio_route).toBe("claude-haiku-4-5");
+    expect(routes.portfolio_profile_extraction).toBe("claude-haiku-4-5");
+    expect(routes.portfolio_idea_generation).toBe("claude-sonnet-4-6");
+    expect(routes.portfolio_artifact_coaching).toBe("claude-sonnet-4-6");
+    expect(routes.portfolio_plan_generation).toBe("claude-sonnet-4-6");
+  });
+
+  it("refuses a Mythos-tier route on every new call type", () => {
+    for (const key of [
+      "portfolio_route",
+      "portfolio_profile_extraction",
+      "portfolio_idea_generation",
+      "portfolio_artifact_coaching",
+      "portfolio_plan_generation",
+    ]) {
+      expect(() =>
+        resolveModelRoutes(`{"${key}":"claude-fable-5"}`),
+      ).toThrow(/build-time only/);
+      expect(() =>
+        resolveModelRoutes(`{"${key}":"claude-mythos-5"}`),
+      ).toThrow(/build-time only/);
+    }
+  });
+});

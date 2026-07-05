@@ -511,3 +511,57 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/admin-spend/deno.json"
 entrypoint = "./functions/admin-spend/index.ts"
+
+# Discovery platform Run 4 functions (intake router + portfolio coaching
+# track). verify_jwt = false mirrors the Run 1/2 discovery functions
+# (browser-facing; auth enforced in-function by requireUser).
+# portfolio-project-public is genuinely public BY DESIGN — the report-
+# public pattern for portfolio artifacts: read-only, keyed by an
+# unguessable 128-bit token, must never require a JWT.
+[functions.portfolio-route]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-route/deno.json"
+entrypoint = "./functions/portfolio-route/index.ts"
+
+[functions.portfolio-sessions]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-sessions/deno.json"
+entrypoint = "./functions/portfolio-sessions/index.ts"
+
+[functions.portfolio-profile]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-profile/deno.json"
+entrypoint = "./functions/portfolio-profile/index.ts"
+
+[functions.portfolio-ideas]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-ideas/deno.json"
+entrypoint = "./functions/portfolio-ideas/index.ts"
+
+[functions.portfolio-projects]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-projects/deno.json"
+entrypoint = "./functions/portfolio-projects/index.ts"
+
+[functions.portfolio-coach]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-coach/deno.json"
+entrypoint = "./functions/portfolio-coach/index.ts"
+
+[functions.portfolio-plan]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-plan/deno.json"
+entrypoint = "./functions/portfolio-plan/index.ts"
+
+[functions.portfolio-project-public]
+enabled = true
+verify_jwt = false
+import_map = "./functions/portfolio-project-public/deno.json"
+entrypoint = "./functions/portfolio-project-public/index.ts"
