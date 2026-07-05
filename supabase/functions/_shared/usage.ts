@@ -4,7 +4,11 @@
 // a logging failure is console.error'd but never fails the user's request,
 // since they already paid the AI cost.
 
-import { assertAllowedModel, MODEL_PRICING } from "./models.ts";
+import {
+  assertAllowedModel,
+  MODEL_PRICING,
+  WEB_SEARCH_COST_PER_REQUEST_USD,
+} from "./models.ts";
 import type { CallType } from "./models.ts";
 
 export interface ModelUsageEntry {
@@ -14,20 +18,30 @@ export interface ModelUsageEntry {
   model: string;
   inputTokens: number | null;
   outputTokens: number | null;
+  // Web-search server tool requests made during the call (market
+  // grounding). Folded into cost_usd at $10/1k.
+  webSearchRequests?: number | null;
 }
 
 export function computeCostUsd(
   model: string,
   inputTokens: number | null,
   outputTokens: number | null,
+  webSearchRequests: number | null = null,
 ): number | null {
   const pricing = MODEL_PRICING[model];
-  if (!pricing) return null;
-  if (inputTokens === null && outputTokens === null) return null;
+  const searchCost = (webSearchRequests ?? 0) * WEB_SEARCH_COST_PER_REQUEST_USD;
+  if (!pricing) {
+    return searchCost > 0 ? Math.round(searchCost * 1_000_000) / 1_000_000 : null;
+  }
+  if (inputTokens === null && outputTokens === null && searchCost === 0) {
+    return null;
+  }
   const cost =
     ((inputTokens ?? 0) * pricing.inputPerMTok +
       (outputTokens ?? 0) * pricing.outputPerMTok) /
-    1_000_000;
+      1_000_000 +
+    searchCost;
   return Math.round(cost * 1_000_000) / 1_000_000;
 }
 
@@ -52,7 +66,12 @@ export async function recordModelUsage(
     model: entry.model,
     input_tokens: entry.inputTokens,
     output_tokens: entry.outputTokens,
-    cost_usd: computeCostUsd(entry.model, entry.inputTokens, entry.outputTokens),
+    cost_usd: computeCostUsd(
+      entry.model,
+      entry.inputTokens,
+      entry.outputTokens,
+      entry.webSearchRequests ?? null,
+    ),
   });
 
   if (error) {

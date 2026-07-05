@@ -103,9 +103,10 @@ const SCENARIOS: Scenario[] = [
     id: 'discovery-sprint',
     icon: <Compass size={20} strokeWidth={1.75} />,
     title: 'Run a Discovery Sprint',
-    subtitle: 'Step-by-step assumption mapping and blind spot analysis',
-    openingMessage:
-      'I want to run through a structured Discovery Sprint. Walk me through it step by step: collect my 5 core assumptions one at a time, then give me a blind spot analysis of each one, then build me interview questions for my riskiest assumption.',
+    subtitle:
+      'Guided flow: map assumptions, check them against the market, get a Mom Test interview guide and a shareable report',
+    // Routed to /discovery — the sprint platform owns this flow now.
+    openingMessage: '',
     featured: true,
   },
   {
@@ -354,6 +355,10 @@ export default function Index() {
   };
 
   const selectScenario = (scenario: Scenario) => {
+    if (scenario.id === 'discovery-sprint') {
+      navigate('/discovery');
+      return;
+    }
     setMessages([]);
     setConversationId(null);
     setConversationMeta(null);
@@ -386,6 +391,19 @@ export default function Index() {
               </span>
             </h1>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/discovery')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
+                  'text-xs font-semibold text-[#8B6324] transition-colors',
+                  'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
+                )}
+              >
+                <Compass size={14} strokeWidth={2} aria-hidden />
+                Discovery
+              </button>
               <CreditsBadge state={credits} />
               <UserMenu
                 user={user}
@@ -437,10 +455,10 @@ export default function Index() {
                     onClick={() => void requestSummary()}
                     disabled={isBusy}
                     className={cn(
-                      'inline-flex items-center gap-1.5 rounded-md border border-[#9BB7D4]/40 bg-background px-3 py-1.5',
+                      'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
                       'text-xs font-medium text-muted-foreground transition-colors',
-                      'hover:border-[#C9A84C]/60 hover:bg-[#C9A84C]/5 hover:text-[#1B4F72]',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+                      'hover:border-[#B8853A]/60 hover:bg-[#B8853A]/5 hover:text-[#8B6324]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60',
                       'disabled:cursor-not-allowed disabled:opacity-50'
                     )}
                   >
@@ -454,10 +472,10 @@ export default function Index() {
                   disabled={isBusy || !conversationMeta}
                   title={!conversationMeta ? 'Send a message first to enable export' : undefined}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-md border border-[#9BB7D4]/40 bg-background px-3 py-1.5',
+                    'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
                     'text-xs font-medium text-muted-foreground transition-colors',
-                    'hover:border-[#9BB7D4]/60 hover:bg-[#9BB7D4]/5 hover:text-[#1B4F72]',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+                    'hover:border-[#B8853A]/60 hover:bg-[#B8853A]/5 hover:text-[#8B6324]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60',
                     'disabled:cursor-not-allowed disabled:opacity-50'
                   )}
                 >
@@ -509,12 +527,12 @@ function CreditsBadge({ state }: { state: CreditsState }) {
 
   // Tone — cerulean by default, gold when low, muted when zero.
   const tone = isError
-    ? 'border-[#9BB7D4]/30 bg-background text-muted-foreground'
+    ? 'border-[#B8853A]/30 bg-background text-muted-foreground'
     : value === 0
       ? 'border-muted-foreground/30 bg-muted/40 text-muted-foreground line-through'
       : value !== null && value <= 3
-        ? 'border-[#C9A84C]/60 bg-[#C9A84C]/10 text-[#C9A84C]'
-        : 'border-[#9BB7D4]/60 bg-[#9BB7D4]/10 text-[#1B4F72]';
+        ? 'border-[#B8853A]/60 bg-[#B8853A]/10 text-[#B8853A]'
+        : 'border-[#B8853A]/60 bg-[#B8853A]/10 text-[#8B6324]';
 
   const label = isError ? '— credits' : `${value} credits`;
 
@@ -557,9 +575,9 @@ function UserMenu({
           aria-label="Open user menu"
           className={cn(
             'flex h-9 w-9 items-center justify-center rounded-full',
-            'border border-[#9BB7D4]/50 bg-background text-sm font-semibold uppercase text-[#1B4F72]',
-            'transition-colors hover:border-[#1B4F72] hover:bg-[#9BB7D4]/15',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60'
+            'border border-[#B8853A]/50 bg-background text-sm font-semibold uppercase text-[#8B6324]',
+            'transition-colors hover:border-[#8B6324] hover:bg-[#B8853A]/15',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
           )}
         >
           {initials}
@@ -647,20 +665,20 @@ function ScenarioCard({
       onClick={() => onSelect(scenario)}
       className={cn(
         'group flex items-start gap-3 rounded-xl border px-4 py-4 text-left transition-all duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60',
         scenario.featured
           ? [
-              'border-[#C9A84C]/60 bg-[#C9A84C]/5',
-              'hover:border-[#C9A84C]/90 hover:bg-[#C9A84C]/10 hover:shadow-sm',
+              'border-[#B8853A]/60 bg-[#B8853A]/5',
+              'hover:border-[#B8853A]/90 hover:bg-[#B8853A]/10 hover:shadow-sm',
             ]
           : scenario.deemphasized
             ? [
-                'border-[#9BB7D4]/20 bg-background/40',
-                'hover:border-[#9BB7D4]/50 hover:bg-background/60',
+                'border-[#B8853A]/20 bg-background/40',
+                'hover:border-[#B8853A]/50 hover:bg-background/60',
               ]
             : [
-                'border-[#9BB7D4]/50 bg-background/60',
-                'hover:border-[#1B4F72]/70 hover:bg-background/80 hover:shadow-sm',
+                'border-[#B8853A]/50 bg-background/60',
+                'hover:border-[#8B6324]/70 hover:bg-background/80 hover:shadow-sm',
               ]
       )}
     >
@@ -668,10 +686,10 @@ function ScenarioCard({
         className={cn(
           'mt-0.5 shrink-0 transition-colors',
           scenario.featured
-            ? 'text-[#C9A84C] group-hover:text-[#C9A84C]'
+            ? 'text-[#B8853A] group-hover:text-[#B8853A]'
             : scenario.deemphasized
               ? 'text-muted-foreground/60 group-hover:text-muted-foreground'
-              : 'text-[#9BB7D4] group-hover:text-[#1B4F72]'
+              : 'text-[#B8853A] group-hover:text-[#8B6324]'
         )}
       >
         {scenario.icon}
@@ -681,7 +699,7 @@ function ScenarioCard({
           className={cn(
             'text-sm font-semibold leading-snug',
             scenario.featured
-              ? 'text-[#C9A84C]'
+              ? 'text-[#B8853A]'
               : scenario.deemphasized
                 ? 'text-muted-foreground group-hover:text-foreground'
                 : 'text-foreground'
@@ -869,11 +887,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <div
           className={cn(
             'rounded-2xl px-4 py-3 text-sm leading-relaxed text-foreground',
-            isSummary ? 'border border-[#9BB7D4]/30 bg-[#9BB7D4]/10' : 'bg-muted'
+            isSummary ? 'border border-[#B8853A]/30 bg-[#B8853A]/10' : 'bg-muted'
           )}
         >
           {isSummary && (
-            <div className="mb-2 inline-flex items-center gap-1 rounded-md bg-[#C9A84C]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#C9A84C]">
+            <div className="mb-2 inline-flex items-center gap-1 rounded-md bg-[#B8853A]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#B8853A]">
               <SummaryIcon />
               Summary
             </div>
@@ -963,11 +981,11 @@ function CopyButton({ text }: { text: string }) {
         onClick={() => void handleCopy()}
         aria-label={copied ? 'Copied' : 'Copy message'}
         className={cn(
-          'flex h-7 w-7 items-center justify-center rounded-md border border-[#9BB7D4]/40 bg-background/60 text-[#1B4F72] transition-all duration-150',
+          'flex h-7 w-7 items-center justify-center rounded-md border border-[#B8853A]/40 bg-background/60 text-[#8B6324] transition-all duration-150',
           'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-          'hover:border-[#C9A84C]/70 hover:bg-[#C9A84C]/10 hover:text-[#C9A84C]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
-          copied && 'border-[#C9A84C]/70 bg-[#C9A84C]/10 text-[#C9A84C] opacity-100'
+          'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10 hover:text-[#B8853A]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60',
+          copied && 'border-[#B8853A]/70 bg-[#B8853A]/10 text-[#B8853A] opacity-100'
         )}
       >
         {copied ? <CheckIcon /> : <CopyIcon />}
@@ -975,7 +993,7 @@ function CopyButton({ text }: { text: string }) {
       <span
         aria-hidden={!copied}
         className={cn(
-          'pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#1B4F72] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#C9A84C] shadow-sm transition-opacity duration-300',
+          'pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#8B6324] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#B8853A] shadow-sm transition-opacity duration-300',
           copied ? 'opacity-100' : 'opacity-0'
         )}
       >
@@ -1097,12 +1115,12 @@ function FeedbackButton({
       title={label}
       className={cn(
         'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB7D4]/60',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60',
         'disabled:cursor-wait',
         selected
           ? isPositive
-            ? 'text-[#C9A84C] hover:bg-[#C9A84C]/10'
-            : 'text-[#C2185B] hover:bg-[#C2185B]/10'
+            ? 'text-[#B8853A] hover:bg-[#B8853A]/10'
+            : 'text-[#A93226] hover:bg-[#A93226]/10'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
