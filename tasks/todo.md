@@ -7,6 +7,40 @@ platform expansion are Run 2+).
 
 ---
 
+## ✅ Shipped 2026-07-04 — Run 3: Hardening
+
+Branch `feat/discovery-platform-run3` (stacked on Run 2's branch / PR #2).
+Build log: `docs/logs/build-log-run3.md` (+ .docx). A hardening run — no
+new features beyond the Should-Have spend view.
+
+- [x] Storage policies: session file uploads for ANY authenticated user
+      (per-user path scoping kept, owner-role clause dropped); verified
+      live by a non-owner upload + the first end-to-end file-mode ingest;
+      foreign-folder writes still rejected
+- [x] Admin spend view: `admin-spend` function (admin+) + Spend tab —
+      totals by model + separable web-search cost, by-day × call-type
+      table; new `model_usage.web_search_requests` column (no new tables)
+- [x] Two-tab guard: `if_unmodified_since` on sessions PATCH → 409
+      `stale_session`; sprint UI shows refresh-to-continue instead of
+      silently overwriting (verified over the API: stale write rejected,
+      newer step survived)
+- [x] Run 2 gap closed for real: assumption-mapping + market-grounding
+      run live, model_usage rows READ and costs recomputed in SQL — all
+      exact, incl. 5 web searches at $0.05 inside the $0.281534 all-in
+      grounding cost
+- [x] 32/32 tests, type-check, build; test user + artifacts fully
+      cleaned up (Mo's global RAG doc untouched)
+
+### Review — Run 3 (2026-07-04)
+
+The second-user storage prerequisite is now closed, spend is observable
+without SQL, stale tabs can't clobber sprint progress, and cost logging
+is verified at the row level rather than assumed. Remaining known gaps
+live in the build log §5 (stale-tab banner not browser-driven end to
+end; guard is strict by design).
+
+---
+
 ## ✅ Shipped 2026-07-04 — Discovery Platform Run 2: Surface
 
 Branch `feat/discovery-platform-run2`. Source of truth:
