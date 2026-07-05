@@ -8,14 +8,7 @@
 // on the object it affects; nothing updates silently. current_step is
 // bookmarked server-side so closing the tab resumes exactly here.
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
@@ -42,10 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import AssumptionCard from '@/components/discovery/AssumptionCard';
-import SprintProgress, {
-  SPRINT_STEPS,
-  stepIndex,
-} from '@/components/discovery/SprintProgress';
+import SprintProgress, { SPRINT_STEPS, stepIndex } from '@/components/discovery/SprintProgress';
 import {
   DiscoveryApiError,
   abandonSession,
@@ -88,7 +78,7 @@ const PROSE = cn(
   '[&_strong]:font-semibold [&_em]:italic',
   '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1',
   '[&_a]:text-primary [&_a]:underline',
-  '[&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm',
+  '[&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm'
 );
 
 function errorCopy(err: unknown, fallback: string): string {
@@ -117,7 +107,7 @@ function ThreadBubble({ m }: { m: ThreadMessage }) {
     <div
       className={cn(
         'mr-auto max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-        isSummary ? 'border border-accent/30 bg-secondary/50' : 'bg-muted',
+        isSummary ? 'border border-accent/30 bg-secondary/50' : 'bg-muted'
       )}
     >
       {isSummary && (
@@ -146,14 +136,8 @@ function StepCard({
       aria-label={title}
       className="rounded-2xl border border-accent/50 bg-card p-4 shadow-sm sm:p-5"
     >
-      <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
-        {title}
-      </h2>
-      {subtitle && (
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          {subtitle}
-        </p>
-      )}
+      <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+      {subtitle && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{subtitle}</p>}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -215,6 +199,10 @@ export default function Sprint() {
   const [step, setStep] = useState('grounding');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // Two-tab guard (Run 3): updated_at from the last load/write is the
+  // optimistic-concurrency token; stale = another tab moved the sprint.
+  const [sessionVersion, setSessionVersion] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
 
   // Per-action state — feedback lives on the object it affects.
   const [pasteText, setPasteText] = useState('');
@@ -284,6 +272,7 @@ export default function Sprint() {
         ]);
         if (cancelled) return;
         setSession(s);
+        setSessionVersion(s.updated_at);
         setProduct(p);
         setMessages(thread);
         setAssumptions(asmp);
@@ -293,9 +282,7 @@ export default function Sprint() {
         setDocs(d);
         const known = SPRINT_STEPS.some((x) => x.key === s.current_step);
         setStep(known && s.current_step ? s.current_step : 'grounding');
-        setSelected(
-          new Set(asmp.filter((a) => a.is_prioritized).map((a) => a.id)),
-        );
+        setSelected(new Set(asmp.filter((a) => a.is_prioritized).map((a) => a.id)));
       } catch {
         if (!cancelled) setLoadError(true);
       } finally {
@@ -314,33 +301,39 @@ export default function Sprint() {
   const goToStep = useCallback(
     (key: string) => {
       setStep(key);
-      if (session) {
-        saveSessionStep(session.id, key).catch(() => {
-          // Bookmark failed — the sprint continues; resume just lands one
-          // step earlier. Worth a whisper, not a blocker.
-          console.error('could not save sprint bookmark');
+      if (!session) return;
+      saveSessionStep(session.id, key, sessionVersion ?? undefined)
+        .then((updated) => setSessionVersion(updated.updated_at))
+        .catch((err) => {
+          if (err instanceof DiscoveryApiError && err.code === 'stale_session') {
+            // Another tab moved this sprint ahead — stop writing over it.
+            setStale(true);
+          } else {
+            // Bookmark failed — the sprint continues; resume just lands one
+            // step earlier. Worth a whisper, not a blocker.
+            console.error('could not save sprint bookmark');
+          }
         });
-      }
     },
-    [session],
+    [session, sessionVersion]
   );
 
   const riskiest = useMemo(
-    () => pickRiskiest(assumptions.filter((a) => a.status !== 'abandoned'), 3),
-    [assumptions],
+    () =>
+      pickRiskiest(
+        assumptions.filter((a) => a.status !== 'abandoned'),
+        3
+      ),
+    [assumptions]
   );
-  const riskiestIds = useMemo(
-    () => new Set(riskiest.map((a) => a.id)),
-    [riskiest],
-  );
+  const riskiestIds = useMemo(() => new Set(riskiest.map((a) => a.id)), [riskiest]);
   const evidenceFor = useCallback(
-    (assumptionId: string) =>
-      evidence.filter((e) => e.assumption_id === assumptionId),
-    [evidence],
+    (assumptionId: string) => evidence.filter((e) => e.assumption_id === assumptionId),
+    [evidence]
   );
   const indexOf = useCallback(
     (id: string) => assumptions.findIndex((a) => a.id === id) + 1,
-    [assumptions],
+    [assumptions]
   );
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -359,7 +352,7 @@ export default function Sprint() {
       setDocs(await listSessionDocuments(session.id));
     } catch (err) {
       setIngestError(
-        errorCopy(err, "Couldn't save your notes. They're still in the box — try again."),
+        errorCopy(err, "Couldn't save your notes. They're still in the box — try again.")
       );
     } finally {
       setIngestBusy(false);
@@ -375,9 +368,7 @@ export default function Sprint() {
       setAssumptions(mapped);
       void refreshThread();
     } catch (err) {
-      setMappingError(
-        errorCopy(err, "Mapping didn't finish. Nothing was saved — try again."),
-      );
+      setMappingError(errorCopy(err, "Mapping didn't finish. Nothing was saved — try again."));
     } finally {
       setMappingBusy(false);
     }
@@ -386,12 +377,10 @@ export default function Sprint() {
   const handleScoreChange = async (
     a: Assumption,
     field: 'confidence' | 'impact',
-    value: number,
+    value: number
   ) => {
     const prev = assumptions;
-    setAssumptions((list) =>
-      list.map((x) => (x.id === a.id ? { ...x, [field]: value } : x)),
-    );
+    setAssumptions((list) => list.map((x) => (x.id === a.id ? { ...x, [field]: value } : x)));
     try {
       await updateAssumption(a.id, { [field]: value });
     } catch {
@@ -412,10 +401,7 @@ export default function Sprint() {
     } catch (err) {
       setGroundingErrors((e) => ({
         ...e,
-        [assumptionId]: errorCopy(
-          err,
-          'The market check failed mid-search. Try this one again.',
-        ),
+        [assumptionId]: errorCopy(err, 'The market check failed mid-search. Try this one again.'),
       }));
     } finally {
       setGroundingIds((s) => {
@@ -444,7 +430,7 @@ export default function Sprint() {
       void refreshThread();
     } catch (err) {
       setBlindError(
-        errorCopy(err, "Blind spot analysis didn't finish. Nothing was lost — try again."),
+        errorCopy(err, "Blind spot analysis didn't finish. Nothing was lost — try again.")
       );
     } finally {
       setBlindBusy(false);
@@ -465,13 +451,9 @@ export default function Sprint() {
     if (!session) return;
     setConfirmBusy(true);
     try {
-      const changes = assumptions.filter(
-        (a) => a.is_prioritized !== selected.has(a.id),
-      );
+      const changes = assumptions.filter((a) => a.is_prioritized !== selected.has(a.id));
       await Promise.all(
-        changes.map((a) =>
-          updateAssumption(a.id, { is_prioritized: selected.has(a.id) }),
-        ),
+        changes.map((a) => updateAssumption(a.id, { is_prioritized: selected.has(a.id) }))
       );
       setAssumptions(await listAssumptions(session.id));
       goToStep('guide');
@@ -492,7 +474,7 @@ export default function Sprint() {
       void refreshThread();
     } catch (err) {
       setGuideError(
-        errorCopy(err, "The guide didn't come together. Try again — nothing was saved."),
+        errorCopy(err, "The guide didn't come together. Try again — nothing was saved.")
       );
     } finally {
       setGuideBusy(false);
@@ -504,15 +486,20 @@ export default function Sprint() {
     setFinishBusy(true);
     setFinishError(null);
     try {
-      const { summary_error } = await completeSession(session.id);
+      const { summary_error } = await completeSession(session.id, sessionVersion ?? undefined);
       if (summary_error) {
         toast.info("The sprint closed, but the summary didn't write. The report still compiles.");
       }
       await compileReport(session.id);
       navigate(`/report/${session.id}`);
     } catch (err) {
+      if (err instanceof DiscoveryApiError && err.code === 'stale_session') {
+        setStale(true);
+        setFinishBusy(false);
+        return;
+      }
       setFinishError(
-        errorCopy(err, "Couldn't finish the sprint. Everything so far is saved — try again."),
+        errorCopy(err, "Couldn't finish the sprint. Everything so far is saved — try again.")
       );
       setFinishBusy(false);
     }
@@ -543,12 +530,11 @@ export default function Sprint() {
         },
       ]);
     } catch (err) {
-      const isCredits =
-        err instanceof DiscoveryApiError && err.code === 'credits_exhausted';
+      const isCredits = err instanceof DiscoveryApiError && err.code === 'credits_exhausted';
       toast.error(
         isCredits
           ? "You've used today's credits — they reset at midnight UTC. The sprint steps still work."
-          : 'Ada is taking a moment. Your message is in the thread — try again.',
+          : 'Ada is taking a moment. Your message is in the thread — try again.'
       );
     } finally {
       setChatBusy(false);
@@ -584,8 +570,8 @@ export default function Sprint() {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-background px-6">
         <p className="max-w-sm text-center text-sm text-muted-foreground">
-          Couldn't open this sprint. It may have been removed, or the
-          connection dropped — your work is stored server-side either way.
+          Couldn't open this sprint. It may have been removed, or the connection dropped — your work
+          is stored server-side either way.
         </p>
         <Button variant="outline" onClick={() => navigate('/discovery')}>
           Back to Discovery
@@ -616,9 +602,7 @@ export default function Sprint() {
                 <p className="text-[11px] text-muted-foreground">
                   Ada's read:{' '}
                   <span className="font-semibold text-accent">
-                    {session.stage === 'fresh_idea'
-                      ? 'fresh idea'
-                      : 'mid-discovery, stuck'}
+                    {session.stage === 'fresh_idea' ? 'fresh idea' : 'mid-discovery, stuck'}
                   </span>
                 </p>
               )}
@@ -660,7 +644,28 @@ export default function Sprint() {
           ))}
           {chatBusy && <WorkingNote label="Ada is thinking…" />}
 
-          <div className="mt-3">
+          {/* Two-tab guard: once another tab has moved this sprint, this
+              tab stops offering step actions and asks for a refresh —
+              never a silent overwrite (PRD async edge case). */}
+          {stale && (
+            <section
+              role="alert"
+              className="mt-3 rounded-2xl border border-warning/50 bg-warning/10 p-5"
+            >
+              <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
+                This sprint moved ahead in another tab
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-foreground/80">
+                Everything saved there is safe. Refresh to pick up from the newest step — nothing
+                from this tab will overwrite it.
+              </p>
+              <Button className="mt-3" onClick={() => window.location.reload()}>
+                Refresh to continue
+              </Button>
+            </section>
+          )}
+
+          <div className={cn('mt-3', stale && 'hidden')}>
             {/* ── Step: grounding ── */}
             {step === 'grounding' && (
               <StepCard
@@ -670,16 +675,13 @@ export default function Sprint() {
                 <div className="space-y-3">
                   <Textarea
                     value={pasteText}
-                    onChange={(e) =>
-                      setPasteText(e.target.value.slice(0, PASTE_MAX))
-                    }
+                    onChange={(e) => setPasteText(e.target.value.slice(0, PASTE_MAX))}
                     rows={5}
                     placeholder="Paste a product brief, positioning doc, or raw interview notes…"
                     aria-label="Paste grounding notes"
                   />
                   <p className="-mt-2 text-right text-[11px] text-muted-foreground">
-                    {pasteText.length.toLocaleString()} /{' '}
-                    {PASTE_MAX.toLocaleString()}
+                    {pasteText.length.toLocaleString()} / {PASTE_MAX.toLocaleString()}
                   </p>
                   {ingestError && (
                     <InlineError
@@ -699,9 +701,8 @@ export default function Sprint() {
                         : 'No personal details needed redacting.'}
                       {flagged.length > 0 && (
                         <span className="mt-1 block text-warning">
-                          Couldn't confidently redact:{' '}
-                          <strong>{flagged.join(', ')}</strong> — kept in the
-                          text; edit and re-paste if any of these is a person.
+                          Couldn't confidently redact: <strong>{flagged.join(', ')}</strong> — kept
+                          in the text; edit and re-paste if any of these is a person.
                         </span>
                       )}
                     </div>
@@ -744,24 +745,19 @@ export default function Sprint() {
               >
                 <div className="space-y-3">
                   {mappingError && (
-                    <InlineError
-                      message={mappingError}
-                      onRetry={() => void handleMap()}
-                    />
+                    <InlineError message={mappingError} onRetry={() => void handleMap()} />
                   )}
                   {mappingBusy && (
                     <WorkingNote label="Ada is mapping your assumptions — usually 10–20 seconds…" />
                   )}
                   {assumptions.length === 0 && !mappingBusy && (
-                    <Button onClick={() => void handleMap()}>
-                      Map my assumptions
-                    </Button>
+                    <Button onClick={() => void handleMap()}>Map my assumptions</Button>
                   )}
                   {assumptions.length > 0 && (
                     <>
                       <p className="text-sm text-muted-foreground">
-                        Tap a score to correct it — you know things Ada
-                        doesn't. The scores drive everything downstream.
+                        Tap a score to correct it — you know things Ada doesn't. The scores drive
+                        everything downstream.
                       </p>
                       <div className="space-y-2.5">
                         {assumptions.map((a, i) => (
@@ -847,7 +843,7 @@ export default function Sprint() {
                                               e.stance === 'challenges' &&
                                                 'bg-destructive/10 text-destructive',
                                               e.stance === 'neutral' &&
-                                                'bg-muted text-muted-foreground',
+                                                'bg-muted text-muted-foreground'
                                             )}
                                           >
                                             {e.stance}
@@ -862,9 +858,7 @@ export default function Sprint() {
                                       variant={ev.length > 0 ? 'outline' : 'default'}
                                       onClick={() => void handleGround(a.id)}
                                     >
-                                      {ev.length > 0
-                                        ? 'Check again'
-                                        : 'Check the market'}
+                                      {ev.length > 0 ? 'Check again' : 'Check the market'}
                                     </Button>
                                   )}
                                 </div>
@@ -874,14 +868,9 @@ export default function Sprint() {
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {riskiest.some(
-                          (a) =>
-                            evidenceFor(a.id).length === 0 &&
-                            !groundingIds.has(a.id),
+                          (a) => evidenceFor(a.id).length === 0 && !groundingIds.has(a.id)
                         ) && (
-                          <Button
-                            onClick={handleGroundAll}
-                            disabled={groundingIds.size > 0}
-                          >
+                          <Button onClick={handleGroundAll} disabled={groundingIds.size > 0}>
                             Check all {riskiest.length}
                           </Button>
                         )}
@@ -909,18 +898,13 @@ export default function Sprint() {
               >
                 <div className="space-y-3">
                   {blindError && (
-                    <InlineError
-                      message={blindError}
-                      onRetry={() => void handleBlindSpots()}
-                    />
+                    <InlineError message={blindError} onRetry={() => void handleBlindSpots()} />
                   )}
                   {blindBusy && (
                     <WorkingNote label="Ada is cross-examining your thinking — usually 15–30 seconds…" />
                   )}
                   {blindSpots.length === 0 && !blindBusy && (
-                    <Button onClick={() => void handleBlindSpots()}>
-                      Surface my blind spots
-                    </Button>
+                    <Button onClick={() => void handleBlindSpots()}>Surface my blind spots</Button>
                   )}
                   {blindSpots.length > 0 && (
                     <>
@@ -958,18 +942,14 @@ export default function Sprint() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() =>
-                                  answerPrompt(`blind spot ${i + 1}`)
-                                }
+                                onClick={() => answerPrompt(`blind spot ${i + 1}`)}
                               >
                                 Answer it
                               </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() =>
-                                  digDeeper(`blind spot ${i + 1}`, b.statement)
-                                }
+                                onClick={() => digDeeper(`blind spot ${i + 1}`, b.statement)}
                                 disabled={chatBusy}
                               >
                                 Dig deeper
@@ -1007,9 +987,7 @@ export default function Sprint() {
                   <p
                     className={cn(
                       'text-sm font-semibold',
-                      selected.size >= 3 && selected.size <= 5
-                        ? 'text-success'
-                        : 'text-warning',
+                      selected.size >= 3 && selected.size <= 5 ? 'text-success' : 'text-warning'
                     )}
                     role="status"
                   >
@@ -1031,22 +1009,16 @@ export default function Sprint() {
                     {selected.size === 0 && riskiest.length > 0 && (
                       <Button
                         variant="outline"
-                        onClick={() =>
-                          setSelected(new Set(riskiest.map((a) => a.id)))
-                        }
+                        onClick={() => setSelected(new Set(riskiest.map((a) => a.id)))}
                       >
                         Use Ada's suggestion ({riskiest.length})
                       </Button>
                     )}
                     <Button
                       onClick={() => void handleConfirmPriorities()}
-                      disabled={
-                        selected.size < 3 || selected.size > 5 || confirmBusy
-                      }
+                      disabled={selected.size < 3 || selected.size > 5 || confirmBusy}
                     >
-                      {confirmBusy
-                        ? 'Saving…'
-                        : `Confirm these ${selected.size || ''}`}
+                      {confirmBusy ? 'Saving…' : `Confirm these ${selected.size || ''}`}
                     </Button>
                   </div>
                 </div>
@@ -1061,18 +1033,13 @@ export default function Sprint() {
               >
                 <div className="space-y-3">
                   {guideError && (
-                    <InlineError
-                      message={guideError}
-                      onRetry={() => void handleGuide()}
-                    />
+                    <InlineError message={guideError} onRetry={() => void handleGuide()} />
                   )}
                   {guideBusy && (
                     <WorkingNote label="Ada is writing your guide — usually 20–30 seconds…" />
                   )}
                   {!guide && !guideBusy && (
-                    <Button onClick={() => void handleGuide()}>
-                      Write my interview guide
-                    </Button>
+                    <Button onClick={() => void handleGuide()}>Write my interview guide</Button>
                   )}
                   {guide && !guideBusy && (
                     <>
@@ -1085,20 +1052,12 @@ export default function Sprint() {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         v{guide.version}
-                        {guide.question_count
-                          ? ` · ${guide.question_count} questions`
-                          : ''}{' '}
-                        · saved to this sprint
+                        {guide.question_count ? ` · ${guide.question_count} questions` : ''} · saved
+                        to this sprint
                       </p>
                       <div className="flex flex-wrap gap-2 pt-1">
-                        <Button onClick={() => goToStep('report')}>
-                          Wrap up the sprint
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleGuide()}
-                        >
+                        <Button onClick={() => goToStep('report')}>Wrap up the sprint</Button>
+                        <Button variant="ghost" size="sm" onClick={() => void handleGuide()}>
                           Rewrite it (keeps v{guide.version})
                         </Button>
                       </div>
@@ -1119,8 +1078,7 @@ export default function Sprint() {
                     <li>
                       • {assumptions.length} assumption
                       {assumptions.length === 1 ? '' : 's'} mapped,{' '}
-                      {assumptions.filter((a) => a.is_prioritized).length}{' '}
-                      prioritized
+                      {assumptions.filter((a) => a.is_prioritized).length} prioritized
                     </li>
                     <li>• {evidence.length} evidence citations</li>
                     <li>• {blindSpots.length} blind spots surfaced</li>
@@ -1132,10 +1090,7 @@ export default function Sprint() {
                     </li>
                   </ul>
                   {finishError && (
-                    <InlineError
-                      message={finishError}
-                      onRetry={() => void handleFinish()}
-                    />
+                    <InlineError message={finishError} onRetry={() => void handleFinish()} />
                   )}
                   {finishBusy ? (
                     <WorkingNote label="Closing the sprint and compiling your report…" />
@@ -1166,10 +1121,7 @@ export default function Sprint() {
             className="min-h-[44px] resize-none"
             aria-label="Message Ada"
           />
-          <Button
-            onClick={() => void handleChat()}
-            disabled={!chatInput.trim() || chatBusy}
-          >
+          <Button onClick={() => void handleChat()} disabled={!chatInput.trim() || chatBusy}>
             Send
           </Button>
         </div>
@@ -1178,13 +1130,10 @@ export default function Sprint() {
       <AlertDialog open={abandonOpen} onOpenChange={setAbandonOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-display">
-              Abandon this sprint?
-            </AlertDialogTitle>
+            <AlertDialogTitle className="font-display">Abandon this sprint?</AlertDialogTitle>
             <AlertDialogDescription>
-              The thread, assumptions, and evidence stay saved, but the sprint
-              closes for good — no resuming. If you just need a break, use
-              "Save & exit" instead.
+              The thread, assumptions, and evidence stay saved, but the sprint closes for good — no
+              resuming. If you just need a break, use "Save & exit" instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1194,10 +1143,14 @@ export default function Sprint() {
               onClick={() => {
                 void (async () => {
                   try {
-                    await abandonSession(session.id);
+                    await abandonSession(session.id, sessionVersion ?? undefined);
                     toast.info('Sprint abandoned. Everything it produced is kept.');
                     navigate('/discovery');
-                  } catch {
+                  } catch (err) {
+                    if (err instanceof DiscoveryApiError && err.code === 'stale_session') {
+                      setStale(true);
+                      return;
+                    }
                     toast.error("Couldn't abandon the sprint. Try again.");
                   }
                 })();

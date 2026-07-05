@@ -17,10 +17,7 @@ type RequestOptions = {
   body?: unknown;
 };
 
-async function adminFetch<T>(
-  functionName: string,
-  opts: RequestOptions = {},
-): Promise<T> {
+async function adminFetch<T>(functionName: string, opts: RequestOptions = {}): Promise<T> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) throw new UnauthorizedError();
@@ -106,9 +103,7 @@ export async function listConversations(): Promise<ConversationSummary[]> {
   return conversations;
 }
 
-export async function getConversation(
-  id: string,
-): Promise<ConversationDetail> {
+export async function getConversation(id: string): Promise<ConversationDetail> {
   const { conversation } = await adminFetch<{
     conversation: ConversationDetail;
   }>('admin-conversations', { params: { id } });
@@ -117,7 +112,7 @@ export async function getConversation(
 
 export async function updateConversationStatus(
   id: string,
-  status: 'active' | 'archived' | 'deleted',
+  status: 'active' | 'archived' | 'deleted'
 ): Promise<void> {
   await adminFetch('admin-conversations', {
     method: 'PATCH',
@@ -129,9 +124,7 @@ export async function updateConversationStatus(
 // ── Prompts ───────────────────────────────────────────────────────
 
 export async function listPrompts(): Promise<CoachingPrompt[]> {
-  const { prompts } = await adminFetch<{ prompts: CoachingPrompt[] }>(
-    'admin-prompts',
-  );
+  const { prompts } = await adminFetch<{ prompts: CoachingPrompt[] }>('admin-prompts');
   return prompts;
 }
 
@@ -140,21 +133,22 @@ export async function createPrompt(input: {
   prompt_text: string;
   notes?: string;
 }): Promise<CoachingPrompt> {
-  const { prompt } = await adminFetch<{ prompt: CoachingPrompt }>(
-    'admin-prompts',
-    { method: 'POST', body: input },
-  );
+  const { prompt } = await adminFetch<{ prompt: CoachingPrompt }>('admin-prompts', {
+    method: 'POST',
+    body: input,
+  });
   return prompt;
 }
 
 export async function updatePrompt(
   id: string,
-  input: { name?: string; prompt_text?: string; notes?: string | null },
+  input: { name?: string; prompt_text?: string; notes?: string | null }
 ): Promise<CoachingPrompt> {
-  const { prompt } = await adminFetch<{ prompt: CoachingPrompt }>(
-    'admin-prompts',
-    { method: 'PUT', params: { id }, body: input },
-  );
+  const { prompt } = await adminFetch<{ prompt: CoachingPrompt }>('admin-prompts', {
+    method: 'PUT',
+    params: { id },
+    body: input,
+  });
   return prompt;
 }
 
@@ -224,6 +218,37 @@ export type InsightsResponse = {
 
 export async function getInsights(): Promise<InsightsResponse> {
   return await adminFetch<InsightsResponse>('admin-insights');
+}
+
+// ── Spend (admin+) ────────────────────────────────────────────────
+
+export type SpendDayRow = {
+  call_type: string;
+  model: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  web_search_requests: number;
+  cost_usd: number;
+};
+
+export type SpendResponse = {
+  window_days: number;
+  since: string;
+  truncated: boolean;
+  totals: {
+    calls: number;
+    cost_usd: number;
+    by_model: { model: string; calls: number; cost_usd: number }[];
+    web_search: { requests: number; cost_usd: number; blended_rows: number };
+  };
+  days: { date: string; rows: SpendDayRow[] }[];
+};
+
+export async function getSpend(days = 30): Promise<SpendResponse> {
+  return await adminFetch<SpendResponse>('admin-spend', {
+    params: { days: String(days) },
+  });
 }
 
 // ── Users (owner-only) ────────────────────────────────────────────

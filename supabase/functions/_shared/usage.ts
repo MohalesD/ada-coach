@@ -66,6 +66,9 @@ export async function recordModelUsage(
     model: entry.model,
     input_tokens: entry.inputTokens,
     output_tokens: entry.outputTokens,
+    // Stored separately (Run 3) so the spend view can split search cost
+    // out of the all-in cost_usd; null = no search component.
+    web_search_requests: entry.webSearchRequests ?? null,
     cost_usd: computeCostUsd(
       entry.model,
       entry.inputTokens,

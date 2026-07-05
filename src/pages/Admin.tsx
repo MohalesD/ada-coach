@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -12,19 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -51,6 +34,7 @@ import {
   getConversation,
   getDailyMessageLimit,
   getInsights,
+  getSpend,
   listConversations,
   listPrompts,
   listUsers,
@@ -66,6 +50,7 @@ import {
   type InsightsResponse,
   type PromptStat,
   type RecentFeedbackEvent,
+  type SpendResponse,
 } from '@/lib/admin-api';
 
 export default function Admin() {
@@ -115,15 +100,10 @@ export default function Admin() {
             <TabsTrigger value="conversations">Conversations</TabsTrigger>
             <TabsTrigger value="prompts">Coaching Prompts</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
-            {profile?.role === 'owner' && (
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-            )}
-            {profile?.role === 'owner' && (
-              <TabsTrigger value="users">Users</TabsTrigger>
-            )}
-            {profile?.role === 'owner' && (
-              <TabsTrigger value="settings">Settings</TabsTrigger>
-            )}
+            <TabsTrigger value="spend">Spend</TabsTrigger>
+            {profile?.role === 'owner' && <TabsTrigger value="documents">Documents</TabsTrigger>}
+            {profile?.role === 'owner' && <TabsTrigger value="users">Users</TabsTrigger>}
+            {profile?.role === 'owner' && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="conversations" className="mt-6">
@@ -139,10 +119,11 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="insights" className="mt-6">
-            <InsightsTab
-              onUnauthorized={handleUnauthorized}
-              onDeepLink={handleDeepLink}
-            />
+            <InsightsTab onUnauthorized={handleUnauthorized} onDeepLink={handleDeepLink} />
+          </TabsContent>
+
+          <TabsContent value="spend" className="mt-6">
+            <SpendTab onUnauthorized={handleUnauthorized} />
           </TabsContent>
 
           {profile?.role === 'owner' && (
@@ -183,9 +164,7 @@ function ConversationsTab({
 }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedDetail, setExpandedDetail] = useState<ConversationDetail | null>(
-    null,
-  );
+  const [expandedDetail, setExpandedDetail] = useState<ConversationDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -282,16 +261,9 @@ function ConversationsTab({
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <div>
           <CardTitle>Conversations</CardTitle>
-          <CardDescription>
-            {conversations.length} total · click a row to expand
-          </CardDescription>
+          <CardDescription>{conversations.length} total · click a row to expand</CardDescription>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refresh()}
-          disabled={isLoading}
-        >
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
           {isLoading ? 'Refreshing...' : 'Refresh'}
         </Button>
       </CardHeader>
@@ -314,10 +286,7 @@ function ConversationsTab({
           <TableBody>
             {conversations.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
+                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                   No conversations yet.
                 </TableCell>
               </TableRow>
@@ -332,28 +301,21 @@ function ConversationsTab({
                     onClick={() => void handleExpand(c.id)}
                   >
                     <TableCell className="font-medium">
-                      <div className="line-clamp-1">
-                        {c.title ?? '(untitled)'}
-                      </div>
+                      <div className="line-clamp-1">{c.title ?? '(untitled)'}</div>
                       {c.first_message && (
                         <div className="line-clamp-1 text-xs text-muted-foreground">
                           {c.first_message}
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {c.message_count}
-                    </TableCell>
+                    <TableCell className="text-right">{c.message_count}</TableCell>
                     <TableCell>
                       <StatusBadge status={c.status} />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDate(c.created_at)}
                     </TableCell>
-                    <TableCell
-                      className="text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="outline"
                         size="sm"
@@ -369,9 +331,7 @@ function ConversationsTab({
                       <TableCell colSpan={5} className="bg-muted/40 p-0">
                         <div className="border-l-2 border-primary px-6 py-4">
                           {isDetailLoading && (
-                            <p className="text-sm text-muted-foreground">
-                              Loading messages...
-                            </p>
+                            <p className="text-sm text-muted-foreground">Loading messages...</p>
                           )}
                           {expandedDetail && !isDetailLoading && (
                             <div className="flex flex-col gap-3">
@@ -385,9 +345,7 @@ function ConversationsTab({
                                   key={m.id}
                                   className={cn(
                                     'rounded-lg border border-border px-4 py-3 text-sm',
-                                    m.role === 'user'
-                                      ? 'bg-secondary/30'
-                                      : 'bg-background',
+                                    m.role === 'user' ? 'bg-secondary/30' : 'bg-background'
                                   )}
                                 >
                                   <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -542,12 +500,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void refresh()}
-              disabled={isLoading}
-            >
+            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
               {isLoading ? 'Refreshing...' : 'Refresh'}
             </Button>
             <Button
@@ -592,9 +545,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {form?.mode === 'create' ? 'Create Prompt' : 'Edit Prompt'}
-            </DialogTitle>
+            <DialogTitle>{form?.mode === 'create' ? 'Create Prompt' : 'Edit Prompt'}</DialogTitle>
             <DialogDescription>
               {form?.mode === 'create'
                 ? 'Creating a prompt with an existing name auto-increments its version.'
@@ -608,9 +559,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 <Input
                   id="prompt-name"
                   value={form.name}
-                  onChange={(e) =>
-                    setForm({ ...form, name: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="Ada v2 - Discovery Coach"
                   required
                 />
@@ -620,9 +569,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 <Textarea
                   id="prompt-text"
                   value={form.prompt_text}
-                  onChange={(e) =>
-                    setForm({ ...form, prompt_text: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, prompt_text: e.target.value })}
                   rows={12}
                   required
                   className="font-mono text-xs"
@@ -633,9 +580,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 <Input
                   id="prompt-notes"
                   value={form.notes}
-                  onChange={(e) =>
-                    setForm({ ...form, notes: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   placeholder="What changed in this version"
                 />
               </div>
@@ -653,11 +598,7 @@ function PromptsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   disabled={isSaving || !form.name || !form.prompt_text}
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {isSaving
-                    ? 'Saving...'
-                    : form.mode === 'create'
-                      ? 'Create'
-                      : 'Save changes'}
+                  {isSaving ? 'Saving...' : form.mode === 'create' ? 'Create' : 'Save changes'}
                 </Button>
               </DialogFooter>
             </form>
@@ -683,18 +624,14 @@ function PromptRow({
     <div
       className={cn(
         'rounded-lg border bg-card p-4 transition-colors',
-        prompt.is_active
-          ? 'border-[#B8853A] bg-accent/5'
-          : 'border-border',
+        prompt.is_active ? 'border-[#B8853A] bg-accent/5' : 'border-border'
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold">{prompt.name}</h3>
-            <span className="text-xs text-muted-foreground">
-              v{prompt.version}
-            </span>
+            <span className="text-xs text-muted-foreground">v{prompt.version}</span>
             {prompt.is_active && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#B8853A] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#0A0A0A]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#0A0A0A]" />
@@ -702,11 +639,7 @@ function PromptRow({
               </span>
             )}
           </div>
-          {prompt.notes && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {prompt.notes}
-            </p>
-          )}
+          {prompt.notes && <p className="mt-1 text-xs text-muted-foreground">{prompt.notes}</p>}
           <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
             {prompt.prompt_text}
           </p>
@@ -732,11 +665,7 @@ function PromptRow({
             size="sm"
             onClick={onDelete}
             disabled={prompt.is_active}
-            title={
-              prompt.is_active
-                ? 'Cannot delete the active prompt'
-                : undefined
-            }
+            title={prompt.is_active ? 'Cannot delete the active prompt' : undefined}
           >
             Delete
           </Button>
@@ -784,10 +713,7 @@ function InsightsTab({
     void refresh();
   }, [refresh]);
 
-  const isEmpty =
-    data &&
-    data.totals.assistant_messages === 0 &&
-    data.totals.feedback_count === 0;
+  const isEmpty = data && data.totals.assistant_messages === 0 && data.totals.feedback_count === 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -820,16 +746,10 @@ function InsightsTab({
         <Card className="border-destructive/40 bg-destructive/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div>
-              <p className="text-sm font-semibold text-destructive">
-                Could not load insights
-              </p>
+              <p className="text-sm font-semibold text-destructive">Could not load insights</p>
               <p className="text-xs text-muted-foreground">{error}</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void refresh()}
-            >
+            <Button variant="outline" size="sm" onClick={() => void refresh()}>
               Retry
             </Button>
           </CardContent>
@@ -843,9 +763,7 @@ function InsightsTab({
       {!isLoading && !error && isEmpty && (
         <Card>
           <CardContent className="py-10 text-center">
-            <p className="text-sm font-medium text-foreground">
-              No feedback data yet.
-            </p>
+            <p className="text-sm font-medium text-foreground">No feedback data yet.</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Share Ada with users and encourage them to rate responses.
             </p>
@@ -888,10 +806,7 @@ function InsightsTab({
           {/* Middle: prompt performance + recent feedback */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <PromptPerformanceCard prompts={data.per_prompt} />
-            <RecentFeedbackCard
-              events={data.recent_feedback}
-              onDeepLink={onDeepLink}
-            />
+            <RecentFeedbackCard events={data.recent_feedback} onDeepLink={onDeepLink} />
           </div>
 
           {/* Bottom: conversation quality ranking */}
@@ -921,10 +836,7 @@ function MetricCard({
 }) {
   return (
     <Card
-      className={cn(
-        'border-[#B8853A]/40',
-        accent === 'gold' && 'border-[#B8853A] bg-[#B8853A]/5',
-      )}
+      className={cn('border-[#B8853A]/40', accent === 'gold' && 'border-[#B8853A] bg-[#B8853A]/5')}
     >
       <CardContent className="py-5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -933,7 +845,7 @@ function MetricCard({
         <p
           className={cn(
             'mt-1 text-3xl font-bold tracking-tight',
-            accent === 'gold' ? 'text-[#B8853A]' : 'text-foreground',
+            accent === 'gold' ? 'text-[#B8853A]' : 'text-foreground'
           )}
         >
           {value}
@@ -951,9 +863,7 @@ function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Coaching prompt performance</CardTitle>
-        <CardDescription>
-          Responses generated per prompt and how they were rated
-        </CardDescription>
+        <CardDescription>Responses generated per prompt and how they were rated</CardDescription>
       </CardHeader>
       <CardContent>
         {prompts.length === 0 ? (
@@ -991,7 +901,7 @@ function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
                           ? 'text-[#B8853A]'
                           : !hasFeedback
                             ? 'text-muted-foreground'
-                            : 'text-foreground',
+                            : 'text-foreground'
                       )}
                     >
                       {hasFeedback ? formatPercent(p.positive_rate) : '—'}
@@ -999,7 +909,7 @@ function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
                     <TableCell
                       className={cn(
                         'text-right',
-                        p.negative > 0 ? 'text-[#A93226]' : 'text-muted-foreground',
+                        p.negative > 0 ? 'text-[#A93226]' : 'text-muted-foreground'
                       )}
                     >
                       {p.negative}
@@ -1034,9 +944,7 @@ function RecentFeedbackCard({
       </CardHeader>
       <CardContent>
         {events.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">
-            No feedback yet.
-          </p>
+          <p className="py-6 text-center text-xs text-muted-foreground">No feedback yet.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {events.map((e) => (
@@ -1047,16 +955,12 @@ function RecentFeedbackCard({
                 <span
                   className={cn(
                     'mt-0.5 shrink-0',
-                    e.feedback === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]',
+                    e.feedback === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]'
                   )}
                   aria-label={e.feedback === 'positive' ? 'Positive' : 'Negative'}
                   title={e.feedback === 'positive' ? 'Positive' : 'Negative'}
                 >
-                  {e.feedback === 'positive' ? (
-                    <ThumbUpIcon />
-                  ) : (
-                    <ThumbDownIcon />
-                  )}
+                  {e.feedback === 'positive' ? <ThumbUpIcon /> : <ThumbDownIcon />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="line-clamp-2 text-xs leading-relaxed text-foreground">
@@ -1098,9 +1002,7 @@ function ConversationRankingCard({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Conversation quality ranking</CardTitle>
-        <CardDescription>
-          Click a row to jump to that conversation
-        </CardDescription>
+        <CardDescription>Click a row to jump to that conversation</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -1137,12 +1039,8 @@ function RankingColumn({
   items: ConversationStat[];
   onDeepLink: (id: string) => void;
 }) {
-  const borderClass =
-    tone === 'positive'
-      ? 'border-l-[#B8853A]'
-      : 'border-l-[#A93226]/60';
-  const scoreClass =
-    tone === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]';
+  const borderClass = tone === 'positive' ? 'border-l-[#B8853A]' : 'border-l-[#A93226]/60';
+  const scoreClass = tone === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]';
 
   return (
     <div className="flex flex-col gap-2">
@@ -1164,7 +1062,7 @@ function RankingColumn({
                   onClick={() => onDeepLink(c.conversation_id)}
                   className={cn(
                     'group flex w-full items-center gap-3 rounded-md border-l-4 bg-background/40 py-2 pl-3 pr-2 text-left transition-colors hover:bg-muted',
-                    borderClass,
+                    borderClass
                   )}
                 >
                   <div className="min-w-0 flex-1">
@@ -1247,7 +1145,16 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 
 function ThumbUpIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z" />
       <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
     </svg>
@@ -1256,7 +1163,16 @@ function ThumbUpIcon() {
 
 function ThumbDownIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3z" />
       <path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
     </svg>
@@ -1309,7 +1225,10 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
       .select('id, filename, file_path, status, created_at, chunk_count')
       .order('created_at', { ascending: false });
     if (fetchErr) {
-      if (fetchErr.code === 'PGRST301') { onUnauthorized(); return; }
+      if (fetchErr.code === 'PGRST301') {
+        onUnauthorized();
+        return;
+      }
       setError(fetchErr.message);
     } else {
       setDocuments((data as DocumentRow[]) ?? []);
@@ -1329,9 +1248,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
     const uniqueName = `${crypto.randomUUID()}_${file.name}`;
     const path = `${user.id}/${uniqueName}`;
 
-    const { error: storageErr } = await supabase.storage
-      .from('documents')
-      .upload(path, file);
+    const { error: storageErr } = await supabase.storage.from('documents').upload(path, file);
     if (storageErr) {
       setUploadError(storageErr.message);
       setIsUploading(false);
@@ -1355,10 +1272,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   const handleDelete = async (doc: DocumentRow) => {
     await supabase.storage.from('documents').remove([doc.file_path]);
-    const { error: dbErr } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', doc.id);
+    const { error: dbErr } = await supabase.from('documents').delete().eq('id', doc.id);
     if (dbErr) {
       setError(dbErr.message);
       return;
@@ -1371,17 +1285,10 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <div>
           <CardTitle>Documents</CardTitle>
-          <CardDescription>
-            {documents.length} uploaded · owner-only knowledge base
-          </CardDescription>
+          <CardDescription>{documents.length} uploaded · owner-only knowledge base</CardDescription>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void refresh()}
-            disabled={isLoading}
-          >
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
             {isLoading ? 'Refreshing...' : 'Refresh'}
           </Button>
           <Button
@@ -1423,10 +1330,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
           <TableBody>
             {documents.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
+                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
                   No documents uploaded yet.
                 </TableCell>
               </TableRow>
@@ -1441,11 +1345,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   {formatDate(doc.created_at)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleDelete(doc)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => void handleDelete(doc)}>
                     Delete
                   </Button>
                 </TableCell>
@@ -1460,18 +1360,10 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 
 function DocumentStatusBadge({ status }: { status: DocumentRow['status'] }) {
   if (status === 'ready') {
-    return (
-      <Badge className="border-[#B8853A] bg-[#B8853A]/10 text-[#B8853A]">
-        ready
-      </Badge>
-    );
+    return <Badge className="border-[#B8853A] bg-[#B8853A]/10 text-[#B8853A]">ready</Badge>;
   }
   const variant =
-    status === 'error'
-      ? 'destructive'
-      : status === 'processing'
-        ? 'outline'
-        : 'secondary';
+    status === 'error' ? 'destructive' : status === 'processing' ? 'outline' : 'secondary';
   return <Badge variant={variant}>{status}</Badge>;
 }
 
@@ -1481,11 +1373,7 @@ function DocumentStatusBadge({ status }: { status: DocumentRow['status'] }) {
 
 function StatusBadge({ status }: { status: string }) {
   const variant: 'default' | 'secondary' | 'outline' =
-    status === 'active'
-      ? 'default'
-      : status === 'archived'
-        ? 'outline'
-        : 'secondary';
+    status === 'active' ? 'default' : status === 'archived' ? 'outline' : 'secondary';
   return <Badge variant={variant}>{status}</Badge>;
 }
 
@@ -1556,12 +1444,7 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
             {users.length} total · reset credits to the current daily limit
           </CardDescription>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refresh()}
-          disabled={isLoading}
-        >
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
           {isLoading ? 'Refreshing...' : 'Refresh'}
         </Button>
       </CardHeader>
@@ -1585,10 +1468,7 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
           <TableBody>
             {users.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No users found.
                 </TableCell>
               </TableRow>
@@ -1600,13 +1480,9 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   {u.display_name ?? '—'}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={u.role === 'owner' ? 'default' : 'outline'}>
-                    {u.role}
-                  </Badge>
+                  <Badge variant={u.role === 'owner' ? 'default' : 'outline'}>{u.role}</Badge>
                 </TableCell>
-                <TableCell className="text-right font-mono">
-                  {u.credits_remaining}
-                </TableCell>
+                <TableCell className="text-right font-mono">{u.credits_remaining}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {u.last_credit_reset}
                 </TableCell>
@@ -1689,16 +1565,13 @@ function SettingsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
     }
   };
 
-  const isDirty =
-    originalLimit !== null && limit !== '' && parseInt(limit, 10) !== originalLimit;
+  const isDirty = originalLimit !== null && limit !== '' && parseInt(limit, 10) !== originalLimit;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Credits & Limits</CardTitle>
-        <CardDescription>
-          Controls how many chat messages a user gets per day.
-        </CardDescription>
+        <CardDescription>Controls how many chat messages a user gets per day.</CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
@@ -1708,9 +1581,7 @@ function SettingsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
         )}
         <form onSubmit={handleSave} className="flex max-w-sm flex-col gap-3">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="daily-message-limit">
-              Daily message limit per user
-            </Label>
+            <Label htmlFor="daily-message-limit">Daily message limit per user</Label>
             <Input
               id="daily-message-limit"
               type="number"
@@ -1721,9 +1592,7 @@ function SettingsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
               disabled={isLoading || isSaving}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              0 = unlimited. Resets at midnight UTC.
-            </p>
+            <p className="text-xs text-muted-foreground">0 = unlimited. Resets at midnight UTC.</p>
           </div>
           <div className="flex justify-end">
             <Button
@@ -1737,5 +1606,204 @@ function SettingsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Spend tab (Run 3) — model cost by day and call type, from model_usage
+// ──────────────────────────────────────────────────────────────────
+
+const MODEL_LABELS: Record<string, string> = {
+  'claude-haiku-4-5': 'Haiku 4.5',
+  'claude-sonnet-4-6': 'Sonnet 4.6',
+};
+
+function formatUsd(n: number): string {
+  return `$${n.toFixed(n < 0.1 ? 4 : 2)}`;
+}
+
+function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [data, setData] = useState<SpendResponse | null>(null);
+  const [days, setDays] = useState(30);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (windowDays: number) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        setData(await getSpend(windowDays));
+      } catch (err) {
+        if ((err as Error).name === 'UnauthorizedError') {
+          onUnauthorized();
+          return;
+        }
+        setError("Couldn't load spend data. Try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [onUnauthorized]
+  );
+
+  useEffect(() => {
+    void load(days);
+  }, [load, days]);
+
+  const modelCost = (model: string) =>
+    data?.totals.by_model.find((m) => m.model === model)?.cost_usd ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Every production model call, priced all-in from{' '}
+          <code className="rounded bg-muted px-1">model_usage</code>. Web-search cost is the
+          separable component of market-grounding calls; it is already included in the model
+          totals, not additional.
+        </p>
+        <div className="flex items-center gap-1">
+          {[7, 30, 90].map((d) => (
+            <Button
+              key={d}
+              size="sm"
+              variant={days === d ? 'default' : 'outline'}
+              onClick={() => setDays(d)}
+              disabled={isLoading}
+            >
+              {d}d
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading && (
+        <p className="py-10 text-center text-sm text-muted-foreground">Loading spend…</p>
+      )}
+
+      {error && !isLoading && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button size="sm" variant="outline" onClick={() => void load(days)}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {data && !isLoading && !error && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Total ({data.window_days}d)</CardDescription>
+                <CardTitle className="text-2xl">{formatUsd(data.totals.cost_usd)}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                {data.totals.calls} calls{data.truncated ? ' · window truncated' : ''}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Haiku 4.5</CardDescription>
+                <CardTitle className="text-2xl">
+                  {formatUsd(modelCost('claude-haiku-4-5'))}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                classification · summaries
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Sonnet 4.6</CardDescription>
+                <CardTitle className="text-2xl">
+                  {formatUsd(modelCost('claude-sonnet-4-6'))}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                mapping · grounding · blind spots · guides
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Web search</CardDescription>
+                <CardTitle className="text-2xl">
+                  {formatUsd(data.totals.web_search.cost_usd)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs text-muted-foreground">
+                {data.totals.web_search.requests} searches · included in Sonnet total
+                {data.totals.web_search.blended_rows > 0 &&
+                  ` · ${data.totals.web_search.blended_rows} older call${
+                    data.totals.web_search.blended_rows === 1 ? '' : 's'
+                  } blended (count unrecorded)`}
+              </CardContent>
+            </Card>
+          </div>
+
+          {data.days.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No model calls in this window yet. Run a Discovery Sprint and the spend shows up
+                here, priced per call.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">By day and call type</CardTitle>
+                <CardDescription>
+                  All-in cost per row (tokens, plus $10/1k web searches where applicable).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Call type</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">In / out tokens</TableHead>
+                      <TableHead className="text-right">Searches</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.days.flatMap((day) =>
+                      day.rows.map((row, i) => (
+                        <TableRow key={`${day.date}-${row.call_type}-${row.model}`}>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {i === 0 ? day.date : ''}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {row.call_type.replace(/_/g, ' ')}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {MODEL_LABELS[row.model] ?? row.model}
+                          </TableCell>
+                          <TableCell className="text-right">{row.calls}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right text-muted-foreground">
+                            {row.input_tokens.toLocaleString()} /{' '}
+                            {row.output_tokens.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.web_search_requests > 0 ? row.web_search_requests : '—'}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatUsd(row.cost_usd)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
   );
 }

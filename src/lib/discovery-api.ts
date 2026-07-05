@@ -23,12 +23,7 @@ export class DiscoveryApiError extends Error {
   detail: string | null;
   retryable: boolean;
 
-  constructor(opts: {
-    status: number;
-    code: string;
-    detail?: string | null;
-    retryable?: boolean;
-  }) {
+  constructor(opts: { status: number; code: string; detail?: string | null; retryable?: boolean }) {
     super(opts.detail ?? opts.code);
     this.name = 'DiscoveryApiError';
     this.status = opts.status;
@@ -42,7 +37,7 @@ async function invoke<T>(
   path: string,
   options: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {
     method: 'GET',
-  },
+  }
 ): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T>(path, {
     method: options.method,
@@ -50,9 +45,10 @@ async function invoke<T>(
   });
   if (error) {
     if (error instanceof FunctionsHttpError) {
-      const payload = (await error.context
-        .json()
-        .catch(() => null)) as Record<string, unknown> | null;
+      const payload = (await error.context.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
       throw new DiscoveryApiError({
         status: error.context.status,
         code: typeof payload?.error === 'string' ? payload.error : 'request_failed',
@@ -77,10 +73,7 @@ export async function listProducts(): Promise<Product[]> {
   return products;
 }
 
-export async function createProduct(
-  name: string,
-  description?: string,
-): Promise<Product> {
+export async function createProduct(name: string, description?: string): Promise<Product> {
   const { product } = await invoke<{ product: Product }>('products', {
     method: 'POST',
     body: { name, description },
@@ -89,11 +82,7 @@ export async function createProduct(
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
+  const { data, error } = await supabase.from('products').select('*').eq('id', id).maybeSingle();
   if (error) {
     throw new DiscoveryApiError({ status: 500, code: 'product_load_failed' });
   }
@@ -104,7 +93,7 @@ export async function getProduct(id: string): Promise<Product | null> {
 
 export async function startSession(
   productId: string,
-  intake: string,
+  intake: string
 ): Promise<{ session: Session; resumed: boolean; classification_error?: boolean }> {
   return invoke('sessions', {
     method: 'POST',
@@ -123,30 +112,36 @@ export async function listSessions(productId?: string): Promise<Session[]> {
   return sessions;
 }
 
+// Sprint writes carry the updated_at the client last loaded as an
+// optimistic-concurrency token (Run 3 two-tab guard): the server rejects
+// with 409 stale_session instead of letting a stale tab overwrite newer
+// progress.
 export async function saveSessionStep(
   id: string,
   currentStep: string,
+  ifUnmodifiedSince?: string
 ): Promise<Session> {
   const { session } = await invoke<{ session: Session }>(`sessions?id=${id}`, {
     method: 'PATCH',
-    body: { current_step: currentStep },
+    body: { current_step: currentStep, if_unmodified_since: ifUnmodifiedSince },
   });
   return session;
 }
 
 export async function completeSession(
   id: string,
+  ifUnmodifiedSince?: string
 ): Promise<{ session: Session; summary_error?: boolean }> {
   return invoke(`sessions?id=${id}`, {
     method: 'PATCH',
-    body: { action: 'complete' },
+    body: { action: 'complete', if_unmodified_since: ifUnmodifiedSince },
   });
 }
 
-export async function abandonSession(id: string): Promise<Session> {
+export async function abandonSession(id: string, ifUnmodifiedSince?: string): Promise<Session> {
   const { session } = await invoke<{ session: Session }>(`sessions?id=${id}`, {
     method: 'PATCH',
-    body: { action: 'abandon' },
+    body: { action: 'abandon', if_unmodified_since: ifUnmodifiedSince },
   });
   return session;
 }
@@ -154,30 +149,28 @@ export async function abandonSession(id: string): Promise<Session> {
 // ── Assumptions ────────────────────────────────────────────────────────────
 
 export async function mapAssumptions(sessionId: string): Promise<Assumption[]> {
-  const { assumptions } = await invoke<{ assumptions: Assumption[] }>(
-    'assumption-mapping',
-    { method: 'POST', body: { session_id: sessionId } },
-  );
+  const { assumptions } = await invoke<{ assumptions: Assumption[] }>('assumption-mapping', {
+    method: 'POST',
+    body: { session_id: sessionId },
+  });
   return assumptions;
 }
 
 export async function listAssumptions(sessionId: string): Promise<Assumption[]> {
   const { assumptions } = await invoke<{ assumptions: Assumption[] }>(
-    `assumptions?session_id=${sessionId}`,
+    `assumptions?session_id=${sessionId}`
   );
   return assumptions;
 }
 
 export async function updateAssumption(
   id: string,
-  patch: Partial<
-    Pick<Assumption, 'confidence' | 'impact' | 'status' | 'is_prioritized'>
-  >,
+  patch: Partial<Pick<Assumption, 'confidence' | 'impact' | 'status' | 'is_prioritized'>>
 ): Promise<Assumption> {
-  const { assumption } = await invoke<{ assumption: Assumption }>(
-    `assumptions?id=${id}`,
-    { method: 'PATCH', body: patch },
-  );
+  const { assumption } = await invoke<{ assumption: Assumption }>(`assumptions?id=${id}`, {
+    method: 'PATCH',
+    body: patch,
+  });
   return assumption;
 }
 
@@ -208,10 +201,10 @@ export async function listEvidence(sessionId: string): Promise<Evidence[]> {
 }
 
 export async function runBlindSpots(sessionId: string): Promise<BlindSpot[]> {
-  const { blind_spots } = await invoke<{ blind_spots: BlindSpot[] }>(
-    'blind-spots',
-    { method: 'POST', body: { session_id: sessionId } },
-  );
+  const { blind_spots } = await invoke<{ blind_spots: BlindSpot[] }>('blind-spots', {
+    method: 'POST',
+    body: { session_id: sessionId },
+  });
   return blind_spots;
 }
 
@@ -235,9 +228,7 @@ export async function generateGuide(sessionId: string): Promise<InterviewGuide> 
   return guide;
 }
 
-export async function getLatestGuide(
-  sessionId: string,
-): Promise<InterviewGuide | null> {
+export async function getLatestGuide(sessionId: string): Promise<InterviewGuide | null> {
   const { data, error } = await supabase
     .from('interview_guides')
     .select('*')
@@ -256,7 +247,7 @@ export async function getLatestGuide(
 export async function ingestPastedText(
   sessionId: string,
   pastedText: string,
-  title?: string,
+  title?: string
 ): Promise<{
   document?: { id: string };
   chunk_count?: number;
@@ -271,9 +262,7 @@ export async function ingestPastedText(
   });
 }
 
-export async function listSessionDocuments(
-  sessionId: string,
-): Promise<SessionDocument[]> {
+export async function listSessionDocuments(sessionId: string): Promise<SessionDocument[]> {
   const { data, error } = await supabase
     .from('documents')
     .select('id, filename, status, chunk_count, created_at')
@@ -297,9 +286,7 @@ export async function compileReport(sessionId: string): Promise<Report> {
 
 export async function getReport(sessionId: string): Promise<Report | null> {
   try {
-    const { report } = await invoke<{ report: Report }>(
-      `report?session_id=${sessionId}`,
-    );
+    const { report } = await invoke<{ report: Report }>(`report?session_id=${sessionId}`);
     return report;
   } catch (err) {
     if (err instanceof DiscoveryApiError && err.status === 404) return null;
@@ -313,9 +300,7 @@ export async function fetchPublicReport(token: string): Promise<{
   generated_at: string;
 } | null> {
   const base = import.meta.env.VITE_SUPABASE_URL;
-  const res = await fetch(
-    `${base}/functions/v1/report-public?token=${encodeURIComponent(token)}`,
-  );
+  const res = await fetch(`${base}/functions/v1/report-public?token=${encodeURIComponent(token)}`);
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new DiscoveryApiError({ status: res.status, code: 'share_load_failed' });
@@ -348,7 +333,7 @@ export async function loadThread(conversationId: string): Promise<ThreadMessage[
 
 export async function sendChat(
   message: string,
-  conversationId: string,
+  conversationId: string
 ): Promise<{ reply: string; message_id: string; credits_remaining?: number | null }> {
   return invoke('chat', {
     method: 'POST',

@@ -503,3 +503,11 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/report-public/deno.json"
 entrypoint = "./functions/report-public/index.ts"
+
+# Run 3: admin spend view. verify_jwt = false mirrors the other admin-*
+# functions (browser-facing preflight); requireAdmin gates in-function.
+[functions.admin-spend]
+enabled = true
+verify_jwt = false
+import_map = "./functions/admin-spend/deno.json"
+entrypoint = "./functions/admin-spend/index.ts"

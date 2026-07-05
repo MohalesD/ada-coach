@@ -31,7 +31,11 @@ const CURRENT_STEP_MAX = 200;
 const TRANSCRIPT_MESSAGE_LIMIT = 40;
 
 type CreateBody = { product_id?: unknown; intake?: unknown };
-type PatchBody = { action?: unknown; current_step?: unknown };
+type PatchBody = {
+  action?: unknown;
+  current_step?: unknown;
+  if_unmodified_since?: unknown;
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -240,21 +244,49 @@ Deno.serve(async (req) => {
       }
       if (!session) return jsonResponse({ error: "Session not found" }, 404, req);
 
+      // Two-tab guard (Run 3, PRD async edge case): callers may send the
+      // updated_at they last loaded; a mismatch means another tab moved
+      // the sprint since — reject instead of silently overwriting. Opt-in
+      // field, so non-sprint callers are unaffected.
+      if (body.if_unmodified_since !== undefined) {
+        const expected =
+          typeof body.if_unmodified_since === "string"
+            ? body.if_unmodified_since
+            : null;
+        if (!expected || expected !== session.updated_at) {
+          return jsonResponse(
+            {
+              error: "stale_session",
+              detail:
+                "This sprint moved ahead in another tab. Refresh to continue.",
+              current_updated_at: session.updated_at,
+            },
+            409,
+            req,
+          );
+        }
+      }
+
       // Resume-position bookmark; independent of any state transition.
       if (body.current_step !== undefined) {
         const step =
           typeof body.current_step === "string"
             ? body.current_step.trim().slice(0, CURRENT_STEP_MAX)
             : null;
-        const { error: stepErr } = await userClient
+        // Return the freshly-updated row: clients hold updated_at as
+        // their concurrency token, so a stale post-update value would
+        // make the guard above misfire on their next write.
+        const { data: updated, error: stepErr } = await userClient
           .from("sessions")
           .update({ current_step: step })
-          .eq("id", id);
-        if (stepErr) {
+          .eq("id", id)
+          .select("*")
+          .single();
+        if (stepErr || !updated) {
           console.error("current_step update failed:", stepErr);
           return jsonResponse({ error: "Could not update session." }, 500, req);
         }
-        session.current_step = step;
+        Object.assign(session, updated);
       }
 
       if (!action) return jsonResponse({ session }, 200, req);
