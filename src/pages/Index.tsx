@@ -110,6 +110,16 @@ const SCENARIOS: Scenario[] = [
     featured: true,
   },
   {
+    id: 'find-your-track',
+    icon: <SignpostIcon />,
+    title: 'New here? Find your track',
+    subtitle:
+      'Two quick questions route you to discovery coaching or portfolio building — aspiring PMs welcome, skip anytime',
+    // Routed to /start — the Run 4 intake router owns this flow.
+    openingMessage: '',
+    featured: true,
+  },
+  {
     id: 'free-exploration',
     icon: <ExploreIcon />,
     title: 'Free exploration',
@@ -359,6 +369,10 @@ export default function Index() {
       navigate('/discovery');
       return;
     }
+    if (scenario.id === 'find-your-track') {
+      navigate('/start');
+      return;
+    }
     setMessages([]);
     setConversationId(null);
     setConversationMeta(null);
@@ -593,6 +607,7 @@ function UserMenu({
           )}
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onNavigate('/portfolio')}>Portfolio</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onNavigate('/settings')}>Settings</DropdownMenuItem>
         {showAdmin && (
           <DropdownMenuItem onSelect={() => onNavigate('/admin')}>Admin</DropdownMenuItem>
@@ -811,6 +826,25 @@ function MapIcon() {
       <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
       <line x1="9" y1="3" x2="9" y2="18" />
       <line x1="15" y1="6" x2="15" y2="21" />
+    </svg>
+  );
+}
+
+function SignpostIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3v3" />
+      <path d="M18.5 13h-13L2 9.5 5.5 6h13L22 9.5z" />
+      <path d="M12 13v8" />
     </svg>
   );
 }

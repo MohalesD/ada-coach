@@ -17,7 +17,12 @@ export type CallType =
   | "assumption_mapping"
   | "market_grounding"
   | "blind_spot_analysis"
-  | "interview_guide";
+  | "interview_guide"
+  | "portfolio_route"
+  | "portfolio_profile_extraction"
+  | "portfolio_idea_generation"
+  | "portfolio_artifact_coaching"
+  | "portfolio_plan_generation";
 
 export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   stage_classification: "claude-haiku-4-5",
@@ -26,6 +31,15 @@ export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   market_grounding: "claude-sonnet-4-6",
   blind_spot_analysis: "claude-sonnet-4-6",
   interview_guide: "claude-sonnet-4-6",
+  // Run 4 — portfolio coaching track. Haiku: intake classification and
+  // resume field extraction (cheap, mechanical). Sonnet 4.6: idea
+  // generation, artifact coaching, tool/effort recommendations
+  // (reasoning-heavy synthesis) — matches the PRD's model-routing rule.
+  portfolio_route: "claude-haiku-4-5",
+  portfolio_profile_extraction: "claude-haiku-4-5",
+  portfolio_idea_generation: "claude-sonnet-4-6",
+  portfolio_artifact_coaching: "claude-sonnet-4-6",
+  portfolio_plan_generation: "claude-sonnet-4-6",
 };
 
 // USD per million tokens. Source: Anthropic pricing via the claude-api
