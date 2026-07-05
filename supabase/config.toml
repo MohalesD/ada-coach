@@ -468,3 +468,38 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/assumption-mapping/deno.json"
 entrypoint = "./functions/assumption-mapping/index.ts"
+
+# Discovery platform Run 2 functions. verify_jwt = false mirrors the Run 1
+# discovery functions (browser-facing; auth enforced in-function by
+# requireUser). report-public is genuinely public BY DESIGN: it serves
+# read-only report snapshots to logged-out share-link visitors, keyed by
+# an unguessable 128-bit token — it must never require a JWT.
+[functions.market-grounding]
+enabled = true
+verify_jwt = false
+import_map = "./functions/market-grounding/deno.json"
+entrypoint = "./functions/market-grounding/index.ts"
+
+[functions.blind-spots]
+enabled = true
+verify_jwt = false
+import_map = "./functions/blind-spots/deno.json"
+entrypoint = "./functions/blind-spots/index.ts"
+
+[functions.interview-guide]
+enabled = true
+verify_jwt = false
+import_map = "./functions/interview-guide/deno.json"
+entrypoint = "./functions/interview-guide/index.ts"
+
+[functions.report]
+enabled = true
+verify_jwt = false
+import_map = "./functions/report/deno.json"
+entrypoint = "./functions/report/index.ts"
+
+[functions.report-public]
+enabled = true
+verify_jwt = false
+import_map = "./functions/report-public/deno.json"
+entrypoint = "./functions/report-public/index.ts"

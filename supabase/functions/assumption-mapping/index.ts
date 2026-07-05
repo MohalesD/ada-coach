@@ -19,6 +19,7 @@ import {
 import { callClaude, extractFirstJson } from "../_shared/anthropic.ts";
 import { getModelFor } from "../_shared/models.ts";
 import { recordModelUsage } from "../_shared/usage.ts";
+import { loadProductMemory, type MemoryClient } from "../_shared/product-memory.ts";
 
 const INTAKE_MAX = 50_000;
 const HISTORY_LIMIT = 20;
@@ -181,11 +182,21 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Product memory (Run 2): prior sprints on this product change how
+    // this sprint is coached — settled assumptions are not re-proposed.
+    const memory = await loadProductMemory(
+      service as unknown as MemoryClient,
+      { productId: session.product_id, excludeSessionId: session.id },
+    );
+    const system = memory
+      ? `${MAPPING_SYSTEM}\n\n${memory}\nUse this memory: do not re-propose assumptions already validated or abandoned; focus on what is still untested, newly implied, or contradicted by what happened since.`
+      : MAPPING_SYSTEM;
+
     const model = await getModelFor(service, "assumption_mapping");
     const result = await callClaude({
       apiKey: anthropicKey,
       model,
-      system: MAPPING_SYSTEM,
+      system,
       messages: [
         {
           role: "user",

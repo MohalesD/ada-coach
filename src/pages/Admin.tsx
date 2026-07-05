@@ -684,7 +684,7 @@ function PromptRow({
       className={cn(
         'rounded-lg border bg-card p-4 transition-colors',
         prompt.is_active
-          ? 'border-[#C9A84C] bg-accent/5'
+          ? 'border-[#B8853A] bg-accent/5'
           : 'border-border',
       )}
     >
@@ -696,7 +696,7 @@ function PromptRow({
               v{prompt.version}
             </span>
             {prompt.is_active && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#C9A84C] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#0A0A0A]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#B8853A] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#0A0A0A]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#0A0A0A]" />
                 Active
               </span>
@@ -922,8 +922,8 @@ function MetricCard({
   return (
     <Card
       className={cn(
-        'border-[#9BB7D4]/40',
-        accent === 'gold' && 'border-[#C9A84C] bg-[#C9A84C]/5',
+        'border-[#B8853A]/40',
+        accent === 'gold' && 'border-[#B8853A] bg-[#B8853A]/5',
       )}
     >
       <CardContent className="py-5">
@@ -933,7 +933,7 @@ function MetricCard({
         <p
           className={cn(
             'mt-1 text-3xl font-bold tracking-tight',
-            accent === 'gold' ? 'text-[#C9A84C]' : 'text-foreground',
+            accent === 'gold' ? 'text-[#B8853A]' : 'text-foreground',
           )}
         >
           {value}
@@ -988,7 +988,7 @@ function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
                       className={cn(
                         'text-right font-medium',
                         hasFeedback && p.positive_rate >= 0.8
-                          ? 'text-[#C9A84C]'
+                          ? 'text-[#B8853A]'
                           : !hasFeedback
                             ? 'text-muted-foreground'
                             : 'text-foreground',
@@ -999,7 +999,7 @@ function PromptPerformanceCard({ prompts }: { prompts: PromptStat[] }) {
                     <TableCell
                       className={cn(
                         'text-right',
-                        p.negative > 0 ? 'text-[#C2185B]' : 'text-muted-foreground',
+                        p.negative > 0 ? 'text-[#A93226]' : 'text-muted-foreground',
                       )}
                     >
                       {p.negative}
@@ -1047,7 +1047,7 @@ function RecentFeedbackCard({
                 <span
                   className={cn(
                     'mt-0.5 shrink-0',
-                    e.feedback === 'positive' ? 'text-[#C9A84C]' : 'text-[#C2185B]',
+                    e.feedback === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]',
                   )}
                   aria-label={e.feedback === 'positive' ? 'Positive' : 'Negative'}
                   title={e.feedback === 'positive' ? 'Positive' : 'Negative'}
@@ -1066,7 +1066,7 @@ function RecentFeedbackCard({
                     <button
                       type="button"
                       onClick={() => onDeepLink(e.conversation_id)}
-                      className="font-semibold text-[#1B4F72] hover:underline"
+                      className="font-semibold text-[#8B6324] hover:underline"
                     >
                       {e.conversation_title?.trim() || '(untitled)'}
                     </button>
@@ -1139,10 +1139,10 @@ function RankingColumn({
 }) {
   const borderClass =
     tone === 'positive'
-      ? 'border-l-[#C9A84C]'
-      : 'border-l-[#C2185B]/60';
+      ? 'border-l-[#B8853A]'
+      : 'border-l-[#A93226]/60';
   const scoreClass =
-    tone === 'positive' ? 'text-[#C9A84C]' : 'text-[#C2185B]';
+    tone === 'positive' ? 'text-[#B8853A]' : 'text-[#A93226]';
 
   return (
     <div className="flex flex-col gap-2">
@@ -1168,7 +1168,7 @@ function RankingColumn({
                   )}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground group-hover:text-[#1B4F72]">
+                    <p className="truncate text-sm font-medium text-foreground group-hover:text-[#8B6324]">
                       {c.title?.trim() || '(untitled)'}
                     </p>
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -1196,7 +1196,7 @@ function InsightsSkeleton() {
     <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading insights">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <Card key={i} className="border-[#9BB7D4]/40">
+          <Card key={i} className="border-[#B8853A]/40">
             <CardContent className="py-5">
               <div className="h-3 w-24 animate-pulse rounded bg-muted" />
               <div className="mt-2 h-7 w-20 animate-pulse rounded bg-muted/80" />
@@ -1461,7 +1461,7 @@ function DocumentsTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 function DocumentStatusBadge({ status }: { status: DocumentRow['status'] }) {
   if (status === 'ready') {
     return (
-      <Badge className="border-[#C9A84C] bg-[#C9A84C]/10 text-[#C9A84C]">
+      <Badge className="border-[#B8853A] bg-[#B8853A]/10 text-[#B8853A]">
         ready
       </Badge>
     );

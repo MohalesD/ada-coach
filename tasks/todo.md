@@ -7,6 +7,132 @@ platform expansion are Run 2+).
 
 ---
 
+## ✅ Shipped 2026-07-04 — Discovery Platform Run 2: Surface
+
+Branch `feat/discovery-platform-run2`. Source of truth:
+`docs/prds/ada-discovery-coach-v2.md` → Must-Have stories + "Run 2:
+Surface" placeholder scope, narrowed by the Run 2 `/goal` (Must-Haves
+only; explicitly NO admin spend view, NO analytics instrumentation
+beyond `model_usage`, NO Notion/Linear export, NO viewer invites).
+Build log: `docs/logs/build-log-run2.md` (MD as we go; DOCX at the end).
+
+### Scope (what Run 1 did not cover)
+
+1. Market-grounded evidence per high-risk assumption (Sonnet 4.6 + the
+   Anthropic `web_search_20260209` server tool)
+2. Blind spot analysis (Sonnet 4.6, grounded in evidence + PM docs +
+   product ledger; evidence-backed vs Socratic-only labeled)
+3. Mom Test interview guide generation (Sonnet 4.6, versioned)
+4. Confidence-by-impact risk map (SVG, accessible, reused in report/PDF)
+5. Report compilation (server-side snapshot) + client-side PDF export
+6. Public share link (unguessable token, `verify_jwt=false` function,
+   logged-out `/share/:token` route)
+7. Product memory: prior session summaries + assumption ledger feed the
+   mapping/blind-spot/guide calls (the "session ten builds on session
+   one" story)
+8. Every frontend screen for the sprint flow end to end: discovery
+   dashboard, sprint surface (chat thread + step progress + tap-target
+   branching), prioritization, guide display, report view, resume flow
+9. Palette retokenization to the warm amber/cream identity (the goal
+   fixes #B8853A / #8B6324 on #FAEFD9/#F5F0E3/#FAF7F0 with espresso
+   text; status colors chosen via research)
+
+### Migrations (local .sql + MCP `apply_migration`, per B-011)
+
+- [x] `assumption_evidence` — per-assumption web evidence (source_url,
+      title, snippet, query, stance); select-own RLS, service-role-only
+      writes (mirrors `model_usage`)
+- [x] `blind_spots` — per-session blind spots, FK assumption nullable,
+      `evidence_backed` flag; same RLS pattern
+- [x] `interview_guides` — versioned per session (unique session+version);
+      same RLS pattern
+- [x] `reports` — one per session (unique session_id), `share_token`
+      unique unguessable, `snapshot` jsonb; same RLS pattern
+- [x] `model_routing` update — add `market_grounding`,
+      `blind_spot_analysis`, `interview_guide` → `claude-sonnet-4-6`
+
+### Shared modules
+
+- [x] `models.ts` — extend CallType + defaults (all three new types →
+      Sonnet 4.6); web-search pricing constant
+- [x] `anthropic.ts` — `callClaudeWithWebSearch` (server tool, citations
+      extraction, `pause_turn` continuation, search-count usage)
+- [x] `usage.ts` — optional extra cost (web search $/request)
+- [x] `product-memory.ts` — product context bundle (prior summaries +
+      validated/challenged/abandoned ledger) for the Sonnet calls
+
+### Edge Functions
+
+- [x] `market-grounding` — POST { assumption_id }: one assumption per
+      call (retry granularity + timeout safety); stores evidence rows +
+      a thread message
+- [x] `blind-spots` — POST { session_id }: Socratic analysis over
+      assumptions + evidence + session docs + ledger; stores rows +
+      thread message; works without web evidence (labels it)
+- [x] `interview-guide` — POST { session_id }: Mom Test guide for
+      prioritized assumptions; versioned; thread message
+- [x] `report` — POST { session_id } compile/regenerate snapshot (stable
+      share token); GET ?session_id= fetch own
+- [x] `report-public` — GET ?token= via service client, `verify_jwt`
+      false, read-only snapshot for logged-out visitors
+- [x] `assumption-mapping` — extend with product-memory bundle (memory
+      story); config.toml entries for all new functions
+
+### Frontend
+
+- [x] Palette: retokenize index.css + tailwind to amber/cream; sweep
+      hardcoded cerulean hexes; status colors researched + documented
+- [x] `src/lib/discovery-api.ts` — typed client for all sprint functions
+- [x] `/discovery` dashboard — products, create, resume-sprint card,
+      report links, empty state
+- [x] `/sprint/:sessionId` — chat thread + step progress indicator +
+      tap-target branching (answer / skip / dig deeper), per-step
+      loading/error/retry, assumption review, prioritize (3–5), guide
+- [x] `RiskMap` SVG component (labels + color, never color alone)
+- [x] `/report/:sessionId` — owner view: report, risk map, PDF export
+      (jspdf), copy share link, regenerate
+- [x] `/share/:token` — public read-only report + risk map
+- [x] Routing + entry points (scenario card → /discovery)
+
+### Verification
+
+- [x] Vitest: new pure logic (routing additions, risk ranking, snapshot
+      shaping); `npm run type-check`; `npm run build`
+- [x] Deploy migrations (MCP) + functions; secrets already present
+- [x] Playwright: fresh test user through the full sprint E2E on the
+      deployed backend; screenshots of every screen at 375px + 1440px;
+      hover/loading states; logged-out share link; cleanup test user
+- [x] Build log MD + DOCX; commit; PR (What/Why/How to test)
+
+### Review — Run 2 (2026-07-04)
+
+Built: 5 migrations (assumption_evidence, blind_spots, interview_guides,
+reports + share tokens, routing update), 4 shared-module changes incl.
+the web-search Claude wrapper and product memory, 5 new Edge Functions
+(+ assumption-mapping memory extension), the amber/cream retokenization
+with researched WCAG-passing status colors and Fraunces/Karla type, and
+7 new frontend surfaces (dashboard, sprint, risk map, assumption card,
+report view + page, share page) plus client-side jsPDF export. 13 new
+Vitest tests (32 total).
+
+Verified (full record in `docs/logs/build-log-run2.md` §5): a fresh
+test user ran the entire sprint on the live backend through Playwright
+— classify (both "fresh idea" and "mid-discovery, stuck" observed),
+ground with real redaction feedback, map 12 assumptions, market-check
+the 3 riskiest with 24 real cited sources, 7 blind spots (3
+evidence-backed with enforced source URLs), dig-deeper chat, prioritize
+4, guide v1 (18 Mom Test questions), complete + report. PDF parsed and
+confirmed (10 pages, embedded risk map). Share link served logged-out
+(curl 200 with no auth + cleared-session browser). Product memory
+demonstrably changed sprint-2 coaching. Cleanup cascade left zero rows.
+
+Known gaps (deliberate, log §7): model_usage rows for new call types
+not eyeballed before cascade cleanup; two-tab concurrency unguarded;
+session file uploads still owner-only at the storage layer; PDF uses
+Helvetica, not brand fonts.
+
+---
+
 ## ✅ Shipped 2026-07-04 — Discovery Platform Run 1: Data and backbone
 
 Branch `feat/discovery-platform-run1`. Source of truth:

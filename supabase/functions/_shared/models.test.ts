@@ -73,4 +73,36 @@ describe("computeCostUsd", () => {
     expect(computeCostUsd("some-other-model", 100, 100)).toBeNull();
     expect(computeCostUsd("claude-haiku-4-5", null, null)).toBeNull();
   });
+
+  it("adds web search cost at $10 per 1,000 searches", () => {
+    // 3 searches = $0.03 on top of token cost
+    expect(
+      computeCostUsd("claude-sonnet-4-6", 1_000_000, 1_000_000, 3),
+    ).toBeCloseTo(18.03, 6);
+    // Search-only cost still records even when the model is unknown
+    expect(computeCostUsd("some-other-model", null, null, 2)).toBeCloseTo(
+      0.02,
+      6,
+    );
+    // Zero searches changes nothing
+    expect(computeCostUsd("claude-haiku-4-5", null, null, 0)).toBeNull();
+  });
+});
+
+describe("Run 2 routing defaults", () => {
+  it("routes all three new call types to Sonnet 4.6 by default", () => {
+    const routes = resolveModelRoutes(null);
+    expect(routes.market_grounding).toBe("claude-sonnet-4-6");
+    expect(routes.blind_spot_analysis).toBe("claude-sonnet-4-6");
+    expect(routes.interview_guide).toBe("claude-sonnet-4-6");
+  });
+
+  it("refuses a Mythos-tier route on the new call types too", () => {
+    expect(() =>
+      resolveModelRoutes('{"market_grounding":"claude-fable-5"}'),
+    ).toThrow(/build-time only/);
+    expect(() =>
+      resolveModelRoutes('{"interview_guide":"claude-mythos-5"}'),
+    ).toThrow(/build-time only/);
+  });
 });

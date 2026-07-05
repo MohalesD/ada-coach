@@ -1,0 +1,357 @@
+// Discovery API client (Run 2) — one thin layer over the discovery Edge
+// Functions plus the read-own table selects RLS already permits. Every
+// mutation goes through a function; reads that need no orchestration go
+// straight to PostgREST.
+
+import { FunctionsHttpError } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import type {
+  Assumption,
+  BlindSpot,
+  Evidence,
+  InterviewGuide,
+  Product,
+  Report,
+  ReportSnapshot,
+  Session,
+  SessionDocument,
+} from '@/types/discovery';
+
+export class DiscoveryApiError extends Error {
+  status: number;
+  code: string;
+  detail: string | null;
+  retryable: boolean;
+
+  constructor(opts: {
+    status: number;
+    code: string;
+    detail?: string | null;
+    retryable?: boolean;
+  }) {
+    super(opts.detail ?? opts.code);
+    this.name = 'DiscoveryApiError';
+    this.status = opts.status;
+    this.code = opts.code;
+    this.detail = opts.detail ?? null;
+    this.retryable = opts.retryable ?? false;
+  }
+}
+
+async function invoke<T>(
+  path: string,
+  options: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {
+    method: 'GET',
+  },
+): Promise<T> {
+  const { data, error } = await supabase.functions.invoke<T>(path, {
+    method: options.method,
+    body: options.body,
+  });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const payload = (await error.context
+        .json()
+        .catch(() => null)) as Record<string, unknown> | null;
+      throw new DiscoveryApiError({
+        status: error.context.status,
+        code: typeof payload?.error === 'string' ? payload.error : 'request_failed',
+        detail: typeof payload?.detail === 'string' ? payload.detail : null,
+        retryable: payload?.retryable === true,
+      });
+    }
+    throw new DiscoveryApiError({
+      status: 0,
+      code: 'network_error',
+      detail: 'Could not reach Ada. Check your connection and try again.',
+      retryable: true,
+    });
+  }
+  return data as T;
+}
+
+// ── Products ───────────────────────────────────────────────────────────────
+
+export async function listProducts(): Promise<Product[]> {
+  const { products } = await invoke<{ products: Product[] }>('products');
+  return products;
+}
+
+export async function createProduct(
+  name: string,
+  description?: string,
+): Promise<Product> {
+  const { product } = await invoke<{ product: Product }>('products', {
+    method: 'POST',
+    body: { name, description },
+  });
+  return product;
+}
+
+export async function getProduct(id: string): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'product_load_failed' });
+  }
+  return (data as Product | null) ?? null;
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────────
+
+export async function startSession(
+  productId: string,
+  intake: string,
+): Promise<{ session: Session; resumed: boolean; classification_error?: boolean }> {
+  return invoke('sessions', {
+    method: 'POST',
+    body: { product_id: productId, intake },
+  });
+}
+
+export async function getSession(id: string): Promise<Session> {
+  const { session } = await invoke<{ session: Session }>(`sessions?id=${id}`);
+  return session;
+}
+
+export async function listSessions(productId?: string): Promise<Session[]> {
+  const path = productId ? `sessions?product_id=${productId}` : 'sessions';
+  const { sessions } = await invoke<{ sessions: Session[] }>(path);
+  return sessions;
+}
+
+export async function saveSessionStep(
+  id: string,
+  currentStep: string,
+): Promise<Session> {
+  const { session } = await invoke<{ session: Session }>(`sessions?id=${id}`, {
+    method: 'PATCH',
+    body: { current_step: currentStep },
+  });
+  return session;
+}
+
+export async function completeSession(
+  id: string,
+): Promise<{ session: Session; summary_error?: boolean }> {
+  return invoke(`sessions?id=${id}`, {
+    method: 'PATCH',
+    body: { action: 'complete' },
+  });
+}
+
+export async function abandonSession(id: string): Promise<Session> {
+  const { session } = await invoke<{ session: Session }>(`sessions?id=${id}`, {
+    method: 'PATCH',
+    body: { action: 'abandon' },
+  });
+  return session;
+}
+
+// ── Assumptions ────────────────────────────────────────────────────────────
+
+export async function mapAssumptions(sessionId: string): Promise<Assumption[]> {
+  const { assumptions } = await invoke<{ assumptions: Assumption[] }>(
+    'assumption-mapping',
+    { method: 'POST', body: { session_id: sessionId } },
+  );
+  return assumptions;
+}
+
+export async function listAssumptions(sessionId: string): Promise<Assumption[]> {
+  const { assumptions } = await invoke<{ assumptions: Assumption[] }>(
+    `assumptions?session_id=${sessionId}`,
+  );
+  return assumptions;
+}
+
+export async function updateAssumption(
+  id: string,
+  patch: Partial<
+    Pick<Assumption, 'confidence' | 'impact' | 'status' | 'is_prioritized'>
+  >,
+): Promise<Assumption> {
+  const { assumption } = await invoke<{ assumption: Assumption }>(
+    `assumptions?id=${id}`,
+    { method: 'PATCH', body: patch },
+  );
+  return assumption;
+}
+
+// ── Market grounding / blind spots / guide ────────────────────────────────
+
+export async function groundAssumption(assumptionId: string): Promise<{
+  assumption_id: string;
+  summary: string;
+  evidence: Evidence[];
+  searches: number;
+}> {
+  return invoke('market-grounding', {
+    method: 'POST',
+    body: { assumption_id: assumptionId },
+  });
+}
+
+export async function listEvidence(sessionId: string): Promise<Evidence[]> {
+  const { data, error } = await supabase
+    .from('assumption_evidence')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('retrieved_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'evidence_load_failed' });
+  }
+  return (data ?? []) as Evidence[];
+}
+
+export async function runBlindSpots(sessionId: string): Promise<BlindSpot[]> {
+  const { blind_spots } = await invoke<{ blind_spots: BlindSpot[] }>(
+    'blind-spots',
+    { method: 'POST', body: { session_id: sessionId } },
+  );
+  return blind_spots;
+}
+
+export async function listBlindSpots(sessionId: string): Promise<BlindSpot[]> {
+  const { data, error } = await supabase
+    .from('blind_spots')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'blind_spots_load_failed' });
+  }
+  return (data ?? []) as BlindSpot[];
+}
+
+export async function generateGuide(sessionId: string): Promise<InterviewGuide> {
+  const { guide } = await invoke<{ guide: InterviewGuide }>('interview-guide', {
+    method: 'POST',
+    body: { session_id: sessionId },
+  });
+  return guide;
+}
+
+export async function getLatestGuide(
+  sessionId: string,
+): Promise<InterviewGuide | null> {
+  const { data, error } = await supabase
+    .from('interview_guides')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'guide_load_failed' });
+  }
+  return (data as InterviewGuide | null) ?? null;
+}
+
+// ── Session documents (grounding) ─────────────────────────────────────────
+
+export async function ingestPastedText(
+  sessionId: string,
+  pastedText: string,
+  title?: string,
+): Promise<{
+  document?: { id: string };
+  chunk_count?: number;
+  redaction?: {
+    redacted_count: number;
+    flagged: { token: string; context: string }[];
+  };
+}> {
+  return invoke('ingest', {
+    method: 'POST',
+    body: { session_id: sessionId, pasted_text: pastedText, title },
+  });
+}
+
+export async function listSessionDocuments(
+  sessionId: string,
+): Promise<SessionDocument[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('id, filename, status, chunk_count, created_at')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'documents_load_failed' });
+  }
+  return (data ?? []) as SessionDocument[];
+}
+
+// ── Reports ────────────────────────────────────────────────────────────────
+
+export async function compileReport(sessionId: string): Promise<Report> {
+  const { report } = await invoke<{ report: Report }>('report', {
+    method: 'POST',
+    body: { session_id: sessionId },
+  });
+  return report;
+}
+
+export async function getReport(sessionId: string): Promise<Report | null> {
+  try {
+    const { report } = await invoke<{ report: Report }>(
+      `report?session_id=${sessionId}`,
+    );
+    return report;
+  } catch (err) {
+    if (err instanceof DiscoveryApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+// Public share view — logged-out visitors, plain fetch, no session.
+export async function fetchPublicReport(token: string): Promise<{
+  snapshot: ReportSnapshot;
+  generated_at: string;
+} | null> {
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  const res = await fetch(
+    `${base}/functions/v1/report-public?token=${encodeURIComponent(token)}`,
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new DiscoveryApiError({ status: res.status, code: 'share_load_failed' });
+  }
+  return res.json();
+}
+
+// ── Sprint thread (reuses the existing conversation engine) ───────────────
+
+export interface ThreadMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  kind?: 'message' | 'summary';
+  created_at: string;
+}
+
+export async function loadThread(conversationId: string): Promise<ThreadMessage[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, role, content, kind, created_at')
+    .eq('conversation_id', conversationId)
+    .in('role', ['user', 'assistant'])
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'thread_load_failed' });
+  }
+  return (data ?? []) as ThreadMessage[];
+}
+
+export async function sendChat(
+  message: string,
+  conversationId: string,
+): Promise<{ reply: string; message_id: string; credits_remaining?: number | null }> {
+  return invoke('chat', {
+    method: 'POST',
+    body: { message, conversation_id: conversationId },
+  });
+}

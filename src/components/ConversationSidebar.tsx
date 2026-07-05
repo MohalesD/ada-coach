@@ -576,8 +576,8 @@ export default function ConversationSidebar({
               className={cn(
                 'w-full rounded-md bg-background/60 py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground',
                 'border border-transparent transition-colors',
-                'focus:border-[#9BB7D4]/60 focus:outline-none focus:ring-0',
-                search && 'border-[#9BB7D4]/30'
+                'focus:border-[#B8853A]/60 focus:outline-none focus:ring-0',
+                search && 'border-[#B8853A]/30'
               )}
             />
 
@@ -894,9 +894,9 @@ function FolderIcon() {
       width="14"
       height="14"
       viewBox="0 0 24 24"
-      fill="#C9A84C"
+      fill="#B8853A"
       fillOpacity="0.18"
-      stroke="#C9A84C"
+      stroke="#B8853A"
       strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -912,8 +912,8 @@ function PinIcon({ active }: { active: boolean }) {
       width="13"
       height="13"
       viewBox="0 0 24 24"
-      fill={active ? '#C9A84C' : 'none'}
-      stroke={active ? '#C9A84C' : 'currentColor'}
+      fill={active ? '#B8853A' : 'none'}
+      stroke={active ? '#B8853A' : 'currentColor'}
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -966,7 +966,7 @@ function FolderRow({
         className={cn(
           'group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm transition-colors',
           isOver
-            ? 'bg-[#C9A84C]/15 ring-1 ring-[#C9A84C]/60'
+            ? 'bg-[#B8853A]/15 ring-1 ring-[#B8853A]/60'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         )}
       >
@@ -1060,7 +1060,7 @@ function UnfiledSection({ children }: { children: React.ReactNode }) {
   return (
     <div
       ref={setNodeRef}
-      className={cn('rounded-lg', isOver && 'bg-muted/40 ring-1 ring-[#9BB7D4]/40')}
+      className={cn('rounded-lg', isOver && 'bg-muted/40 ring-1 ring-[#B8853A]/40')}
     >
       {children}
     </div>
@@ -1164,11 +1164,11 @@ function Row({
         'group mb-1 flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2 text-sm',
         !isDragging && 'transition-all duration-200',
         selectionMode && isSelected
-          ? 'bg-[#9BB7D4]/15 text-foreground'
+          ? 'bg-[#B8853A]/15 text-foreground'
           : isActive
             ? 'bg-primary/10 text-foreground'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-        isDragging && 'cursor-grabbing bg-background shadow-lg ring-1 ring-[#C9A84C]/40',
+        isDragging && 'cursor-grabbing bg-background shadow-lg ring-1 ring-[#B8853A]/40',
         isBeingDragged && !isDragging && 'opacity-40'
       )}
     >

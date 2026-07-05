@@ -14,12 +14,18 @@
 export type CallType =
   | "stage_classification"
   | "session_summary"
-  | "assumption_mapping";
+  | "assumption_mapping"
+  | "market_grounding"
+  | "blind_spot_analysis"
+  | "interview_guide";
 
 export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   stage_classification: "claude-haiku-4-5",
   session_summary: "claude-haiku-4-5",
   assumption_mapping: "claude-sonnet-4-6",
+  market_grounding: "claude-sonnet-4-6",
+  blind_spot_analysis: "claude-sonnet-4-6",
+  interview_guide: "claude-sonnet-4-6",
 };
 
 // USD per million tokens. Source: Anthropic pricing via the claude-api
@@ -31,6 +37,12 @@ export const MODEL_PRICING: Record<
   "claude-haiku-4-5": { inputPerMTok: 1.0, outputPerMTok: 5.0 },
   "claude-sonnet-4-6": { inputPerMTok: 3.0, outputPerMTok: 15.0 },
 };
+
+// Anthropic web search server tool: $10 per 1,000 searches (verified
+// against the web search tool docs 2026-07-04). Errored searches are not
+// billed by Anthropic; we only count what the API reports in
+// usage.server_tool_use.web_search_requests.
+export const WEB_SEARCH_COST_PER_REQUEST_USD = 0.01;
 
 const MYTHOS_TIER_RE = /fable|mythos/i;
 
