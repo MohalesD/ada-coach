@@ -140,6 +140,15 @@ export default function Login() {
       }
 
       if (mode === 'forgot') {
+        // Dynamic on purpose: window.location.origin resolves to
+        // localhost during dev and the real domain once deployed, so
+        // this never needs a hardcoded host. If reset links still land
+        // on the app root instead of /reset-password, the redirect
+        // itself is being requested correctly — the cause is almost
+        // certainly the Supabase project's Auth > URL Configuration
+        // "Redirect URLs" allow-list not including this origin/path.
+        // GoTrue silently falls back to the Site URL for any redirectTo
+        // it doesn't recognize, with no error surfaced to the client.
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin + '/reset-password',
         });
@@ -152,6 +161,8 @@ export default function Login() {
       }
 
       if (mode === 'magic') {
+        // Magic link intentionally goes to the app root (a sign-in, not
+        // a password change) — do not point this at /reset-password.
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
