@@ -7,6 +7,105 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-05 — Run 5: Market + Competitive Intelligence
+
+Branch `feat/discovery-platform-run5`. Source of truth:
+`docs/prds/ada-discovery-coach-v3.md` (RUN 5) +
+`docs/prds/ada-discovery-coach-v3-addendum.md` (endpoints 9–13, JTBD
+6–9, Run 5 diagrams). Build log: `docs/logs/build-log-run5.md` (MD as
+we go; DOCX at the end).
+
+### Key decisions (made during recon; rationale in the build log)
+
+- **Four new tables** (`market_briefs`, `market_evidence`, `competitors`,
+  `competitor_evidence`): select-own RLS + service-role-only writes (the
+  `reports`/`blind_spots` pattern). Both `_evidence` tables:
+  `source_url text not null` + CHECK `^https?://` — a citation-less
+  claim is unstorable at the DB layer; code layer keeps only URLs the
+  search tool actually returned (Run 2 enforcement).
+- **Gap analysis** persists as `products.competitive_gap jsonb` +
+  `gap_generated_at`, with column-tightened INSERT/UPDATE grants on
+  `products` (authenticated keeps name/description only) — the
+  documented column-grant defense pattern. Report compile folds it
+  into snapshots (addendum: gap "writes into the product's report
+  snapshot"); no fifth table invented.
+- **Search budget**: `app_settings.intel_search_budget` (default 15,
+  config-driven). Market research call gets the whole budget; identify
+  gets `min(5, budget)`; profiling splits
+  `max(1, floor(budget / confirmed_count))` per competitor so a real
+  multi-competitor run cannot exceed the budget in total.
+  `callClaudeWithWebSearch` gains a hard ledger across pause_turn
+  continuations (max_uses recomputed from remaining; stop at 0).
+- **5 new call types, all Sonnet 4.6** (PRD: web_search always pairs
+  with Sonnet 4.6, never Haiku): `market_intel_plan`,
+  `market_intel_research`, `competitor_identification`,
+  `competitor_profiling`, `competitive_gap_analysis`. Recorded to
+  model_usage with `session_id: null` (Run 4 precedent) +
+  `web_search_requests`.
+- **Report feed**: snapshot v2 gains `market_intel` +
+  `competitive_intel` sections; gap threats carry
+  `related_assumption_ids` (server-validated against the product's
+  real assumptions) so the risk map can badge threatened assumptions.
+- **Honesty rules**: every stored claim carries `retrieved_at` and is
+  visibly dated in the UI; `confidence_label` CHECK
+  (strong/moderate/thin/none) on briefs and competitor profiles;
+  empty search → "unmapped/limited" states, never fabrication.
+
+### Backend
+
+- [ ] Migration `market_briefs` (unique product_id, summary jsonb,
+      confidence_label CHECK, retrieved_at)
+- [ ] Migration `market_evidence` (claim, source_url + CHECK,
+      query_used, retrieved_at)
+- [ ] Migration `competitors` (name, confirmed, added_by, positioning,
+      pricing_signal, feature_notes jsonb, recent_moves,
+      confidence_label, retrieved_at, profiled_at)
+- [ ] Migration `competitor_evidence` (same CHECK shape)
+- [ ] Migration `products` gap columns + column-tightened grants
+- [ ] Migration `intel_search_budget` seed + `model_routing` merge
+- [ ] `_shared/models.ts`: +5 call types
+- [ ] `_shared/anthropic.ts`: budget ledger across pause_turn loop
+- [ ] `_shared/intel-config.ts`: budget reader + per-competitor split
+- [ ] Edge Function `market-intel` (plan → bounded research → store)
+- [ ] Edge Function `competitive-intel` (POST identify / PATCH confirm)
+- [ ] Edge Function `competitor-profile` (one competitor per call)
+- [ ] Edge Function `competitive-gap` (synthesis over stored evidence)
+- [ ] `report/index.ts`: snapshot v2 with intel sections
+- [ ] `config.toml`: pin verify_jwt for the 4 new functions
+- [ ] Vitest: routing + Fable/Mythos refusal for new call types;
+      budget split math
+
+### Frontend (amber identity, tokens only)
+
+- [ ] `types/discovery.ts` + `discovery-api.ts` extensions
+- [ ] `/product/:productId/intel` page: Market brief module +
+      Competitive landscape module (identify → confirm gate with cost
+      math surfaced BEFORE profiling → per-competitor profile cards →
+      comparison matrix → gap view); every claim visibly dated;
+      confidence chips; loading/error/retry per object
+- [ ] Discovery product card: "Market & competitors" entry
+- [ ] ReportPage + ShareReport + report-pdf: render intel sections;
+      risk-map threat badges
+
+### Verification (the /goal's done criteria)
+
+- [ ] Two-user probe: zero cross-user reads on all 4 new tables, both
+      directions
+- [ ] Deliberate fabricated-citation INSERT rejected by the CHECKs
+- [ ] Deliberate cap-exceed attempt: budget lowered, run executed,
+      recorded searches ≤ budget (market + multi-competitor)
+- [ ] One real market brief + one real competitive analysis live;
+      model_usage rows read directly, costs recomputed in SQL
+- [ ] Playwright at 375px + 1440px: hover, loading, error states
+- [ ] `npm run type-check`, Vitest, production build clean
+- [ ] Build log MD + DOCX; commit; PR
+
+### Review
+
+(added at end of run)
+
+---
+
 ## ✅ Shipped 2026-07-05 — Run 4: Intake router + Portfolio coaching track
 
 Branch `feat/discovery-platform-run4`. Source of truth:

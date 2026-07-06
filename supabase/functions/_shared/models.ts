@@ -22,7 +22,12 @@ export type CallType =
   | "portfolio_profile_extraction"
   | "portfolio_idea_generation"
   | "portfolio_artifact_coaching"
-  | "portfolio_plan_generation";
+  | "portfolio_plan_generation"
+  | "market_intel_plan"
+  | "market_intel_research"
+  | "competitor_identification"
+  | "competitor_profiling"
+  | "competitive_gap_analysis";
 
 export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   stage_classification: "claude-haiku-4-5",
@@ -40,6 +45,15 @@ export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   portfolio_idea_generation: "claude-sonnet-4-6",
   portfolio_artifact_coaching: "claude-sonnet-4-6",
   portfolio_plan_generation: "claude-sonnet-4-6",
+  // Run 5 — market + competitive intelligence. ALL Sonnet 4.6 per the
+  // PRD's routing rule: intel planning, search execution, and synthesis
+  // are reasoning-heavy, and web_search always pairs with Sonnet 4.6,
+  // never Haiku.
+  market_intel_plan: "claude-sonnet-4-6",
+  market_intel_research: "claude-sonnet-4-6",
+  competitor_identification: "claude-sonnet-4-6",
+  competitor_profiling: "claude-sonnet-4-6",
+  competitive_gap_analysis: "claude-sonnet-4-6",
 };
 
 // USD per million tokens. Source: Anthropic pricing via the claude-api

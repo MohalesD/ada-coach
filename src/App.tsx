@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Settings from './pages/Settings';
 import Discovery from './pages/Discovery';
+import ProductIntel from './pages/ProductIntel';
 import Sprint from './pages/Sprint';
 import ReportPage from './pages/ReportPage';
 import ShareReport from './pages/ShareReport';
@@ -72,6 +73,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PortfolioWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/product/:productId/intel"
+            element={
+              <ProtectedRoute>
+                <ProductIntel />
               </ProtectedRoute>
             }
           />

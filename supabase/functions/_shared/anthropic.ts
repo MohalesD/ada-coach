@@ -161,13 +161,7 @@ function collectFromContent(
 export async function callClaudeWithWebSearch(
   opts: ClaudeWebSearchOptions,
 ): Promise<ClaudeWebSearchResult> {
-  const tools = [
-    {
-      type: "web_search_20260209",
-      name: "web_search",
-      max_uses: opts.maxSearches ?? 5,
-    },
-  ];
+  const searchBudget = opts.maxSearches ?? 5;
 
   // Content may be raw block arrays once we echo assistant turns back.
   const messages: Array<{ role: string; content: unknown }> = [
@@ -185,6 +179,20 @@ export async function callClaudeWithWebSearch(
   let outputTokens: number | null = null;
 
   for (let turn = 0; turn <= MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
+    // Run 5 cost-cap ledger: our own count is authoritative. Each
+    // continuation gets only the budget that remains after searches
+    // already consumed, and a paused turn with nothing left is not
+    // continued — the cap must hold even in a pathological pause loop.
+    const remainingSearches = searchBudget - webSearchRequests;
+    if (turn > 0 && remainingSearches <= 0) break;
+    const tools = [
+      {
+        type: "web_search_20260209",
+        name: "web_search",
+        max_uses: Math.max(1, remainingSearches),
+      },
+    ];
+
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: {

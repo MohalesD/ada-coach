@@ -32,7 +32,7 @@ export function markdownToPlainText(md: string): string {
 }
 
 async function svgToPngDataUrl(
-  svgId: string,
+  svgId: string
 ): Promise<{ dataUrl: string; width: number; height: number } | null> {
   const el = document.getElementById(svgId);
   if (!(el instanceof SVGSVGElement)) return null;
@@ -89,7 +89,11 @@ class PdfWriter {
 
   body(
     text: string,
-    opts: { size?: number; color?: [number, number, number]; style?: 'normal' | 'italic' | 'bold' } = {},
+    opts: {
+      size?: number;
+      color?: [number, number, number];
+      style?: 'normal' | 'italic' | 'bold';
+    } = {}
   ) {
     const size = opts.size ?? 10;
     const lineH = size * 1.45;
@@ -112,21 +116,20 @@ class PdfWriter {
 
 export async function exportReportPdf(
   snapshot: ReportSnapshot,
-  riskMapSvgId: string,
+  riskMapSvgId: string
 ): Promise<void> {
   const w = new PdfWriter();
 
   // Title block
-  w.doc.setFont('helvetica', 'bold').setFontSize(22).setTextColor(...ESPRESSO);
-  w.doc.text(
-    w.doc.splitTextToSize(snapshot.product.name, CONTENT_W) as string[],
-    MARGIN,
-    w.y + 10,
-  );
+  w.doc
+    .setFont('helvetica', 'bold')
+    .setFontSize(22)
+    .setTextColor(...ESPRESSO);
+  w.doc.text(w.doc.splitTextToSize(snapshot.product.name, CONTENT_W) as string[], MARGIN, w.y + 10);
   w.y += 34;
   w.body(
     `Discovery Report · generated ${new Date(snapshot.generated_at).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}${snapshot.session.stage ? ` · entry point: ${snapshot.session.stage.replace('_', ' ')}` : ''}`,
-    { color: MUTED },
+    { color: MUTED }
   );
   if (snapshot.product.description) {
     w.gap(2);
@@ -147,22 +150,19 @@ export async function exportReportPdf(
     w.ensure(imgH + 8);
     w.doc.addImage(png.dataUrl, 'PNG', MARGIN, w.y, imgW, imgH);
     w.y += imgH + 6;
-    w.body(
-      'Top-left quadrant = high impact, weak evidence: test these first.',
-      { size: 9, color: MUTED },
-    );
+    w.body('Top-left quadrant = high impact, weak evidence: test these first.', {
+      size: 9,
+      color: MUTED,
+    });
   }
 
   // Assumptions
   w.heading('Assumption map');
   snapshot.assumptions.forEach((a, i) => {
-    w.body(
-      `${i + 1}. [${a.category}] ${a.statement}`,
-      { style: 'bold' },
-    );
+    w.body(`${i + 1}. [${a.category}] ${a.statement}`, { style: 'bold' });
     w.body(
       `    confidence ${a.confidence}/5 · impact ${a.impact}/5 · ${a.status}${a.is_prioritized ? ' · PRIORITIZED' : ''}`,
-      { size: 9, color: MUTED },
+      { size: 9, color: MUTED }
     );
     w.gap(4);
   });
@@ -184,13 +184,97 @@ export async function exportReportPdf(
     });
   }
 
+  // Market intelligence (Run 5) — dated, confidence-labeled, sourced
+  const marketIntel = snapshot.market_intel ?? null;
+  if (marketIntel) {
+    const b = marketIntel.brief;
+    w.heading('Market intelligence');
+    w.body(
+      `${b.confidence_label.toUpperCase()} evidence · retrieved ${new Date(b.retrieved_at).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}${b.partial ? ' · PARTIAL (search budget reached)' : ''}${b.summary.search_unavailable ? ' · LIMITED (search unavailable)' : ''}`,
+      { size: 9, color: MUTED }
+    );
+    w.gap(4);
+    w.body(b.summary.narrative);
+    w.gap(4);
+    for (const [label, text] of [
+      ['Market size', b.summary.market_size],
+      ['Trends', b.summary.trends],
+      ['Demand signals', b.summary.demand_signals],
+      ['Adjacent players', b.summary.adjacent_players],
+    ] as const) {
+      w.body(`${label}:`, { style: 'bold', size: 9.5 });
+      w.body(text, { size: 9.5 });
+      w.gap(3);
+    }
+    if (marketIntel.evidence.length > 0) {
+      w.body('Sources:', { style: 'bold', size: 9.5 });
+      for (const e of marketIntel.evidence) {
+        w.body(`• ${e.claim}`, { size: 9 });
+        w.body(
+          `   ${e.title ?? e.source_url} · retrieved ${new Date(e.retrieved_at).toLocaleDateString()}`,
+          { size: 8, color: MUTED }
+        );
+        w.body(`   ${e.source_url}`, { size: 8, color: MUTED });
+        w.gap(2);
+      }
+    }
+  }
+
+  // Competitive landscape (Run 5)
+  const competitiveIntel = snapshot.competitive_intel ?? null;
+  if (competitiveIntel) {
+    const profiled = competitiveIntel.competitors.filter((c) => c.profiled_at !== null);
+    if (profiled.length > 0 || competitiveIntel.gap) {
+      w.heading('Competitive landscape');
+    }
+    for (const c of profiled) {
+      w.body(
+        `${c.name}${c.confidence_label ? ` [${c.confidence_label} evidence]` : ''} · retrieved ${new Date(c.retrieved_at).toLocaleDateString()}`,
+        { style: 'bold' }
+      );
+      if (c.positioning) w.body(`   ${c.positioning}`, { size: 9 });
+      if (c.pricing_signal) w.body(`   Pricing: ${c.pricing_signal}`, { size: 9, color: MUTED });
+      if (c.recent_moves) w.body(`   Recent: ${c.recent_moves}`, { size: 9, color: MUTED });
+      const rows = competitiveIntel.evidence.filter((e) => e.competitor_id === c.id);
+      for (const e of rows) {
+        w.body(`   ${e.source_url}`, { size: 8, color: MUTED });
+      }
+      w.gap(4);
+    }
+    const gapAnalysis = competitiveIntel.gap;
+    if (gapAnalysis) {
+      w.body(
+        `Where the landscape is unserved [${gapAnalysis.confidence_label} evidence · analyzed ${new Date(gapAnalysis.generated_at).toLocaleDateString()}]`,
+        { style: 'bold' }
+      );
+      w.body(gapAnalysis.summary, { size: 9.5 });
+      w.gap(3);
+      for (const g of gapAnalysis.gaps) {
+        w.body(`• ${g.gap} — ${g.rationale}`, { size: 9 });
+        w.gap(2);
+      }
+      if (gapAnalysis.threats.length > 0) {
+        w.body('Competitive threats:', { style: 'bold', size: 9.5 });
+        const numberOf = (id: string) => snapshot.assumptions.findIndex((a) => a.id === id) + 1;
+        for (const t of gapAnalysis.threats) {
+          const nums = t.related_assumption_ids.map(numberOf).filter((n) => n > 0);
+          w.body(
+            `• ${t.threat}${t.competitor ? ` — ${t.competitor}` : ''}${nums.length > 0 ? ` (pressures assumption${nums.length === 1 ? '' : 's'} ${nums.join(', ')})` : ''}`,
+            { size: 9 }
+          );
+          w.gap(2);
+        }
+      }
+    }
+  }
+
   // Blind spots
   if (snapshot.blind_spots.length > 0) {
     w.heading('Blind spots');
     snapshot.blind_spots.forEach((b, i) => {
       w.body(
         `${i + 1}. ${b.statement} ${b.evidence_backed ? '[evidence-backed]' : '[socratic — reasoning only]'}`,
-        { style: 'bold' },
+        { style: 'bold' }
       );
       if (b.socratic_question) {
         w.body(`   ${b.socratic_question}`, { style: 'italic', size: 9 });
@@ -205,7 +289,7 @@ export async function exportReportPdf(
   // Interview guide
   if (snapshot.interview_guide) {
     w.heading(
-      `Interview guide (v${snapshot.interview_guide.version}${snapshot.interview_guide.question_count ? ` · ${snapshot.interview_guide.question_count} questions` : ''})`,
+      `Interview guide (v${snapshot.interview_guide.version}${snapshot.interview_guide.question_count ? ` · ${snapshot.interview_guide.question_count} questions` : ''})`
     );
     w.body(markdownToPlainText(snapshot.interview_guide.content_md));
   }

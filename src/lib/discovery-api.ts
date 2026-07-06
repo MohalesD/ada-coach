@@ -8,9 +8,15 @@ import { supabase } from '@/lib/supabase';
 import type {
   Assumption,
   BlindSpot,
+  Competitor,
+  CompetitorEvidence,
+  CompetitiveGap,
   Evidence,
   InterviewGuide,
+  MarketBrief,
+  MarketEvidence,
   Product,
+  ProfilingPlan,
   Report,
   ReportSnapshot,
   Session,
@@ -272,6 +278,121 @@ export async function listSessionDocuments(sessionId: string): Promise<SessionDo
     throw new DiscoveryApiError({ status: 500, code: 'documents_load_failed' });
   }
   return (data ?? []) as SessionDocument[];
+}
+
+// ── Market + competitive intelligence (Run 5) ─────────────────────────────
+// Mutations go through the intel Edge Functions (service-role writes,
+// budget enforcement, evidence grounding); reads that need no
+// orchestration go straight to PostgREST under select-own RLS.
+
+export async function getIntelSearchBudget(): Promise<number> {
+  const { budget } = await invoke<{ budget: number }>('market-intel');
+  return budget;
+}
+
+export async function generateMarketBrief(productId: string): Promise<{
+  brief: MarketBrief;
+  evidence: MarketEvidence[];
+  searches: number;
+  budget: number;
+}> {
+  return invoke('market-intel', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
+}
+
+export async function getMarketBrief(productId: string): Promise<MarketBrief | null> {
+  const { data, error } = await supabase
+    .from('market_briefs')
+    .select('*')
+    .eq('product_id', productId)
+    .maybeSingle();
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'brief_load_failed' });
+  }
+  return (data as MarketBrief | null) ?? null;
+}
+
+export async function listMarketEvidence(briefId: string): Promise<MarketEvidence[]> {
+  const { data, error } = await supabase
+    .from('market_evidence')
+    .select('*')
+    .eq('market_brief_id', briefId)
+    .order('retrieved_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'evidence_load_failed' });
+  }
+  return (data ?? []) as MarketEvidence[];
+}
+
+export async function identifyCompetitors(productId: string): Promise<{
+  competitors: Competitor[];
+  unmapped: boolean;
+  note: string | null;
+  searches: number;
+  budget: number;
+}> {
+  return invoke('competitive-intel', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
+}
+
+export async function confirmCompetitors(
+  productId: string,
+  changes: { confirm: string[]; add: string[]; remove: string[] }
+): Promise<{ competitors: Competitor[]; profiling: ProfilingPlan }> {
+  return invoke('competitive-intel', {
+    method: 'PATCH',
+    body: { product_id: productId, ...changes },
+  });
+}
+
+export async function listCompetitors(productId: string): Promise<Competitor[]> {
+  const { data, error } = await supabase
+    .from('competitors')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'competitors_load_failed' });
+  }
+  return (data ?? []) as Competitor[];
+}
+
+export async function listCompetitorEvidence(
+  competitorIds: string[]
+): Promise<CompetitorEvidence[]> {
+  if (competitorIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('competitor_evidence')
+    .select('*')
+    .in('competitor_id', competitorIds)
+    .order('retrieved_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'evidence_load_failed' });
+  }
+  return (data ?? []) as CompetitorEvidence[];
+}
+
+export async function profileCompetitor(competitorId: string): Promise<{
+  competitor: Competitor;
+  evidence: CompetitorEvidence[];
+  searches: number;
+  per_competitor_budget: number;
+}> {
+  return invoke('competitor-profile', {
+    method: 'POST',
+    body: { competitor_id: competitorId },
+  });
+}
+
+export async function runGapAnalysis(productId: string): Promise<{ gap: CompetitiveGap }> {
+  return invoke('competitive-gap', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
 }
 
 // ── Reports ────────────────────────────────────────────────────────────────

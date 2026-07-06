@@ -90,10 +90,12 @@ Deno.serve(async (req) => {
       { data: blindSpots },
       { data: guide },
       { data: intake },
+      { data: marketBrief },
+      { data: competitors },
     ] = await Promise.all([
       service
         .from("products")
-        .select("name, description")
+        .select("name, description, competitive_gap, gap_generated_at")
         .eq("id", session.product_id)
         .maybeSingle(),
       service
@@ -133,7 +135,44 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle(),
+      // Run 5: the product's standing intel snapshots, folded into every
+      // compiled report (this is how intel "feeds the report").
+      service
+        .from("market_briefs")
+        .select("id, summary, confidence_label, partial, search_count, retrieved_at")
+        .eq("product_id", session.product_id)
+        .maybeSingle(),
+      service
+        .from("competitors")
+        .select(
+          "id, name, added_by, positioning, pricing_signal, feature_notes, recent_moves, confidence_label, retrieved_at, profiled_at",
+        )
+        .eq("product_id", session.product_id)
+        .eq("confirmed", true)
+        .order("created_at", { ascending: true }),
     ]);
+
+    // Evidence for the intel sections (needs ids from the rows above).
+    const [{ data: marketEvidence }, { data: competitorEvidence }] =
+      await Promise.all([
+        marketBrief
+          ? service
+              .from("market_evidence")
+              .select("claim, source_url, title, query_used, retrieved_at")
+              .eq("market_brief_id", (marketBrief as { id: string }).id)
+              .order("retrieved_at", { ascending: true })
+          : Promise.resolve({ data: null }),
+        competitors && competitors.length > 0
+          ? service
+              .from("competitor_evidence")
+              .select("competitor_id, claim, source_url, title, retrieved_at")
+              .in(
+                "competitor_id",
+                competitors.map((c) => c.id as string),
+              )
+              .order("retrieved_at", { ascending: true })
+          : Promise.resolve({ data: null }),
+      ]);
 
     if (!assumptions || assumptions.length === 0) {
       return jsonResponse(
@@ -146,8 +185,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    const gap =
+      (product as { competitive_gap: unknown } | null)?.competitive_gap ??
+      null;
+
     const snapshot = {
-      version: 1,
+      version: 2,
       generated_at: new Date().toISOString(),
       product: {
         name: (product as { name: string } | null)?.name ?? "Unnamed product",
@@ -169,6 +212,19 @@ Deno.serve(async (req) => {
       evidence: evidence ?? [],
       blind_spots: blindSpots ?? [],
       interview_guide: guide ?? null,
+      // Run 5 intel sections — null when the product has no intel yet,
+      // so version-1 renderers and intel-less products degrade cleanly.
+      market_intel: marketBrief
+        ? { brief: marketBrief, evidence: marketEvidence ?? [] }
+        : null,
+      competitive_intel:
+        (competitors && competitors.length > 0) || gap
+          ? {
+              competitors: competitors ?? [],
+              evidence: competitorEvidence ?? [],
+              gap,
+            }
+          : null,
       disclaimer: DISCLAIMER,
     };
 

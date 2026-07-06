@@ -107,6 +107,34 @@ describe("Run 2 routing defaults", () => {
   });
 });
 
+describe("Run 5 routing defaults (market + competitive intelligence)", () => {
+  it("routes every intel call type to Sonnet 4.6 — web_search never pairs with Haiku", () => {
+    const routes = resolveModelRoutes(null);
+    expect(routes.market_intel_plan).toBe("claude-sonnet-4-6");
+    expect(routes.market_intel_research).toBe("claude-sonnet-4-6");
+    expect(routes.competitor_identification).toBe("claude-sonnet-4-6");
+    expect(routes.competitor_profiling).toBe("claude-sonnet-4-6");
+    expect(routes.competitive_gap_analysis).toBe("claude-sonnet-4-6");
+  });
+
+  it("refuses a Mythos-tier route on every intel call type", () => {
+    for (const key of [
+      "market_intel_plan",
+      "market_intel_research",
+      "competitor_identification",
+      "competitor_profiling",
+      "competitive_gap_analysis",
+    ]) {
+      expect(() =>
+        resolveModelRoutes(`{"${key}":"claude-fable-5"}`),
+      ).toThrow(/build-time only/);
+      expect(() =>
+        resolveModelRoutes(`{"${key}":"claude-mythos-5"}`),
+      ).toThrow(/build-time only/);
+    }
+  });
+});
+
 describe("Run 4 routing defaults (portfolio coaching track)", () => {
   it("routes classification/extraction to Haiku, synthesis to Sonnet 4.6", () => {
     const routes = resolveModelRoutes(null);

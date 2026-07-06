@@ -8,11 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import RiskMap, { CATEGORY_COLORS } from '@/components/discovery/RiskMap';
 import { cn } from '@/lib/utils';
-import type {
-  AssumptionCategory,
-  ReportSnapshot,
-  SnapshotAssumption,
-} from '@/types/discovery';
+import type { AssumptionCategory, ReportSnapshot, SnapshotAssumption } from '@/types/discovery';
 
 const CATEGORY_ORDER: AssumptionCategory[] = [
   'desirability',
@@ -27,7 +23,7 @@ const PROSE = cn(
   '[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base',
   '[&_p]:my-2 [&_li]:my-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
   '[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5',
-  '[&_strong]:font-semibold [&_a]:text-primary [&_a]:underline',
+  '[&_strong]:font-semibold [&_a]:text-primary [&_a]:underline'
 );
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -45,7 +41,7 @@ function StanceChip({ stance }: { stance: string }) {
         'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
         stance === 'supports' && 'bg-success/15 text-success',
         stance === 'challenges' && 'bg-destructive/10 text-destructive',
-        stance === 'neutral' && 'bg-muted text-muted-foreground',
+        stance === 'neutral' && 'bg-muted text-muted-foreground'
       )}
     >
       {stance}
@@ -53,13 +49,7 @@ function StanceChip({ stance }: { stance: string }) {
   );
 }
 
-function AssumptionRow({
-  a,
-  index,
-}: {
-  a: SnapshotAssumption;
-  index: number;
-}) {
+function AssumptionRow({ a, index }: { a: SnapshotAssumption; index: number }) {
   return (
     <div className="flex items-start gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
       <span
@@ -92,8 +82,23 @@ export default function ReportView({
   riskMapSvgId?: string;
 }) {
   const { assumptions } = snapshot;
-  const indexOf = (id: string | null) =>
-    id ? assumptions.findIndex((a) => a.id === id) + 1 : 0;
+  const indexOf = (id: string | null) => (id ? assumptions.findIndex((a) => a.id === id) + 1 : 0);
+  // Run 5: assumptions a competitive threat pressures get badged on the
+  // risk map and in the legend.
+  const threatenedIds = new Set(
+    (snapshot.competitive_intel?.gap?.threats ?? []).flatMap((t) => t.related_assumption_ids)
+  );
+  const marketIntel = snapshot.market_intel ?? null;
+  const competitiveIntel = snapshot.competitive_intel ?? null;
+  const profiledCompetitors = (competitiveIntel?.competitors ?? []).filter(
+    (c) => c.profiled_at !== null
+  );
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   const evidenceByAssumption = assumptions
     .map((a, i) => ({
       assumption: a,
@@ -128,14 +133,14 @@ export default function ReportView({
             <>
               {' '}
               · entry point:{' '}
-              <span className="font-semibold">
-                {snapshot.session.stage.replace('_', ' ')}
-              </span>
+              <span className="font-semibold">{snapshot.session.stage.replace('_', ' ')}</span>
             </>
-          )}
-          {' '}· {assumptions.length} assumptions ·{' '}
-          {snapshot.evidence.length} evidence citations ·{' '}
+          )}{' '}
+          · {assumptions.length} assumptions · {snapshot.evidence.length} evidence citations ·{' '}
           {snapshot.blind_spots.length} blind spots
+          {marketIntel && ' · market brief'}
+          {profiledCompetitors.length > 0 &&
+            ` · ${profiledCompetitors.length} competitors profiled`}
         </p>
       </header>
 
@@ -153,14 +158,14 @@ export default function ReportView({
       <section className="space-y-3">
         <SectionTitle>Risk map — confidence by impact</SectionTitle>
         <p className="text-sm text-muted-foreground">
-          Assumptions in the top-left corner are the ones to test first:
-          they break the idea if wrong, and the evidence for them is
-          weakest.
+          Assumptions in the top-left corner are the ones to test first: they break the idea if
+          wrong, and the evidence for them is weakest.
         </p>
         <div className="rounded-xl border border-border bg-card p-3 sm:p-5">
           <RiskMap
             assumptions={assumptions.map((a) => ({ ...a }))}
             svgId={riskMapSvgId}
+            threatenedIds={threatenedIds}
           />
         </div>
       </section>
@@ -227,16 +232,179 @@ export default function ReportView({
         </section>
       )}
 
+      {/* Market intelligence (Run 5) — dated, confidence-labeled, sourced */}
+      {marketIntel && (
+        <section className="space-y-3">
+          <SectionTitle>
+            Market intelligence{' '}
+            <span className="text-sm font-normal text-muted-foreground">
+              ({marketIntel.brief.confidence_label} evidence · retrieved{' '}
+              {formatDate(marketIntel.brief.retrieved_at)})
+            </span>
+          </SectionTitle>
+          {(marketIntel.brief.partial || marketIntel.brief.summary.search_unavailable) && (
+            <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
+              {marketIntel.brief.summary.search_unavailable
+                ? 'Limited — web search returned nothing usable for this run; nothing was invented to fill the gap.'
+                : 'Partial — the research run reached its search budget.'}
+            </p>
+          )}
+          <p className="text-sm leading-relaxed text-foreground">
+            {marketIntel.brief.summary.narrative}
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(
+              [
+                ['Market size', marketIntel.brief.summary.market_size],
+                ['Trends', marketIntel.brief.summary.trends],
+                ['Demand signals', marketIntel.brief.summary.demand_signals],
+                ['Adjacent players', marketIntel.brief.summary.adjacent_players],
+              ] as const
+            ).map(([label, text]) => (
+              <div key={label} className="rounded-lg border border-border bg-card px-3 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  {label}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-foreground/90">{text}</p>
+              </div>
+            ))}
+          </div>
+          {marketIntel.evidence.length > 0 && (
+            <ul className="space-y-2">
+              {marketIntel.evidence.map((e, i) => (
+                <li
+                  key={`${e.source_url}-${i}`}
+                  className="rounded-lg border border-border bg-card px-3 py-2.5"
+                >
+                  <p className="text-sm text-foreground/90">{e.claim}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <a
+                      href={e.source_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      {e.title ?? e.source_url}
+                    </a>{' '}
+                    · retrieved {formatDate(e.retrieved_at)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Competitive landscape (Run 5) */}
+      {competitiveIntel && (
+        <section className="space-y-4">
+          <SectionTitle>Competitive landscape</SectionTitle>
+          {profiledCompetitors.length > 0 && (
+            <div className="space-y-2.5">
+              {profiledCompetitors.map((c) => (
+                <div key={c.id} className="rounded-xl border border-border bg-card px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{c.name}</span>
+                    {c.confidence_label && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {c.confidence_label} evidence
+                      </span>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">
+                      retrieved {formatDate(c.retrieved_at)}
+                    </span>
+                  </div>
+                  {c.positioning && (
+                    <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">
+                      {c.positioning}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {c.pricing_signal && <>Pricing: {c.pricing_signal} </>}
+                    {c.recent_moves && <>· Recent: {c.recent_moves}</>}
+                  </p>
+                  {(() => {
+                    const rows = competitiveIntel.evidence.filter((e) => e.competitor_id === c.id);
+                    if (rows.length === 0) return null;
+                    return (
+                      <ul className="mt-2 space-y-0.5">
+                        {rows.map((e, i) => (
+                          <li key={`${e.source_url}-${i}`}>
+                            <a
+                              href={e.source_url}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="break-all text-xs text-primary underline underline-offset-2"
+                            >
+                              {e.title ?? e.source_url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          )}
+          {competitiveIntel.gap && (
+            <div className="rounded-xl border border-accent/40 bg-secondary/40 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">
+                  Where the landscape is unserved
+                </p>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {competitiveIntel.gap.confidence_label} evidence
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  analyzed {formatDate(competitiveIntel.gap.generated_at)}
+                </span>
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">
+                {competitiveIntel.gap.summary}
+              </p>
+              <ul className="mt-2 space-y-2">
+                {competitiveIntel.gap.gaps.map((g, i) => (
+                  <li key={i} className="text-sm leading-relaxed">
+                    <span className="font-medium text-foreground">{g.gap}</span>
+                    <span className="text-muted-foreground"> — {g.rationale}</span>
+                  </li>
+                ))}
+              </ul>
+              {competitiveIntel.gap.threats.length > 0 && (
+                <div className="mt-3 border-t border-border pt-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-warning">
+                    Competitive threats
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {competitiveIntel.gap.threats.map((t, i) => (
+                      <li key={i} className="text-sm leading-relaxed text-foreground/90">
+                        {t.threat}
+                        <span className="text-xs text-muted-foreground">
+                          {t.competitor ? ` — ${t.competitor}` : ''}
+                          {t.related_assumption_ids.length > 0 &&
+                            ` · pressures assumption${t.related_assumption_ids.length === 1 ? '' : 's'} ${t.related_assumption_ids
+                              .map((id) => indexOf(id))
+                              .filter((n) => n > 0)
+                              .join(', ')}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Blind spots */}
       {snapshot.blind_spots.length > 0 && (
         <section className="space-y-3">
           <SectionTitle>Blind spots</SectionTitle>
           <div className="space-y-2.5">
             {snapshot.blind_spots.map((b, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-border bg-card px-4 py-3"
-              >
+              <div key={i} className="rounded-xl border border-border bg-card px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-foreground">
                     {i + 1}. {b.statement}
@@ -314,9 +482,7 @@ export default function ReportView({
           <SectionTitle>Session summary</SectionTitle>
           <div className="rounded-xl border border-accent/30 bg-secondary/40 px-5 py-4">
             <div className={PROSE}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {snapshot.session.summary}
-              </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{snapshot.session.summary}</ReactMarkdown>
             </div>
           </div>
         </section>
