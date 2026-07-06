@@ -138,10 +138,112 @@ export interface Session {
   stage_confidence: number | null;
   current_step: string | null;
   summary: string | null;
+  // Agent-loop state (service-owned; written only by the discovery-turn
+  // controller). current_step is retired for the loop flow.
+  current_phase: DiscoveryGoal | null;
+  coverage: Coverage;
+  active_framework: Partial<Record<FrameworkSlot, string>>;
+  pending_action: PendingAction | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
 }
+
+// ── Agent-loop redesign (discovery-turn controller) ────────────────────────
+// Mirrors supabase/functions/_shared/loop.ts + frameworks.ts. The browser
+// never re-declares a framework — it renders what the controller returns.
+
+export type DiscoveryGoal =
+  | 'frame'
+  | 'surface_assumptions'
+  | 'gather_evidence'
+  | 'prioritize'
+  | 'define_success'
+  | 'prepare_to_learn'
+  | 'conclude';
+
+export type GoalStatus = 'untouched' | 'in_progress' | 'covered' | 'deferred';
+
+export interface Coverage {
+  goals?: Partial<Record<DiscoveryGoal, GoalStatus>>;
+  success_metric?: 'defined' | 'declined';
+  interviews?: 'prepared' | 'declined';
+}
+
+export type ActionType =
+  | 'ask_next'
+  | 'dig_deeper'
+  | 'map_assumptions'
+  | 'ground_assumption'
+  | 'run_blind_spots'
+  | 'propose_prioritization'
+  | 'define_success_metric'
+  | 'prepare_interviews'
+  | 'revisit_phase'
+  | 'conclude';
+
+export type FrameworkSlot = 'prioritization' | 'success_metric' | 'interview';
+
+export type FrameworkScoring =
+  | {
+      kind: 'numeric';
+      formula?: 'rice';
+      fields: { key: string; label: string; min: number; max: number }[];
+    }
+  | { kind: 'categorical'; buckets: { key: string; label: string }[] };
+
+export interface PublicFramework {
+  id: string;
+  name: string;
+  slot: FrameworkSlot;
+  goal: DiscoveryGoal;
+  isDefault: boolean;
+  oneLiner: string;
+  whenWhy: string;
+  scoring: FrameworkScoring | null;
+}
+
+// A grounded North Star candidate (camelCase mirrors the capability output).
+export interface MetricCandidate {
+  northStar: string;
+  measures: string;
+  groundedIn: string;
+  proxy: string;
+  driftRisk: string;
+}
+
+// The single outstanding proposal awaiting the PM's confirm/override/dismiss.
+export interface PendingAction {
+  action: ActionType;
+  rationale: string;
+  framework?: { slot: FrameworkSlot; suggested: string; options: PublicFramework[] };
+  target?: { assumption_id?: string; label?: string };
+  goal?: DiscoveryGoal;
+  data?: { candidates?: MetricCandidate[] };
+}
+
+export interface DiscoveryTurnResponse {
+  reply: string;
+  message_id: string | null;
+  pending_action: PendingAction | null;
+  current_phase?: DiscoveryGoal;
+  coverage?: Coverage;
+  session_updated_at?: string;
+  evaluation_error?: boolean;
+}
+
+// Per-assumption framework scores (assumptions.framework_scores jsonb).
+export interface RiceScores {
+  reach: number;
+  impact: number;
+  confidence: number;
+  effort: number;
+  score?: number;
+}
+export interface MoscowScore {
+  bucket: 'must' | 'should' | 'could' | 'wont';
+}
+export type FrameworkScores = RiceScores | MoscowScore;
 
 export interface Assumption {
   id: string;
@@ -153,6 +255,9 @@ export interface Assumption {
   impact: number;
   status: AssumptionStatus;
   is_prioritized: boolean;
+  // Set when the active prioritization framework isn't the default
+  // confidence×impact (RICE / MoSCoW). Written only by the controller.
+  framework_scores: FrameworkScores | null;
   created_at: string;
   updated_at: string;
 }

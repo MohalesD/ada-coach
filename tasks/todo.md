@@ -7,6 +7,94 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-06 — Agent-loop FRONTEND (Fable run, `/goal`)
+
+Branch `feat/discovery-frontend`. Source of truth:
+`docs/discovery-frontend-fable-brief.md`. Frontend only — hard boundary,
+no Edge Function or migration edits. Chat-first v1 accepted (my read of
+Sprint.tsx confirms the per-step narratives already land in the thread
+and the report carries the structured detail; rebuilding the evidence /
+blind-spot / guide panels would triple surface area for no decision value).
+
+Contract facts pinned from a read-only pass over `discovery-turn`:
+- `propose_prioritization` confirm ALWAYS needs `params.framework` (no
+  server fallback to the suggested id) — send it on confirm and override.
+- `define_success_metric` candidates only exist on the evaluator path;
+  `initiate` requires a `chosen` candidate. So the library's North Star
+  entry sends a normal turn message ("let's define success") and lets the
+  server-side readiness gate answer — never a fake client-side quiz.
+- `conclude` completes the session but does not compile the report;
+  ReportPage already compiles on demand → navigate to `/report/:id`.
+- Turn mode never 409s; resolve/initiate 409 `stale_session` → the
+  existing stale-tab guard, now keyed off `session_updated_at`.
+
+### Build checklist
+
+- [x] `CoveragePath.tsx` — coverage read over the 7 goals (+ current phase);
+      replaces `SprintProgress` in the Sprint (component file stays put)
+- [x] `ProposalCard.tsx` — the one PM-gated decision card: all 8
+      direction-changing actions; framework options w/ when-why expander +
+      suggested pre-select + real decline; North Star candidates w/ drift
+      risk + decline; confirm/override/dismiss wiring
+- [x] `FrameworkLibrary.tsx` — dialog: browse + teaching text + invoke out
+      of turn (prioritization/interview direct initiate; North Star via a
+      turn message)
+- [x] `NotesDialog.tsx` — grounding-notes paste + redaction feedback,
+      moved out of the old grounding step
+- [x] `Sprint.tsx` rewrite — engine swap to `sendDiscoveryTurn` /
+      `resolveDiscoveryAction` / `initiateDiscoveryAction`; keep thread
+      spine, footer input, abandon dialog, stale guard, Ada's read,
+      assumptions review (editable scores + prioritize toggle); cutover
+      defaults (`current_phase ?? 'frame'`, `coverage ?? {}`)
+- [x] `Discovery.tsx` resume hint: prefer `current_phase` over the retired
+      `current_step`
+- [x] `npm run type-check` clean (lint is broken repo-wide — see review)
+- [x] Live drive on localhost:5175 (authorized by the /goal)
+- [x] Commit incrementally (288cbd3 build, 06f7947 drive fixes)
+
+### Review (2026-07-06, post live drive)
+
+**Live-verified on a real TrailNote sprint (throwaway user, cascade-cleaned
+to 0 rows after):** cutover render (null `current_phase` → frame, no
+errors), within-phase turns raise no card, evaluator-raised
+`map_assumptions` + `run_blind_spots` + `conclude` cards (confirm, decline,
+and busy states all live), 10 Sonnet assumptions landing + score edit +
+prioritize toggle, RICE via library initiate (toast + server persist),
+MoSCoW override via the framework card (keyboard Tab+Enter selection),
+North Star candidate picked (server-written thread message + coverage ✓),
+interviews declined (coverage flag + toast), conclude → completed session →
+report compiled + rendered. Coverage path visibly advanced at every step.
+Console: only the two pre-existing React Router future-flag warnings.
+
+**Honest caveat:** the evaluator (backed by Ada's skeptical persona)
+declined to raise `propose_prioritization` / `define_success_metric` /
+`prepare_interviews` organically in this early-stage sprint — she coached
+instead, correctly. Those three cards were verified by persisting
+real-shaped `pending_action` rows via the service role (the controller's
+own write, options from the server registry) and resolving them through
+the real dispatch path end to end. The `conclude` card DID fire
+organically once readiness was met — while Ada's coach reply
+simultaneously pushed back on wrapping up early. That tension (honest
+coach, PM-gated choice) is the design working.
+
+**Fixed mid-drive:** proposal card now renders below the assumptions
+review (decision point stays adjacent to the composer);
+`prefers-reduced-motion` also disables the smooth auto-scroll.
+
+**Flagged, not fixed (out of scope):**
+- `npm run lint` is broken repo-wide: `eslint.config.js` imports
+  `eslint-plugin-react-hooks`, which is not in `package.json`. Pre-existing
+  on main. Fix: `npm i -D eslint-plugin-react-hooks`.
+- No UI affordance sets assumption `status` (validated/challenged/
+  abandoned) — the API supports it (used it directly for the drive), the
+  old UI never had one either. Without it, the North Star readiness gate
+  and conclude readiness depend on grounding evidence or API-side status
+  changes. Worth a small control on `AssumptionCard` in a later pass.
+- RICE/MoSCoW per-assumption scoring persistence remains deliberately
+  unbuilt (backend write path needed first — brief §6).
+
+---
+
 ## 🔨 In progress 2026-07-06 — Agent-Loop Redesign + Framework Library
 
 Branch `feat/agent-loop-discovery`. Source of truth:
@@ -66,10 +154,14 @@ exceeds "structural verification"); deploy needs explicit authorization.
 
 Flag (separate suggestion, not fixed — Scope Discipline): `_shared/models.ts` `SettingsClient` and `_shared/usage.ts` `InsertClient` structural types don't unify with a real `SupabaseClient` under `deno check` (PostgrestBuilder isn't a `Promise`). Pre-existing across all functions; a repo-wide fix would widen those helper param types.
 
-### Frontend + prioritization
-- [ ] Prioritization: write `framework_scores`/`active_framework`; AssumptionCard framework-aware scoring.
-- [ ] `Sprint.tsx`: dynamic action card from `pending_action`; framework library; `SprintProgress` → coverage; North Star candidate cards.
-- [ ] `discovery-api.ts` + `types/discovery.ts`; cutover for in-flight sessions; `npm run type-check`.
+### Frontend + prioritization  (branch: feat/discovery-frontend, off merged backend)
+- [x] `types/discovery.ts`: extended `Session` (+4 loop fields) & `Assumption` (+`framework_scores`); added DiscoveryGoal/GoalStatus/Coverage/ActionType/FrameworkSlot/FrameworkScoring/PublicFramework/MetricCandidate/PendingAction/DiscoveryTurnResponse/Rice+MoscowScores. **`npm run type-check` clean.**
+- [x] `discovery-api.ts`: `getFrameworks`, `sendDiscoveryTurn`, `resolveDiscoveryAction`, `initiateDiscoveryAction` + `DispatchResult`.
+- [→] **HANDED OFF TO FABLE** (2026-07-06). Execution brief: `docs/discovery-frontend-fable-brief.md`. Remaining scope (Sprint.tsx loop integration, coverage indicator, framework + North Star proposal cards, cutover) is Fable's to build against the type-checked contract (commit f084be0). Open design question (chat-first v1 vs preserving rich panels) stated as recommended default, left reconsiderable. Creative direction handed to Fable. Boundary: frontend only, no Edge Function changes.
+- [ ] `Sprint.tsx`: (Fable) dynamic action card from `pending_action`; framework proposal w/ teaching expander; North Star candidate cards; framework library; via `sendDiscoveryTurn`/`resolveDiscoveryAction`/`initiateDiscoveryAction`.
+- [ ] `SprintProgress.tsx`: (Fable) fixed steps → coverage indicator over goals.
+- [ ] Cutover: (Fable) `current_phase == null` → treat as `'frame'`; controller repopulates loop state on first turn.
+- [ ] **PHASED / FLAGGED:** RICE/MoSCoW *per-assumption* scoring persistence needs a small controller `score` write-path (framework_scores is service-only) + redeploy. Default confidence×impact scoring already works via existing `updateAssumption`. Framework *selection* (active_framework) is fully working.
 
 ### Review
 _(filled on completion)_
