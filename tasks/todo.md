@@ -66,10 +66,13 @@ exceeds "structural verification"); deploy needs explicit authorization.
 
 Flag (separate suggestion, not fixed — Scope Discipline): `_shared/models.ts` `SettingsClient` and `_shared/usage.ts` `InsertClient` structural types don't unify with a real `SupabaseClient` under `deno check` (PostgrestBuilder isn't a `Promise`). Pre-existing across all functions; a repo-wide fix would widen those helper param types.
 
-### Frontend + prioritization
-- [ ] Prioritization: write `framework_scores`/`active_framework`; AssumptionCard framework-aware scoring.
-- [ ] `Sprint.tsx`: dynamic action card from `pending_action`; framework library; `SprintProgress` → coverage; North Star candidate cards.
-- [ ] `discovery-api.ts` + `types/discovery.ts`; cutover for in-flight sessions; `npm run type-check`.
+### Frontend + prioritization  (branch: feat/discovery-frontend, off merged backend)
+- [x] `types/discovery.ts`: extended `Session` (+4 loop fields) & `Assumption` (+`framework_scores`); added DiscoveryGoal/GoalStatus/Coverage/ActionType/FrameworkSlot/FrameworkScoring/PublicFramework/MetricCandidate/PendingAction/DiscoveryTurnResponse/Rice+MoscowScores. **`npm run type-check` clean.**
+- [x] `discovery-api.ts`: `getFrameworks`, `sendDiscoveryTurn`, `resolveDiscoveryAction`, `initiateDiscoveryAction` + `DispatchResult`.
+- [ ] `Sprint.tsx`: send turns via `sendDiscoveryTurn`; render coach reply; **dynamic action card from `pending_action`** (framework proposal w/ teaching expander; North Star candidate cards; plain proposals; revisit); framework library entry (browse + initiate out of turn); coverage indicator.
+- [ ] `SprintProgress.tsx`: fixed steps → coverage indicator over goals.
+- [ ] Cutover: in-flight sessions ignore `current_step` → controller sets `current_phase='frame'` on first turn (already handled server-side).
+- [ ] **PHASED / FLAGGED:** RICE/MoSCoW *per-assumption* scoring persistence needs a small controller `score` write-path (framework_scores is service-only) + redeploy. Default confidence×impact scoring already works via existing `updateAssumption`. Framework *selection* (active_framework) is fully working.
 
 ### Review
 _(filled on completion)_

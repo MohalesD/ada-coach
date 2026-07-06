@@ -6,18 +6,24 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type {
+  ActionType,
   Assumption,
   BlindSpot,
   Competitor,
   CompetitorEvidence,
   CompetitiveGap,
+  Coverage,
+  DiscoveryGoal,
+  DiscoveryTurnResponse,
   Evidence,
+  FrameworkSlot,
   IntelStatus,
   InterviewGuide,
   MarketBrief,
   MarketEvidence,
   Product,
   ProfilingPlan,
+  PublicFramework,
   Report,
   ReportSnapshot,
   Session,
@@ -496,5 +502,79 @@ export async function sendChat(
   return invoke('chat', {
     method: 'POST',
     body: { message, conversation_id: conversationId },
+  });
+}
+
+// ── Agent loop (discovery-turn controller) ────────────────────────────────
+// Every sprint turn and every direction-changing action goes through the one
+// controller. It coaches, evaluates, and gates; the browser renders proposals
+// and sends back confirm/override/dismiss (or initiates an action out of turn).
+
+// Result of a resolve/initiate dispatch. Fields present depend on the action.
+export interface DispatchResult {
+  ok?: boolean;
+  dismissed?: boolean;
+  concluded?: boolean;
+  current_phase?: DiscoveryGoal;
+  coverage?: Coverage;
+  active_framework?: Partial<Record<FrameworkSlot, string>>;
+  result?: Record<string, unknown>;
+  session?: { session: Session };
+  session_updated_at?: string;
+}
+
+// The framework library — teaching text + scoring schema, the single source
+// from the server registry (the browser never re-declares a framework).
+export async function getFrameworks(): Promise<PublicFramework[]> {
+  const { frameworks } = await invoke<{ frameworks: PublicFramework[] }>(
+    'discovery-turn?resource=frameworks'
+  );
+  return frameworks;
+}
+
+// A PM turn: persist → coach reply → evaluate → gate. A direction-changing
+// recommendation comes back as pending_action; within-phase ones don't.
+export async function sendDiscoveryTurn(
+  sessionId: string,
+  message: string
+): Promise<DiscoveryTurnResponse> {
+  return invoke('discovery-turn', {
+    method: 'POST',
+    body: { session_id: sessionId, message },
+  });
+}
+
+// Confirm / override / dismiss the outstanding proposal. ifUnmodifiedSince is
+// the concurrency token (session_updated_at) the client last held.
+export async function resolveDiscoveryAction(
+  sessionId: string,
+  resolve: {
+    decision: 'confirm' | 'override' | 'dismiss';
+    action?: ActionType;
+    params?: Record<string, unknown>;
+  },
+  ifUnmodifiedSince?: string
+): Promise<DispatchResult> {
+  return invoke('discovery-turn', {
+    method: 'POST',
+    body: { session_id: sessionId, resolve, if_unmodified_since: ifUnmodifiedSince },
+  });
+}
+
+// A PM-initiated action, out of turn (bypasses the evaluator) — e.g. picking
+// a framework from the library or asking Ada to map assumptions now.
+export async function initiateDiscoveryAction(
+  sessionId: string,
+  action: ActionType,
+  params?: Record<string, unknown>,
+  ifUnmodifiedSince?: string
+): Promise<DispatchResult> {
+  return invoke('discovery-turn', {
+    method: 'POST',
+    body: {
+      session_id: sessionId,
+      initiate: { action, params },
+      if_unmodified_since: ifUnmodifiedSince,
+    },
   });
 }
