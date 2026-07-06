@@ -7,7 +7,7 @@
 import { Crosshair, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineError, WorkingNote } from '@/components/portfolio/notes';
-import { ConfidenceChip, RetrievedChip } from '@/components/intel/chips';
+import { ConfidenceChip, RetrievedChip, SavedChip } from '@/components/intel/chips';
 import type { CompetitiveGap } from '@/types/discovery';
 
 export default function GapAnalysisCard({
@@ -38,6 +38,7 @@ export default function GapAnalysisCard({
           <div className="flex flex-wrap items-center gap-2">
             <ConfidenceChip label={gap.confidence_label} />
             <RetrievedChip iso={gap.generated_at} prefix="Analyzed" />
+            <SavedChip iso={gap.generated_at} />
             <Button size="sm" variant="outline" disabled={analyzing || !ready} onClick={onAnalyze}>
               Re-run analysis
             </Button>

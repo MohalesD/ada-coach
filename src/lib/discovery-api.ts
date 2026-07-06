@@ -88,6 +88,14 @@ export async function createProduct(name: string, description?: string): Promise
   return product;
 }
 
+export async function renameProduct(id: string, name: string): Promise<Product> {
+  const { product } = await invoke<{ product: Product }>(`products?id=${id}`, {
+    method: 'PATCH',
+    body: { name },
+  });
+  return product;
+}
+
 export async function getProduct(id: string): Promise<Product | null> {
   const { data, error } = await supabase.from('products').select('*').eq('id', id).maybeSingle();
   if (error) {
