@@ -24,6 +24,9 @@ export interface IntelStatus {
   note?: string | null;
   // user-safe failure copy (state 'error')
   message?: string;
+  // truncated technical detail for support/debugging (state 'error');
+  // never rendered as the primary copy
+  debug?: string;
 }
 
 type ProductClient = {

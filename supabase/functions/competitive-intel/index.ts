@@ -102,13 +102,14 @@ async function runIdentification(opts: {
 }): Promise<void> {
   const { service, anthropicKey, userId, product, identifyBudget, startedAt } =
     opts;
-  const fail = (message: string) =>
+  const fail = (message: string, debug?: unknown) =>
     setIntelStatus(service, product.id, {
       kind: "competitor_identification",
       state: "error",
       started_at: startedAt,
       finished_at: new Date().toISOString(),
       message,
+      debug: debug === undefined ? undefined : String(debug).slice(0, 300),
     });
 
   try {
@@ -241,7 +242,7 @@ async function runIdentification(opts: {
     });
   } catch (err) {
     console.error("competitive-intel worker error:", err);
-    await fail("The competitor search didn't finish. Try again.");
+    await fail("The competitor search didn't finish. Try again.", err);
   }
 }
 

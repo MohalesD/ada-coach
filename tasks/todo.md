@@ -53,56 +53,80 @@ we go; DOCX at the end).
 
 ### Backend
 
-- [ ] Migration `market_briefs` (unique product_id, summary jsonb,
+- [x] Migration `market_briefs` (unique product_id, summary jsonb,
       confidence_label CHECK, retrieved_at)
-- [ ] Migration `market_evidence` (claim, source_url + CHECK,
+- [x] Migration `market_evidence` (claim, source_url + CHECK,
       query_used, retrieved_at)
-- [ ] Migration `competitors` (name, confirmed, added_by, positioning,
+- [x] Migration `competitors` (name, confirmed, added_by, positioning,
       pricing_signal, feature_notes jsonb, recent_moves,
       confidence_label, retrieved_at, profiled_at)
-- [ ] Migration `competitor_evidence` (same CHECK shape)
-- [ ] Migration `products` gap columns + column-tightened grants
-- [ ] Migration `intel_search_budget` seed + `model_routing` merge
-- [ ] `_shared/models.ts`: +5 call types
-- [ ] `_shared/anthropic.ts`: budget ledger across pause_turn loop
-- [ ] `_shared/intel-config.ts`: budget reader + per-competitor split
-- [ ] Edge Function `market-intel` (plan → bounded research → store)
-- [ ] Edge Function `competitive-intel` (POST identify / PATCH confirm)
-- [ ] Edge Function `competitor-profile` (one competitor per call)
-- [ ] Edge Function `competitive-gap` (synthesis over stored evidence)
-- [ ] `report/index.ts`: snapshot v2 with intel sections
-- [ ] `config.toml`: pin verify_jwt for the 4 new functions
-- [ ] Vitest: routing + Fable/Mythos refusal for new call types;
-      budget split math
+- [x] Migration `competitor_evidence` (same CHECK shape)
+- [x] Migration `products` gap columns + column-tightened grants
+- [x] Migration `intel_search_budget` seed + `model_routing` merge
+- [x] Migration `products.intel_status` (added mid-run — see review)
+- [x] `_shared/models.ts`: +5 call types
+- [x] `_shared/anthropic.ts`: budget ledger + maxContinuations bound
+- [x] `_shared/intel-config.ts`: budget reader + per-competitor split +
+      per-call latency ceilings + honestConfidence
+- [x] `_shared/intel-status.ts`: background-run status cell helpers
+- [x] Edge Function `market-intel` (plan → bounded research → store;
+      202 + background worker)
+- [x] Edge Function `competitive-intel` (POST identify worker / PATCH
+      confirm gate)
+- [x] Edge Function `competitor-profile` (one competitor per call,
+      202 + worker)
+- [x] Edge Function `competitive-gap` (synchronous synthesis over
+      stored evidence)
+- [x] `report/index.ts`: snapshot v2 with intel sections
+- [x] `config.toml`: pin verify_jwt for the 4 new functions
+- [x] Vitest (42/42): routing + Fable/Mythos refusal; budget math
 
 ### Frontend (amber identity, tokens only)
 
-- [ ] `types/discovery.ts` + `discovery-api.ts` extensions
-- [ ] `/product/:productId/intel` page: Market brief module +
-      Competitive landscape module (identify → confirm gate with cost
-      math surfaced BEFORE profiling → per-competitor profile cards →
-      comparison matrix → gap view); every claim visibly dated;
-      confidence chips; loading/error/retry per object
-- [ ] Discovery product card: "Market & competitors" entry
-- [ ] ReportPage + ShareReport + report-pdf: render intel sections;
-      risk-map threat badges
+- [x] `types/discovery.ts` + `discovery-api.ts` extensions (incl.
+      pollIntelStatus)
+- [x] `/product/:productId/intel` page with both modules
+- [x] Discovery product card: "Market & competitors" entry
+- [x] ReportPage + ShareReport + report-pdf intel sections; risk-map
+      threat badges
 
 ### Verification (the /goal's done criteria)
 
-- [ ] Two-user probe: zero cross-user reads on all 4 new tables, both
-      directions
-- [ ] Deliberate fabricated-citation INSERT rejected by the CHECKs
-- [ ] Deliberate cap-exceed attempt: budget lowered, run executed,
-      recorded searches ≤ budget (market + multi-competitor)
-- [ ] One real market brief + one real competitive analysis live;
-      model_usage rows read directly, costs recomputed in SQL
-- [ ] Playwright at 375px + 1440px: hover, loading, error states
-- [ ] `npm run type-check`, Vitest, production build clean
-- [ ] Build log MD + DOCX; commit; PR
+- [x] Two-user probe: zero cross-user reads on all 4 new tables, both
+      directions (+ write paths and the gap column proven closed)
+- [x] Deliberate fabricated-citation INSERTs rejected by the CHECKs
+      (5/5: NULL, empty, prose, ftp:// — both evidence tables)
+- [x] Deliberate cap-exceed attempts: brief at budget 3 recorded
+      exactly 3 searches (partial-marked); identify ≤ 3; confirming 4
+      competitors under budget 3 → 400 too_many_competitors (live API)
+- [x] One real market brief live (twice — budget 3 and budget 15/cap 6),
+      model_usage rows read directly, all 7 costs recomputed exactly
+- [~] Competitive analysis live run BLOCKED mid-run: the Anthropic
+      account ran out of API credits ("credit balance is too low").
+      Identification ran live once (3 searches, honest unmapped when
+      the search tool errored); profiling + gap never completed a live
+      model call. UI verified with labeled fixtures, then cleaned up.
+      Needs: credits topped up, then one identify → confirm → profile
+      → gap click-through on EchoBrief.
+- [x] Playwright at 375px + 1440px: hover, loading, error states
+      (identify error captured live; gate cost math; matrix; gap view;
+      report threat badges; logged-out share at 375)
+- [x] `npm run type-check`, Vitest 42/42, production build clean
+- [x] Build log MD + DOCX; commit; PR
 
 ### Review
 
-(added at end of run)
+Shipped the full Run 5 scope with two mid-run architectural corrections
+forced by live evidence: (1) synchronous web-search calls die at the
+edge gateway's 150s idle timeout, so all three search endpoints became
+202 + background worker + status-cell polling (new
+`products.intel_status`); (2) pause_turn continuations multiply both
+latency and input-token cost (a 6-search brief hit 310k input tokens),
+so per-call search ceilings and continuation bounds now sit on top of
+the per-run budget. Every DB-layer done-criterion passed. The single
+open item is the live competitive profiling/gap run, blocked by the
+Anthropic account's credit balance — external, one click-through once
+topped up.
 
 ---
 

@@ -59,12 +59,257 @@ at the end, same as Runs 1–4.
 
 ## 3. What was built
 
-(filled in as the run proceeds)
+### Database (7 migrations, applied via MCP `apply_migration`, committed locally)
+
+| Migration | Contents |
+|---|---|
+| `20260705150000_market_briefs.sql` | `market_briefs` — one standing brief per product (unique product_id), `summary` jsonb, `confidence_label` CHECK (strong/moderate/thin/none), `partial`, `search_count`, `retrieved_at`. Read-own RLS, service-role-only writes. |
+| `20260705150100_market_evidence.sql` | `market_evidence` — claim, `source_url NOT NULL` + CHECK `~* '^https?://'` (fabricated citation unstorable), title, `query_used`, `retrieved_at`. Same RLS. |
+| `20260705150200_competitors.sql` | `competitors` — name, `added_by` (ada/user), `confirmed` (the gate flag), positioning, `pricing_signal`, `feature_notes` jsonb, `recent_moves`, `confidence_label` CHECK, `retrieved_at`, `profiled_at`. Same RLS. |
+| `20260705150300_competitor_evidence.sql` | `competitor_evidence` — same shape and CHECK as market_evidence, FK → competitors CASCADE. |
+| `20260705150400_products_competitive_gap.sql` | `products.competitive_gap` jsonb + `gap_generated_at`; products INSERT/UPDATE grants tightened to (user_id, name, description)/(name, description) — the documented column-grant defense; the products function's own writes unaffected. |
+| `20260705150500_intel_config_run5.sql` | `app_settings.intel_search_budget` = '15' (CHECK integer ≥ 1) + the five Run 5 call types merged into `model_routing`, all `claude-sonnet-4-6`. |
+| `20260705160000_products_intel_status.sql` | `products.intel_status` jsonb — the background workers' report line, the client's poll target, and the per-product run lock. Service-role-only by the tightened grants. |
+
+### Shared modules (`supabase/functions/_shared/`)
+
+- `intel-config.ts` — budget reader (`intel_search_budget`, default 15,
+  clamp ≥ 1), per-call latency ceilings (brief 6 / identify 3 / profile
+  5), `perCompetitorSearchBudget` (count × allocation ≤ budget, gate
+  rejects count > budget), and `honestConfidence` (the stored label
+  never exceeds what surviving citations support: 0 → none, ≤2 → thin,
+  ≤5 → moderate).
+- `intel-status.ts` — `setIntelStatus` / `isRunActive` for the
+  background-run report cell (10-minute stale reclaim).
+- `anthropic.ts` — `callClaudeWithWebSearch` gains the authoritative
+  budget ledger (per-continuation `max_uses` recomputed from remaining;
+  refuses to continue at 0) and a `maxContinuations` bound.
+- `models.ts` — `CallType` + defaults extended with the 5 intel call
+  types, all Sonnet 4.6; the Fable/Mythos guard covers them
+  automatically.
+
+### Edge Functions (4 new + `report` extended; config.toml pins verify_jwt)
+
+- **`market-intel`** — GET returns `{budget, brief_run_cap}` so the UI
+  surfaces cost BEFORE a run (app_settings is owner-only). POST 202 →
+  background worker: Sonnet plan call (3–5 angles; malformed plan falls
+  back to derived angles, never crashes) → one Sonnet + web_search
+  research call (ledgered budget) → only search-returned URLs stored as
+  evidence → honesty-floored confidence, `partial` when the cap was hit,
+  `search_unavailable` when zero searches landed → upsert brief (row id
+  stable), replace evidence.
+- **`competitive-intel`** — POST 202 → identification worker (≤ 3
+  searches): candidates land `confirmed = false`; re-identify replaces
+  only unconfirmed+unprofiled rows; empty search → `unmapped: true` with
+  the model's honest note, nothing invented. PATCH = the confirm gate
+  (synchronous): confirm/add/remove with server-side validation,
+  **refuses more competitors than the budget covers (400
+  `too_many_competitors`)**, returns the profiling cost math
+  (per-competitor × count ≤ budget).
+- **`competitor-profile`** — POST 202 → profiling worker for ONE
+  confirmed competitor (409 `not_confirmed` otherwise): allocation =
+  min(5, floor(budget / confirmed_count)); positioning/pricing/features/
+  recent moves + evidence, same grounding + honesty floor; re-profiling
+  replaces the profile and its evidence.
+- **`competitive-gap`** — synchronous Sonnet call, NO search: reasons
+  over the stored, cited profiles + the product's own assumptions;
+  threats carry `related_assumption_ids` (server-validated; unknown ids
+  dropped, unmatched competitor names nulled); output persists on
+  `products.competitive_gap`.
+- **`report`** — snapshot v2: folds the product's market brief +
+  evidence, confirmed competitors + evidence, and the gap analysis into
+  every compiled snapshot (nullable sections; v1 snapshots render
+  unchanged). This is how intel reaches the report and the share link.
+
+### Frontend (amber identity, tokens only)
+
+- `/product/:productId/intel` (`ProductIntel.tsx`) — both modules on one
+  product-scoped surface. Market module: cost note before the run,
+  progress note during (poll-driven), dated + confidence-chipped brief,
+  partial/limited honesty banners, expandable dated sources. Competitive
+  module: identify → **the confirm gate** (checkbox curation, add-known,
+  remove, re-search, live cost math that refuses over-budget selections
+  inline) → per-competitor profile cards (per-card loading/error/retry)
+  → comparison matrix (client-rendered from stored rows — nothing
+  restated by a model) → gap card (gaps, opportunities, threats with
+  assumption links). Sequential profile-all (runs are serialized per
+  product).
+- `components/intel/` — `chips.tsx` (ConfidenceChip, RetrievedChip,
+  cost-math mirrors), `MarketBriefCard`, `CompetitorGate`,
+  `CompetitorProfileCard`, `ComparisonMatrix`, `GapAnalysisCard`.
+- `RiskMap.tsx` — optional `threatenedIds`: assumptions a competitive
+  threat pressures get a flag marker on the SVG (inline attrs, so it
+  rasterizes into the PDF) + a "competitive threat" badge in the legend.
+- `ReportView.tsx` (owner + share + PDF source of truth) — Market
+  intelligence and Competitive landscape sections, every claim dated,
+  confidence labels, threat → assumption-number references;
+  `report-pdf.ts` renders the same sections into the export.
+- `Discovery.tsx` product cards gain the "Market & competitors" entry;
+  route wired in `App.tsx`.
+- `discovery-api.ts` — intel mutations through the Edge Functions
+  (202 + `pollIntelStatus`), reads through select-own PostgREST.
+
+### Tests
+
+- 42/42 Vitest: Run 5 routing defaults (all five call types Sonnet 4.6),
+  per-call-type Fable/Mythos refusal, budget parsing/clamping, the
+  allocation invariant (count × per-competitor ≤ budget across budget ×
+  count grids), latency-ceiling behavior, and the honest-confidence
+  floor.
 
 ## 4. Verification record
 
-(filled in as the run proceeds)
+All of the following ran against the live ada-coach-01 backend on
+2026-07-05/06, with outputs captured in-session.
+
+**Static:** 42/42 Vitest (5 files), `npm run type-check` clean,
+`npm run build` clean (pre-existing chunk-size warning only).
+
+**Fabricated-citation CHECKs (deliberately tested, 5/5 rejected).**
+Direct INSERT attempts as the privileged role — the strongest case,
+since the CHECK binds every role:
+
+| Attempt | Outcome |
+|---|---|
+| market_evidence, `source_url = NULL` | rejected: not_null_violation |
+| market_evidence, `source_url = ''` | rejected: check_violation (market_evidence_real_source_url) |
+| market_evidence, `source_url = 'see internal memo, trust me'` | rejected: check_violation |
+| competitor_evidence, `source_url = NULL` | rejected: not_null_violation |
+| competitor_evidence, `source_url = 'ftp://old-server/file'` | rejected: check_violation (competitor_evidence_real_source_url) |
+
+A fabricated citation is physically unstorable; the code layer
+additionally drops well-formed URLs the search tool did not return
+(Run 2 enforcement, observed dropping 0 URLs across the live runs —
+the model cited only real results).
+
+**RLS isolation proof (the Run 1 standard, both directions).** Two
+throwaway users seeded with one row in each of the four new tables;
+transaction-scoped probes as `authenticated` with each user's JWT
+claims:
+
+| Probe | briefs own/other's | market_evidence | competitors | competitor_evidence |
+|---|---|---|---|---|
+| A probing B | 1 / **0** | 1 / **0** | 1 / **0** | 1 / **0** |
+| B probing A | 1 / **0** | 1 / **0** | 1 / **0** | 1 / **0** |
+
+Write paths: `has_table_privilege('authenticated', …, 'insert'/'update')`
+= **false** on the intel tables, and
+`has_column_privilege('authenticated','products','competitive_gap','update')`
+= **false**. Cleanup cascaded both probe users to zero residue.
+
+**Search-budget cap (deliberately tested, three ways, live).**
+1. Budget lowered to 3; a real market brief run recorded **exactly 3
+   searches** in model_usage, and the stored brief carried
+   `partial = true` — the cap held and was labeled honestly.
+2. Identification at budget 3: **3 searches** (≤ the identify ceiling).
+3. The exceed attempt: confirming 4 competitors under budget 3 over the
+   live API → **400 `too_many_competitors`** ("The search budget (3)
+   allows at most 3 competitors per profiling run"). Client-side, the
+   gate shows the same refusal inline and disables Confirm.
+4. Budget restored to 15: the brief run spends min(6, budget) per call
+   (latency ceiling) — the kick response reported budget 6 and the run
+   recorded **6 searches**; the confirm gate's math for 2 competitors
+   reads "up to 10 web searches (~$0.10) — 5 per competitor"
+   (min(5, floor(15/2)) — run total provably ≤ budget).
+
+**The real market brief (Must-Have, live).** EchoBrief (an AI
+meeting-notes assistant for product teams — a deliberately well-mapped
+space): sprint intake → Haiku classifier (`fresh_idea`) → 11 assumptions
+mapped → market-intel run at budget 6. Result: a moderate-confidence,
+partial-marked brief with **10 evidence rows, every source_url a real
+search-returned URL, every claim dated "Retrieved Jul 5, 2026"** —
+market-size ranges with an explicit treat-the-range caveat, named
+players (Otter, Fireflies, Fathom, Copilot), and an honest "no
+PM-specific survey was surfaced; fill that gap with primary discovery"
+admission. The 202 → worker → poll path measured 236s — a run the old
+synchronous shape could never have survived.
+
+**model_usage read directly, all 7 live rows recomputed in SQL — every
+cost exact (including web-search components):**
+
+| call_type | model | tokens in/out | searches | cost_usd | recomputed | match |
+|---|---|---|---|---|---|---|
+| stage_classification | claude-haiku-4-5 | 212/24 | — | 0.000332 | 0.000332 | ✓ |
+| assumption_mapping | claude-sonnet-4-6 | 384/566 | — | 0.009642 | 0.009642 | ✓ |
+| market_intel_plan | claude-sonnet-4-6 | 156/85 | — | 0.001743 | 0.001743 | ✓ |
+| market_intel_research (budget 3) | claude-sonnet-4-6 | 67,673/6,051 | **3** | 0.323784 | 0.323784 | ✓ |
+| competitor_identification | claude-sonnet-4-6 | 172,850/3,392 | **3** | 0.599430 | 0.599430 | ✓ |
+| market_intel_plan | claude-sonnet-4-6 | 156/74 | — | 0.001578 | 0.001578 | ✓ |
+| market_intel_research (cap 6) | claude-sonnet-4-6 | 310,137/9,067 | **6** | 1.126416 | 1.126416 | ✓ |
+
+No Fable/Mythos-tier model appears anywhere; the Run 1 DB CHECK still
+refuses one, and all 16 routing entries were verified in app_settings.
+
+**Intel feeds the report and risk map (live compile).** Session
+completed (Haiku summary failed on the credit outage — non-fatal by
+design, `summary_error: true`), report compiled → **snapshot v2 with
+`market_intel` (10 dated sources)**; with competitive fixtures present
+the snapshot also carried 2 profiled competitors + the gap analysis,
+the risk map rendered **threat flags on assumptions 2 and 3** with the
+"competitive threat" legend badge, and the exported PDF (4 pages,
+parsed not just downloaded) contained "Market intelligence",
+"Competitive landscape", "unserved", the threat→assumption references,
+and the lowercase date labels in its text layer. `report-public` served
+the same snapshot **with no auth header** (200); the logged-out
+`/share/:token` view rendered the Market intelligence section at 375px;
+the share token stayed stable across a post-cleanup regeneration.
+
+**UI states (Playwright, 375px + 1440px, against the live backend):**
+amber identity everywhere (tokens only); Discovery card hover on
+"Market & competitors"; brief header chips (confidence + retrieved
+date) beside Refresh; partial banner; expandable sources with dates;
+pre-run cost notes on both modules; the confirm gate with live cost
+math and add/remove/re-search; per-competitor profile cards with
+confidence/date chips and "added by you" labeling; the side-by-side
+matrix (scrolls inside its container at 375px — no page overflow);
+the gap card with threats; a **live** identify error state (the credit
+outage produced a real InlineError + "Search again"); zero unexpected
+console errors across the session.
 
 ## 5. Could not verify / known gaps
 
-(filled in at the end)
+- **The live competitive profiling + gap run is blocked by an external
+  outage: the Anthropic API account ran out of credits mid-run**
+  ("Your credit balance is too low to access the Anthropic API",
+  surfaced via the new `intel_status.debug` field). Identification ran
+  live once end-to-end (3 searches; the web_search tool returned a
+  rate-limit/credit error that time and Ada honestly reported the space
+  as unmapped rather than inventing competitors — the anti-fabrication
+  behavior working under real failure). Profiling and gap analysis
+  never completed a live model call. Their UI surfaces were verified
+  with **clearly-labeled SQL fixtures** (content drawn from the real
+  brief's own evidence), which were **deleted afterward** and the
+  report recompiled so only real research persists. Once credits are
+  topped up: open EchoBrief → Market & competitors → Find competitors →
+  confirm → Research all → Map the gaps. Everything downstream of the
+  model call is already proven.
+- **This also means Ada's production chat/coaching is down until the
+  account is topped up** — every Anthropic-backed feature, not just
+  Run 5.
+- **Cost lesson recorded in model_usage**: pause_turn continuations
+  echo the full transcript back, so a 6-search research call reached
+  310k input tokens ($1.13). The new `maxContinuations` bounds cap
+  this, but web-search-heavy calls remain the platform's most expensive
+  surface — exactly why the budget, the per-call ceilings, and the
+  admin spend view exist.
+- **The intel run-status poll is client-pull, not push** — a PM who
+  closes the tab mid-run comes back to a finished brief (the worker
+  completes server-side), but there is no notification. Acceptable for
+  the current single-user reality.
+- **`market_intel_plan`'s fallback angles** (used when the plan call
+  fails or returns garbage) were never exercised live — the plan call
+  succeeded every run.
+- The **identify loading note** flashes too briefly to screenshot when
+  the worker fails instantly; the component is the same WorkingNote
+  verified across Run 4, and the market-brief loading note behaves
+  identically during real multi-minute runs.
+- The e2e test user (`run5-e2e-1783298142279@gmail.com`) and its
+  EchoBrief product were **deliberately kept** (not cascade-deleted as
+  in prior runs): the market brief is a real demo-able artifact, the
+  product is the ready stage for the blocked competitive click-through,
+  and deleting the user would cascade away the model_usage rows that
+  evidence the live runs.
+- `TRUNCATE`/`REFERENCES` grants on the new tables remain at Supabase
+  defaults for `authenticated` (as on every prior table; PostgREST
+  exposes no TRUNCATE path). Noted for a future blanket hardening pass,
+  not changed unilaterally in this run.
