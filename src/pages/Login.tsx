@@ -4,8 +4,10 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PasswordStrengthMeter } from '@/components/PasswordStrengthMeter';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 
@@ -140,6 +142,15 @@ export default function Login() {
       }
 
       if (mode === 'forgot') {
+        // Dynamic on purpose: window.location.origin resolves to
+        // localhost during dev and the real domain once deployed, so
+        // this never needs a hardcoded host. If reset links still land
+        // on the app root instead of /reset-password, the redirect
+        // itself is being requested correctly — the cause is almost
+        // certainly the Supabase project's Auth > URL Configuration
+        // "Redirect URLs" allow-list not including this origin/path.
+        // GoTrue silently falls back to the Site URL for any redirectTo
+        // it doesn't recognize, with no error surfaced to the client.
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin + '/reset-password',
         });
@@ -152,6 +163,8 @@ export default function Login() {
       }
 
       if (mode === 'magic') {
+        // Magic link intentionally goes to the app root (a sign-in, not
+        // a password change) — do not point this at /reset-password.
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
@@ -302,12 +315,13 @@ export default function Login() {
                             Forgot password?
                           </button>
                         </div>
+                      ) : mode === 'signup' ? (
+                        <PasswordStrengthMeter password={password} />
                       ) : null
                     }
                   >
-                    <Input
+                    <PasswordInput
                       id="password"
-                      type="password"
                       autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                       required
                       value={password}
@@ -325,9 +339,8 @@ export default function Login() {
                     label="Confirm password"
                     error={showError('confirmPassword')}
                   >
-                    <Input
+                    <PasswordInput
                       id="confirmPassword"
-                      type="password"
                       autoComplete="new-password"
                       required
                       value={confirmPassword}
