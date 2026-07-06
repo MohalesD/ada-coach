@@ -4,8 +4,10 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PasswordStrengthMeter } from '@/components/PasswordStrengthMeter';
 import { supabase } from '@/lib/supabase';
 
 const PASSWORD_MIN = 8;
@@ -155,8 +157,14 @@ export default function ResetPassword() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
+        // Supabase rejects a same-password update with `error_code:
+        // "same_password"` — a real, distinct failure that has nothing to
+        // do with the recovery link. Only unrecognized errors get the
+        // "link may have expired" copy; that message must stay accurate.
         setFormError(
-          'We could not update your password. The reset link may have expired — request a new one and try again.'
+          error.code === 'same_password'
+            ? 'Choose a password different from your current one.'
+            : 'We could not update your password. The reset link may have expired — request a new one and try again.'
         );
         return;
       }
@@ -287,9 +295,8 @@ export default function ResetPassword() {
               <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="password">New password</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={password}
@@ -298,6 +305,7 @@ export default function ResetPassword() {
                     disabled={isSubmitting}
                     aria-invalid={!!showError('password')}
                   />
+                  <PasswordStrengthMeter password={password} />
                   {showError('password') && (
                     <p className="text-xs text-destructive" role="alert">
                       {showError('password')}
@@ -307,9 +315,8 @@ export default function ResetPassword() {
 
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="confirmPassword">Confirm password</Label>
-                  <Input
+                  <PasswordInput
                     id="confirmPassword"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={confirmPassword}

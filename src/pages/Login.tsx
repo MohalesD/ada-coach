@@ -4,8 +4,10 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PasswordStrengthMeter } from '@/components/PasswordStrengthMeter';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 
@@ -313,12 +315,13 @@ export default function Login() {
                             Forgot password?
                           </button>
                         </div>
+                      ) : mode === 'signup' ? (
+                        <PasswordStrengthMeter password={password} />
                       ) : null
                     }
                   >
-                    <Input
+                    <PasswordInput
                       id="password"
-                      type="password"
                       autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                       required
                       value={password}
@@ -336,9 +339,8 @@ export default function Login() {
                     label="Confirm password"
                     error={showError('confirmPassword')}
                   >
-                    <Input
+                    <PasswordInput
                       id="confirmPassword"
-                      type="password"
                       autoComplete="new-password"
                       required
                       value={confirmPassword}
