@@ -7,6 +7,75 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-06 — Agent-Loop Redesign + Framework Library
+
+Branch `feat/agent-loop-discovery`. Source of truth:
+`C:/Users/mohal/.claude/plans/plan-mode-session-opus-lovely-whistle.md`
+(Opus Plan Mode session, approved 2026-07-06). Replaces the fixed 7-step
+`SPRINT_STEPS` script with a deterministic, PM-gated controller whose
+evaluate-and-decide step is model-driven. Adds a framework library (Mom
+Test, MoSCoW, RICE, North Star + proxy). Personality/multi-persona layer
+is OUT of scope (deferred with the backlog item).
+
+**On the record (corrected 2026-07-06):** Anthropic API + credits are
+CONFIRMED WORKING (live 200 to claude-haiku-4-5-20251001 with the
+`.env.local` key). An earlier "credits exhausted" claim was stale memory
+from the Run 5 log and was wrong — the loop CAN be runtime-tested once
+deployed. The only current gate is deployment: the auto-mode classifier
+blocked deploying the untested `discovery-turn` to production (correctly —
+exceeds "structural verification"); deploy needs explicit authorization.
+
+### Key decisions (Opus plan + advisor-reviewed)
+
+- **Shape = Option C:** loop state (`current_phase` + `coverage` +
+  `active_framework` + one `pending_action`) on `sessions`; an enumerable
+  action space; a Haiku evaluator recommends one action; code dispatches;
+  **direction changes are PM-gated proposals**, within-phase coaching flows
+  free. PM can initiate any action out of turn. Not a fixed script; not an
+  autonomous tool agent.
+- **Completion = prioritized-assumption coverage** (confirmed with Mo):
+  every prioritized assumption tested-or-deferred; riskiest have a
+  guide-or-declined; a success metric defined-or-declined. Recommendation
+  gate, PM-overridable both ways.
+- **New session state is service-owned** (controller writes via service
+  role, mirroring `stage`/`summary`) → no new `authenticated` UPDATE grants.
+- **RICE/MoSCoW don't fit `confidence`/`impact` (1–5)** → `assumptions.framework_scores jsonb`; existing columns stay for the default. Framework-score writes route through the controller (service) → assumptions grant not loosened.
+- **JTBD is not schema state** → success-metric call infers it from the transcript + validated assumptions.
+- **North Star anti-quiz = the readiness gate**, not the prompt. Offer the metric flow only once a validated assumption + inferable JTBD exist.
+- **Per-step functions orchestrated as capabilities**, not collapsed.
+- **`chat` untouched** — stays the plain non-sprint surface.
+
+### Foundation
+- [x] Migration `agent_loop_session_state`: `sessions` (+`current_phase` w/ CHECK,`coverage`,`active_framework`,`pending_action`), `assumptions` (+`framework_scores`); column-grant lockdown so loop state is service-only. Applied via MCP + verified (columns + authenticated UPDATE limited to status/current_step).
+- [x] `models.ts`: +`discovery_coach`,`discovery_evaluation`,`success_metric_candidates`; `agent_loop_model_routing` merge migration applied + verified (routes merged, prior keys preserved).
+- [x] `_shared/frameworks.ts`: static registry (Mom Test, confidence×impact, MoSCoW, RICE, North Star) + `publicFrameworks`/`computeRiceScore`.
+
+### Backend brain
+- [x] `_shared/loop.ts` — action space, gating (`isDirectionChanging`), `computeReadiness` (completion criteria), coverage merge.
+- [x] `_shared/coach.ts` — session-aware coach (phase focus + framework directive + assumption digest; never announces moves).
+- [x] `_shared/evaluator.ts` — Haiku structured evaluator over the fixed action space; non-linearity + define_success gate baked into the prompt.
+- [x] `_shared/capabilities/success-metric.ts` — grounded North Star, drift-risk per candidate, strict validation.
+- [x] `discovery-turn` — turn mode (persist→coach→evaluate→gate) + resolve/initiate; `pending_action` w/ `if_unmodified_since`; readiness/validated-assumption gates; capabilities via internal JWT-forwarded calls; `conclude` → existing sessions complete path. config.toml + deno.json.
+- [x] Verification: novel pure modules pass `deno check` clean; controller's only `deno check` errors match the existing shipped `sessions` function (repo-wide structural-client-typing, esbuild deploy doesn't type-check) — no new error classes.
+- [x] **DEPLOYED** (`discovery-turn`, user-authorized) + **LIVE-VERIFIED** end to end (2026-07-06, throwaway users, cascade-cleaned to 0 rows):
+  - Turn mode: stage classify → coach (real pressure-testing reply) + evaluator → correctly stayed within-phase for framing turns (no rubber-stamp jump); service-owned loop state persisted; 5 `model_usage` rows (Haiku) recorded → proves the `deno check` structural-typing warnings are harmless at runtime.
+  - Dispatch mode: PM-initiated `map_assumptions` → real Sonnet capability → 12 assumptions + coverage/phase update; `propose_prioritization framework=rice` → `active_framework` write; invalid framework → 400; coverage merged across actions; Sonnet call recorded ($0.013).
+  - `GET ?resource=frameworks` returns all 5.
+
+### ── CHECKPOINT: review backend contract before frontend rewrite ── ◀ HERE
+
+Flag (separate suggestion, not fixed — Scope Discipline): `_shared/models.ts` `SettingsClient` and `_shared/usage.ts` `InsertClient` structural types don't unify with a real `SupabaseClient` under `deno check` (PostgrestBuilder isn't a `Promise`). Pre-existing across all functions; a repo-wide fix would widen those helper param types.
+
+### Frontend + prioritization
+- [ ] Prioritization: write `framework_scores`/`active_framework`; AssumptionCard framework-aware scoring.
+- [ ] `Sprint.tsx`: dynamic action card from `pending_action`; framework library; `SprintProgress` → coverage; North Star candidate cards.
+- [ ] `discovery-api.ts` + `types/discovery.ts`; cutover for in-flight sessions; `npm run type-check`.
+
+### Review
+_(filled on completion)_
+
+---
+
 ## 🔨 In progress 2026-07-05 — Run 5: Market + Competitive Intelligence
 
 Branch `feat/discovery-platform-run5`. Source of truth:

@@ -27,7 +27,11 @@ export type CallType =
   | "market_intel_research"
   | "competitor_identification"
   | "competitor_profiling"
-  | "competitive_gap_analysis";
+  | "competitive_gap_analysis"
+  // Agent-Loop Redesign — the discovery coaching loop.
+  | "discovery_coach"
+  | "discovery_evaluation"
+  | "success_metric_candidates";
 
 export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   stage_classification: "claude-haiku-4-5",
@@ -54,6 +58,12 @@ export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
   competitor_identification: "claude-sonnet-4-6",
   competitor_profiling: "claude-sonnet-4-6",
   competitive_gap_analysis: "claude-sonnet-4-6",
+  // Agent-Loop Redesign. Haiku: the coaching reply (parity with the chat
+  // surface) and the per-turn next-action evaluator (cheap, structured).
+  // Sonnet 4.6: grounded North Star / proxy synthesis (reasoning-heavy).
+  discovery_coach: "claude-haiku-4-5",
+  discovery_evaluation: "claude-haiku-4-5",
+  success_metric_candidates: "claude-sonnet-4-6",
 };
 
 // USD per million tokens. Source: Anthropic pricing via the claude-api
