@@ -593,3 +593,14 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/competitive-gap/deno.json"
 entrypoint = "./functions/competitive-gap/index.ts"
+
+# Agent-Loop Redesign — the discovery loop controller. verify_jwt = false
+# mirrors the other discovery functions (browser-facing; auth enforced
+# in-function by requireUser). It also fans out to the per-step functions
+# (assumption-mapping, market-grounding, blind-spots, interview-guide,
+# sessions) by forwarding the caller's JWT.
+[functions.discovery-turn]
+enabled = true
+verify_jwt = false
+import_map = "./functions/discovery-turn/deno.json"
+entrypoint = "./functions/discovery-turn/index.ts"
