@@ -565,3 +565,31 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/portfolio-project-public/deno.json"
 entrypoint = "./functions/portfolio-project-public/index.ts"
+
+# Discovery platform Run 5 functions (market + competitive intelligence).
+# verify_jwt = false mirrors the other discovery functions (browser-facing;
+# auth enforced in-function by requireUser). None of these is public: every
+# request must carry a valid JWT past requireUser.
+[functions.market-intel]
+enabled = true
+verify_jwt = false
+import_map = "./functions/market-intel/deno.json"
+entrypoint = "./functions/market-intel/index.ts"
+
+[functions.competitive-intel]
+enabled = true
+verify_jwt = false
+import_map = "./functions/competitive-intel/deno.json"
+entrypoint = "./functions/competitive-intel/index.ts"
+
+[functions.competitor-profile]
+enabled = true
+verify_jwt = false
+import_map = "./functions/competitor-profile/deno.json"
+entrypoint = "./functions/competitor-profile/index.ts"
+
+[functions.competitive-gap]
+enabled = true
+verify_jwt = false
+import_map = "./functions/competitive-gap/deno.json"
+entrypoint = "./functions/competitive-gap/index.ts"

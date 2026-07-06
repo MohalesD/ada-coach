@@ -8,9 +8,16 @@ import { supabase } from '@/lib/supabase';
 import type {
   Assumption,
   BlindSpot,
+  Competitor,
+  CompetitorEvidence,
+  CompetitiveGap,
   Evidence,
+  IntelStatus,
   InterviewGuide,
+  MarketBrief,
+  MarketEvidence,
   Product,
+  ProfilingPlan,
   Report,
   ReportSnapshot,
   Session,
@@ -272,6 +279,149 @@ export async function listSessionDocuments(sessionId: string): Promise<SessionDo
     throw new DiscoveryApiError({ status: 500, code: 'documents_load_failed' });
   }
   return (data ?? []) as SessionDocument[];
+}
+
+// ── Market + competitive intelligence (Run 5) ─────────────────────────────
+// Mutations go through the intel Edge Functions (service-role writes,
+// budget enforcement, evidence grounding); reads that need no
+// orchestration go straight to PostgREST under select-own RLS.
+
+export async function getIntelSearchBudget(): Promise<number> {
+  const { budget } = await invoke<{ budget: number }>('market-intel');
+  return budget;
+}
+
+// The three search endpoints answer 202 and finish in a background
+// worker; poll products.intel_status for the outcome.
+export interface IntelRunStart {
+  started: boolean;
+  started_at: string;
+  budget?: number;
+}
+
+export async function generateMarketBrief(productId: string): Promise<IntelRunStart> {
+  return invoke('market-intel', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
+}
+
+// Poll until the background run that began at sinceIso reports done or
+// error. The timeout is generous (workers can run minutes); on timeout a
+// synthetic error status comes back with honest next-step copy.
+export async function pollIntelStatus(
+  productId: string,
+  sinceIso: string,
+  timeoutMs = 420_000
+): Promise<IntelStatus> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    const { data, error } = await supabase
+      .from('products')
+      .select('intel_status')
+      .eq('id', productId)
+      .maybeSingle();
+    if (!error) {
+      const status = (data?.intel_status ?? null) as IntelStatus | null;
+      if (status && status.started_at >= sinceIso && status.state !== 'running') {
+        return status;
+      }
+    }
+    if (Date.now() > deadline) {
+      return {
+        kind: 'market_brief',
+        state: 'error',
+        started_at: sinceIso,
+        message:
+          'This is taking longer than it should. Ada may still finish — reload the page in a minute, or run it again.',
+      };
+    }
+  }
+}
+
+export async function getMarketBrief(productId: string): Promise<MarketBrief | null> {
+  const { data, error } = await supabase
+    .from('market_briefs')
+    .select('*')
+    .eq('product_id', productId)
+    .maybeSingle();
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'brief_load_failed' });
+  }
+  return (data as MarketBrief | null) ?? null;
+}
+
+export async function listMarketEvidence(briefId: string): Promise<MarketEvidence[]> {
+  const { data, error } = await supabase
+    .from('market_evidence')
+    .select('*')
+    .eq('market_brief_id', briefId)
+    .order('retrieved_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'evidence_load_failed' });
+  }
+  return (data ?? []) as MarketEvidence[];
+}
+
+export async function identifyCompetitors(productId: string): Promise<IntelRunStart> {
+  return invoke('competitive-intel', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
+}
+
+export async function confirmCompetitors(
+  productId: string,
+  changes: { confirm: string[]; add: string[]; remove: string[] }
+): Promise<{ competitors: Competitor[]; profiling: ProfilingPlan }> {
+  return invoke('competitive-intel', {
+    method: 'PATCH',
+    body: { product_id: productId, ...changes },
+  });
+}
+
+export async function listCompetitors(productId: string): Promise<Competitor[]> {
+  const { data, error } = await supabase
+    .from('competitors')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'competitors_load_failed' });
+  }
+  return (data ?? []) as Competitor[];
+}
+
+export async function listCompetitorEvidence(
+  competitorIds: string[]
+): Promise<CompetitorEvidence[]> {
+  if (competitorIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('competitor_evidence')
+    .select('*')
+    .in('competitor_id', competitorIds)
+    .order('retrieved_at', { ascending: true });
+  if (error) {
+    throw new DiscoveryApiError({ status: 500, code: 'evidence_load_failed' });
+  }
+  return (data ?? []) as CompetitorEvidence[];
+}
+
+export async function profileCompetitor(
+  competitorId: string
+): Promise<IntelRunStart & { per_competitor_budget: number }> {
+  return invoke('competitor-profile', {
+    method: 'POST',
+    body: { competitor_id: competitorId },
+  });
+}
+
+export async function runGapAnalysis(productId: string): Promise<{ gap: CompetitiveGap }> {
+  return invoke('competitive-gap', {
+    method: 'POST',
+    body: { product_id: productId },
+  });
 }
 
 // ── Reports ────────────────────────────────────────────────────────────────

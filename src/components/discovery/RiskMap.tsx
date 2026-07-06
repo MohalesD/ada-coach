@@ -59,10 +59,14 @@ export default function RiskMap({
   assumptions,
   svgId,
   showLegend = true,
+  threatenedIds,
 }: {
   assumptions: RiskMapAssumption[];
   svgId?: string;
   showLegend?: boolean;
+  // Run 5: assumptions a competitive threat pressures (from the gap
+  // analysis) carry a flag marker + a legend badge.
+  threatenedIds?: Set<string>;
 }) {
   const cellCounts = new Map<string, number>();
   const midX = M.left + PW / 2;
@@ -144,16 +148,47 @@ export default function RiskMap({
         />
 
         {/* quadrant labels */}
-        <text x={M.left + 10} y={M.top + 18} fontSize={11} fontWeight={700} letterSpacing="0.08em" fill="#A93226">
+        <text
+          x={M.left + 10}
+          y={M.top + 18}
+          fontSize={11}
+          fontWeight={700}
+          letterSpacing="0.08em"
+          fill="#A93226"
+        >
           TEST THESE FIRST
         </text>
-        <text x={M.left + PW - 10} y={M.top + 18} textAnchor="end" fontSize={11} fontWeight={700} letterSpacing="0.08em" fill="#8B6324">
+        <text
+          x={M.left + PW - 10}
+          y={M.top + 18}
+          textAnchor="end"
+          fontSize={11}
+          fontWeight={700}
+          letterSpacing="0.08em"
+          fill="#8B6324"
+        >
           CORE BETS
         </text>
-        <text x={M.left + 10} y={M.top + PH - 10} fontSize={11} fontWeight={700} letterSpacing="0.08em" fill={ESPRESSO} opacity={0.45}>
+        <text
+          x={M.left + 10}
+          y={M.top + PH - 10}
+          fontSize={11}
+          fontWeight={700}
+          letterSpacing="0.08em"
+          fill={ESPRESSO}
+          opacity={0.45}
+        >
           PARK FOR NOW
         </text>
-        <text x={M.left + PW - 10} y={M.top + PH - 10} textAnchor="end" fontSize={11} fontWeight={700} letterSpacing="0.08em" fill="#4A7031">
+        <text
+          x={M.left + PW - 10}
+          y={M.top + PH - 10}
+          textAnchor="end"
+          fontSize={11}
+          fontWeight={700}
+          letterSpacing="0.08em"
+          fill="#4A7031"
+        >
           SAFE ENOUGH
         </text>
 
@@ -191,14 +226,7 @@ export default function RiskMap({
           return (
             <g key={a.id}>
               {a.is_prioritized && (
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={17}
-                  fill="none"
-                  stroke={ESPRESSO}
-                  strokeWidth={2}
-                />
+                <circle cx={cx} cy={cy} r={17} fill="none" stroke={ESPRESSO} strokeWidth={2} />
               )}
               <circle cx={cx} cy={cy} r={13} fill={CATEGORY_COLORS[a.category]} />
               <text
@@ -211,6 +239,14 @@ export default function RiskMap({
               >
                 {i + 1}
               </text>
+              {threatenedIds?.has(a.id) && (
+                <path
+                  d={`M ${cx + 9} ${cy - 17} l 11 6.5 l -11 6.5 z`}
+                  fill="#A34E0D"
+                  stroke={CREAM}
+                  strokeWidth={1.25}
+                />
+              )}
             </g>
           );
         })}
@@ -236,6 +272,16 @@ export default function RiskMap({
               />
               prioritized
             </span>
+            {threatenedIds && threatenedIds.size > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="inline-block h-0 w-0 border-y-[5px] border-l-[9px] border-y-transparent"
+                  style={{ borderLeftColor: '#A34E0D' }}
+                />
+                competitive threat
+              </span>
+            )}
           </div>
           <ol className="space-y-1 text-sm">
             {assumptions.map((a, i) => (
@@ -252,6 +298,11 @@ export default function RiskMap({
                   {a.is_prioritized && (
                     <span className="ml-1.5 rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       prioritized
+                    </span>
+                  )}
+                  {threatenedIds?.has(a.id) && (
+                    <span className="ml-1.5 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                      competitive threat
                     </span>
                   )}
                 </span>

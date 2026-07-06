@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Compass, FileText, Play, Plus } from 'lucide-react';
+import { ArrowLeft, Compass, FileText, Globe, Play, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,12 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  createProduct,
-  listProducts,
-  listSessions,
-  startSession,
-} from '@/lib/discovery-api';
+import { createProduct, listProducts, listSessions, startSession } from '@/lib/discovery-api';
 import type { Product, Session } from '@/types/discovery';
 
 const INTAKE_MAX = 50_000;
@@ -71,13 +66,9 @@ export default function Discovery() {
     return map;
   }, [sessions]);
 
-  const openSprints = useMemo(
-    () => sessions.filter((s) => s.status === 'in_progress'),
-    [sessions],
-  );
+  const openSprints = useMemo(() => sessions.filter((s) => s.status === 'in_progress'), [sessions]);
 
-  const productName = (id: string) =>
-    products.find((p) => p.id === id)?.name ?? 'Product';
+  const productName = (id: string) => products.find((p) => p.id === id)?.name ?? 'Product';
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -128,9 +119,7 @@ export default function Discovery() {
             </Link>
             <h1 className="font-display text-xl font-semibold tracking-tight">
               <span className="gradient-text">Ada</span>{' '}
-              <span className="text-sm font-medium text-muted-foreground">
-                · Discovery Sprints
-              </span>
+              <span className="text-sm font-medium text-muted-foreground">· Discovery Sprints</span>
             </h1>
           </div>
           {products.length > 0 && (
@@ -144,16 +133,13 @@ export default function Discovery() {
 
       <main className="mx-auto max-w-4xl px-6 py-8">
         {loading && (
-          <p className="py-16 text-center text-sm text-muted-foreground">
-            Loading your products…
-          </p>
+          <p className="py-16 text-center text-sm text-muted-foreground">Loading your products…</p>
         )}
 
         {!loading && loadError && (
           <div className="mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-center">
             <p className="text-sm text-destructive">
-              Couldn't load your products. Your work is safe — this is just a
-              connection hiccup.
+              Couldn't load your products. Your work is safe — this is just a connection hiccup.
             </p>
             <Button
               variant="outline"
@@ -187,8 +173,7 @@ export default function Discovery() {
                     {productName(s.product_id)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Last step: {(s.current_step ?? 'getting started').replace('_', ' ')} ·
-                    started{' '}
+                    Last step: {(s.current_step ?? 'getting started').replace('_', ' ')} · started{' '}
                     {new Date(s.created_at).toLocaleDateString([], {
                       month: 'short',
                       day: 'numeric',
@@ -204,19 +189,13 @@ export default function Discovery() {
         {/* Empty state (PRD: "Create your first product") */}
         {!loading && !loadError && products.length === 0 && (
           <div className="mx-auto max-w-md py-14 text-center">
-            <Compass
-              size={40}
-              strokeWidth={1.5}
-              className="mx-auto text-accent"
-              aria-hidden
-            />
+            <Compass size={40} strokeWidth={1.5} className="mx-auto text-accent" aria-hidden />
             <h2 className="mt-4 font-display text-2xl font-semibold tracking-tight">
               Create your first product
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              A product is the idea you're pressure-testing. Every Discovery
-              Sprint, assumption, and report hangs off it — and Ada remembers
-              what you learned between sprints.
+              A product is the idea you're pressure-testing. Every Discovery Sprint, assumption, and
+              report hangs off it — and Ada remembers what you learned between sprints.
             </p>
             <Button className="mt-5 gap-1.5" onClick={() => setNewOpen(true)}>
               <Plus size={15} aria-hidden />
@@ -261,9 +240,7 @@ export default function Discovery() {
                           >
                             <FileText size={13} aria-hidden />
                             Report ·{' '}
-                            {new Date(
-                              s.completed_at ?? s.created_at,
-                            ).toLocaleDateString([], {
+                            {new Date(s.completed_at ?? s.created_at).toLocaleDateString([], {
                               month: 'short',
                               day: 'numeric',
                             })}
@@ -274,27 +251,37 @@ export default function Discovery() {
                   )}
 
                   <div className="mt-4 flex-1" />
-                  {open ? (
+                  <div className="flex flex-col gap-2">
+                    {open ? (
+                      <Button
+                        variant="outline"
+                        className="gap-1.5"
+                        onClick={() => navigate(`/sprint/${open.id}`)}
+                      >
+                        <Play size={15} aria-hidden />
+                        Resume sprint
+                      </Button>
+                    ) : (
+                      <Button
+                        className="gap-1.5"
+                        onClick={() => {
+                          setIntakeFor(p);
+                          setIntake('');
+                        }}
+                      >
+                        <Compass size={15} aria-hidden />
+                        Start Discovery Sprint
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       className="gap-1.5"
-                      onClick={() => navigate(`/sprint/${open.id}`)}
+                      onClick={() => navigate(`/product/${p.id}/intel`)}
                     >
-                      <Play size={15} aria-hidden />
-                      Resume sprint
+                      <Globe size={15} aria-hidden />
+                      Market & competitors
                     </Button>
-                  ) : (
-                    <Button
-                      className="gap-1.5"
-                      onClick={() => {
-                        setIntakeFor(p);
-                        setIntake('');
-                      }}
-                    >
-                      <Compass size={15} aria-hidden />
-                      Start Discovery Sprint
-                    </Button>
-                  )}
+                  </div>
                 </div>
               );
             })}
@@ -308,8 +295,7 @@ export default function Discovery() {
           <DialogHeader>
             <DialogTitle className="font-display">New product</DialogTitle>
             <DialogDescription>
-              Name the idea you want to pressure-test. You can start a sprint
-              right after.
+              Name the idea you want to pressure-test. You can start a sprint right after.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -333,10 +319,7 @@ export default function Discovery() {
             />
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => void handleCreate()}
-              disabled={!newName.trim() || creating}
-            >
+            <Button onClick={() => void handleCreate()} disabled={!newName.trim() || creating}>
               {creating ? 'Creating…' : 'Create product'}
             </Button>
           </DialogFooter>
@@ -356,9 +339,8 @@ export default function Discovery() {
               Start a Discovery Sprint — {intakeFor?.name}
             </DialogTitle>
             <DialogDescription>
-              What's the idea, or where are you stuck? Ada reads this to meet
-              you where you actually are — fresh idea and mid-discovery get
-              coached differently.
+              What's the idea, or where are you stuck? Ada reads this to meet you where you actually
+              are — fresh idea and mid-discovery get coached differently.
             </DialogDescription>
           </DialogHeader>
           <div>
@@ -374,10 +356,7 @@ export default function Discovery() {
             </p>
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => void handleStart()}
-              disabled={!intake.trim() || starting}
-            >
+            <Button onClick={() => void handleStart()} disabled={!intake.trim() || starting}>
               {starting ? 'Ada is reading…' : 'Begin the sprint'}
             </Button>
           </DialogFooter>

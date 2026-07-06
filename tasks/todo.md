@@ -7,6 +7,129 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-05 — Run 5: Market + Competitive Intelligence
+
+Branch `feat/discovery-platform-run5`. Source of truth:
+`docs/prds/ada-discovery-coach-v3.md` (RUN 5) +
+`docs/prds/ada-discovery-coach-v3-addendum.md` (endpoints 9–13, JTBD
+6–9, Run 5 diagrams). Build log: `docs/logs/build-log-run5.md` (MD as
+we go; DOCX at the end).
+
+### Key decisions (made during recon; rationale in the build log)
+
+- **Four new tables** (`market_briefs`, `market_evidence`, `competitors`,
+  `competitor_evidence`): select-own RLS + service-role-only writes (the
+  `reports`/`blind_spots` pattern). Both `_evidence` tables:
+  `source_url text not null` + CHECK `^https?://` — a citation-less
+  claim is unstorable at the DB layer; code layer keeps only URLs the
+  search tool actually returned (Run 2 enforcement).
+- **Gap analysis** persists as `products.competitive_gap jsonb` +
+  `gap_generated_at`, with column-tightened INSERT/UPDATE grants on
+  `products` (authenticated keeps name/description only) — the
+  documented column-grant defense pattern. Report compile folds it
+  into snapshots (addendum: gap "writes into the product's report
+  snapshot"); no fifth table invented.
+- **Search budget**: `app_settings.intel_search_budget` (default 15,
+  config-driven). Market research call gets the whole budget; identify
+  gets `min(5, budget)`; profiling splits
+  `max(1, floor(budget / confirmed_count))` per competitor so a real
+  multi-competitor run cannot exceed the budget in total.
+  `callClaudeWithWebSearch` gains a hard ledger across pause_turn
+  continuations (max_uses recomputed from remaining; stop at 0).
+- **5 new call types, all Sonnet 4.6** (PRD: web_search always pairs
+  with Sonnet 4.6, never Haiku): `market_intel_plan`,
+  `market_intel_research`, `competitor_identification`,
+  `competitor_profiling`, `competitive_gap_analysis`. Recorded to
+  model_usage with `session_id: null` (Run 4 precedent) +
+  `web_search_requests`.
+- **Report feed**: snapshot v2 gains `market_intel` +
+  `competitive_intel` sections; gap threats carry
+  `related_assumption_ids` (server-validated against the product's
+  real assumptions) so the risk map can badge threatened assumptions.
+- **Honesty rules**: every stored claim carries `retrieved_at` and is
+  visibly dated in the UI; `confidence_label` CHECK
+  (strong/moderate/thin/none) on briefs and competitor profiles;
+  empty search → "unmapped/limited" states, never fabrication.
+
+### Backend
+
+- [x] Migration `market_briefs` (unique product_id, summary jsonb,
+      confidence_label CHECK, retrieved_at)
+- [x] Migration `market_evidence` (claim, source_url + CHECK,
+      query_used, retrieved_at)
+- [x] Migration `competitors` (name, confirmed, added_by, positioning,
+      pricing_signal, feature_notes jsonb, recent_moves,
+      confidence_label, retrieved_at, profiled_at)
+- [x] Migration `competitor_evidence` (same CHECK shape)
+- [x] Migration `products` gap columns + column-tightened grants
+- [x] Migration `intel_search_budget` seed + `model_routing` merge
+- [x] Migration `products.intel_status` (added mid-run — see review)
+- [x] `_shared/models.ts`: +5 call types
+- [x] `_shared/anthropic.ts`: budget ledger + maxContinuations bound
+- [x] `_shared/intel-config.ts`: budget reader + per-competitor split +
+      per-call latency ceilings + honestConfidence
+- [x] `_shared/intel-status.ts`: background-run status cell helpers
+- [x] Edge Function `market-intel` (plan → bounded research → store;
+      202 + background worker)
+- [x] Edge Function `competitive-intel` (POST identify worker / PATCH
+      confirm gate)
+- [x] Edge Function `competitor-profile` (one competitor per call,
+      202 + worker)
+- [x] Edge Function `competitive-gap` (synchronous synthesis over
+      stored evidence)
+- [x] `report/index.ts`: snapshot v2 with intel sections
+- [x] `config.toml`: pin verify_jwt for the 4 new functions
+- [x] Vitest (42/42): routing + Fable/Mythos refusal; budget math
+
+### Frontend (amber identity, tokens only)
+
+- [x] `types/discovery.ts` + `discovery-api.ts` extensions (incl.
+      pollIntelStatus)
+- [x] `/product/:productId/intel` page with both modules
+- [x] Discovery product card: "Market & competitors" entry
+- [x] ReportPage + ShareReport + report-pdf intel sections; risk-map
+      threat badges
+
+### Verification (the /goal's done criteria)
+
+- [x] Two-user probe: zero cross-user reads on all 4 new tables, both
+      directions (+ write paths and the gap column proven closed)
+- [x] Deliberate fabricated-citation INSERTs rejected by the CHECKs
+      (5/5: NULL, empty, prose, ftp:// — both evidence tables)
+- [x] Deliberate cap-exceed attempts: brief at budget 3 recorded
+      exactly 3 searches (partial-marked); identify ≤ 3; confirming 4
+      competitors under budget 3 → 400 too_many_competitors (live API)
+- [x] One real market brief live (twice — budget 3 and budget 15/cap 6),
+      model_usage rows read directly, all 7 costs recomputed exactly
+- [~] Competitive analysis live run BLOCKED mid-run: the Anthropic
+      account ran out of API credits ("credit balance is too low").
+      Identification ran live once (3 searches, honest unmapped when
+      the search tool errored); profiling + gap never completed a live
+      model call. UI verified with labeled fixtures, then cleaned up.
+      Needs: credits topped up, then one identify → confirm → profile
+      → gap click-through on EchoBrief.
+- [x] Playwright at 375px + 1440px: hover, loading, error states
+      (identify error captured live; gate cost math; matrix; gap view;
+      report threat badges; logged-out share at 375)
+- [x] `npm run type-check`, Vitest 42/42, production build clean
+- [x] Build log MD + DOCX; commit; PR
+
+### Review
+
+Shipped the full Run 5 scope with two mid-run architectural corrections
+forced by live evidence: (1) synchronous web-search calls die at the
+edge gateway's 150s idle timeout, so all three search endpoints became
+202 + background worker + status-cell polling (new
+`products.intel_status`); (2) pause_turn continuations multiply both
+latency and input-token cost (a 6-search brief hit 310k input tokens),
+so per-call search ceilings and continuation bounds now sit on top of
+the per-run budget. Every DB-layer done-criterion passed. The single
+open item is the live competitive profiling/gap run, blocked by the
+Anthropic account's credit balance — external, one click-through once
+topped up.
+
+---
+
 ## ✅ Shipped 2026-07-05 — Run 4: Intake router + Portfolio coaching track
 
 Branch `feat/discovery-platform-run4`. Source of truth:
