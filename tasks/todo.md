@@ -69,9 +69,10 @@ Flag (separate suggestion, not fixed — Scope Discipline): `_shared/models.ts` 
 ### Frontend + prioritization  (branch: feat/discovery-frontend, off merged backend)
 - [x] `types/discovery.ts`: extended `Session` (+4 loop fields) & `Assumption` (+`framework_scores`); added DiscoveryGoal/GoalStatus/Coverage/ActionType/FrameworkSlot/FrameworkScoring/PublicFramework/MetricCandidate/PendingAction/DiscoveryTurnResponse/Rice+MoscowScores. **`npm run type-check` clean.**
 - [x] `discovery-api.ts`: `getFrameworks`, `sendDiscoveryTurn`, `resolveDiscoveryAction`, `initiateDiscoveryAction` + `DispatchResult`.
-- [ ] `Sprint.tsx`: send turns via `sendDiscoveryTurn`; render coach reply; **dynamic action card from `pending_action`** (framework proposal w/ teaching expander; North Star candidate cards; plain proposals; revisit); framework library entry (browse + initiate out of turn); coverage indicator.
-- [ ] `SprintProgress.tsx`: fixed steps → coverage indicator over goals.
-- [ ] Cutover: in-flight sessions ignore `current_step` → controller sets `current_phase='frame'` on first turn (already handled server-side).
+- [→] **HANDED OFF TO FABLE** (2026-07-06). Execution brief: `docs/discovery-frontend-fable-brief.md`. Remaining scope (Sprint.tsx loop integration, coverage indicator, framework + North Star proposal cards, cutover) is Fable's to build against the type-checked contract (commit f084be0). Open design question (chat-first v1 vs preserving rich panels) stated as recommended default, left reconsiderable. Creative direction handed to Fable. Boundary: frontend only, no Edge Function changes.
+- [ ] `Sprint.tsx`: (Fable) dynamic action card from `pending_action`; framework proposal w/ teaching expander; North Star candidate cards; framework library; via `sendDiscoveryTurn`/`resolveDiscoveryAction`/`initiateDiscoveryAction`.
+- [ ] `SprintProgress.tsx`: (Fable) fixed steps → coverage indicator over goals.
+- [ ] Cutover: (Fable) `current_phase == null` → treat as `'frame'`; controller repopulates loop state on first turn.
 - [ ] **PHASED / FLAGGED:** RICE/MoSCoW *per-assumption* scoring persistence needs a small controller `score` write-path (framework_scores is service-only) + redeploy. Default confidence×impact scoring already works via existing `updateAssumption`. Framework *selection* (active_framework) is fully working.
 
 ### Review
