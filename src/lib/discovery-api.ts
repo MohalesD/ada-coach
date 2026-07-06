@@ -5,6 +5,7 @@
 
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { isEdgeAuthError, recoverSession } from '@/lib/session-recovery';
 import type {
   ActionType,
   Assumption,
@@ -52,12 +53,25 @@ async function invoke<T>(
     method: 'GET',
   }
 ): Promise<T> {
-  const { data, error } = await supabase.functions.invoke<T>(path, {
-    method: options.method,
-    body: options.body,
-  });
-  if (error) {
+  // At most two attempts: a 401 on the first means the access token was
+  // rejected, so we refresh the session once and retry with a fresh token. A
+  // dead session (refresh failed) redirects to /login instead of erroring.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await supabase.functions.invoke<T>(path, {
+      method: options.method,
+      body: options.body,
+    });
+    if (!error) return data as T;
+
     if (error instanceof FunctionsHttpError) {
+      if (attempt === 0 && isEdgeAuthError(error)) {
+        if (await recoverSession()) continue; // refreshed — retry once
+        throw new DiscoveryApiError({
+          status: 401,
+          code: 'session_expired',
+          detail: 'Your session expired. Please sign in again.',
+        });
+      }
       const payload = (await error.context.json().catch(() => null)) as Record<
         string,
         unknown
@@ -76,7 +90,8 @@ async function invoke<T>(
       retryable: true,
     });
   }
-  return data as T;
+  // Unreachable: the loop returns or throws on every path.
+  throw new DiscoveryApiError({ status: 0, code: 'network_error', retryable: true });
 }
 
 // ── Products ───────────────────────────────────────────────────────────────

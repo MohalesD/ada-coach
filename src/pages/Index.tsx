@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { isEdgeAuthError, recoverSession } from '@/lib/session-recovery';
 import { isAdmin, useAuth, type UserProfile } from '@/lib/auth-context';
 import type { User } from '@supabase/supabase-js';
 import ConversationSidebar from '@/components/ConversationSidebar';
@@ -56,6 +57,17 @@ const ERROR_MESSAGE = 'Ada is taking a moment. Please try again.';
 const SUMMARY_SENTINEL = '__SUMMARY__';
 
 type ConversationMeta = { id: string; title: string | null; created_at: string };
+
+// Chat invoke with session-expiry recovery: on a 401 (rejected token) refresh
+// once and retry with a fresh token; a truly dead session redirects to /login
+// via recoverSession() rather than surfacing a misleading "connection" error.
+async function invokeChat(body: { message: string; conversation_id?: string }) {
+  const res = await supabase.functions.invoke<ChatResponse>('chat', { body });
+  if (res.error && isEdgeAuthError(res.error) && (await recoverSession())) {
+    return supabase.functions.invoke<ChatResponse>('chat', { body });
+  }
+  return res;
+}
 
 // ─── Scenarios ────────────────────────────────────────────────────────────────
 
@@ -213,11 +225,9 @@ export default function Index() {
     setIsLoading(true);
 
     try {
-      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>('chat', {
-        body: {
-          message: trimmed,
-          conversation_id: conversationId ?? undefined,
-        },
+      const { data, error: invokeErr } = await invokeChat({
+        message: trimmed,
+        conversation_id: conversationId ?? undefined,
       });
 
       if (invokeErr || !data || data.error || !data.reply) {
@@ -278,11 +288,9 @@ export default function Index() {
     setError(null);
     setIsSummarizing(true);
     try {
-      const { data, error: invokeErr } = await supabase.functions.invoke<ChatResponse>('chat', {
-        body: {
-          message: SUMMARY_SENTINEL,
-          conversation_id: conversationId,
-        },
+      const { data, error: invokeErr } = await invokeChat({
+        message: SUMMARY_SENTINEL,
+        conversation_id: conversationId,
       });
 
       if (invokeErr || !data || data.error || !data.reply) {
