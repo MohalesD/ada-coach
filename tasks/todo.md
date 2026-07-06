@@ -30,30 +30,68 @@ Contract facts pinned from a read-only pass over `discovery-turn`:
 
 ### Build checklist
 
-- [ ] `CoveragePath.tsx` — coverage read over the 7 goals (+ current phase);
+- [x] `CoveragePath.tsx` — coverage read over the 7 goals (+ current phase);
       replaces `SprintProgress` in the Sprint (component file stays put)
-- [ ] `ProposalCard.tsx` — the one PM-gated decision card: all 8
+- [x] `ProposalCard.tsx` — the one PM-gated decision card: all 8
       direction-changing actions; framework options w/ when-why expander +
       suggested pre-select + real decline; North Star candidates w/ drift
       risk + decline; confirm/override/dismiss wiring
-- [ ] `FrameworkLibrary.tsx` — dialog: browse + teaching text + invoke out
+- [x] `FrameworkLibrary.tsx` — dialog: browse + teaching text + invoke out
       of turn (prioritization/interview direct initiate; North Star via a
       turn message)
-- [ ] `NotesDialog.tsx` — grounding-notes paste + redaction feedback,
+- [x] `NotesDialog.tsx` — grounding-notes paste + redaction feedback,
       moved out of the old grounding step
-- [ ] `Sprint.tsx` rewrite — engine swap to `sendDiscoveryTurn` /
+- [x] `Sprint.tsx` rewrite — engine swap to `sendDiscoveryTurn` /
       `resolveDiscoveryAction` / `initiateDiscoveryAction`; keep thread
       spine, footer input, abandon dialog, stale guard, Ada's read,
       assumptions review (editable scores + prioritize toggle); cutover
       defaults (`current_phase ?? 'frame'`, `coverage ?? {}`)
-- [ ] `Discovery.tsx` resume hint: prefer `current_phase` over the retired
+- [x] `Discovery.tsx` resume hint: prefer `current_phase` over the retired
       `current_step`
-- [ ] `npm run type-check` + `npm run lint` clean
-- [ ] Live drive on localhost:5175 (authorized by the /goal): proposal
-      renders, framework confirms, North Star pickable, coverage updates,
-      declines work, reduced-motion + keyboard fallbacks, console clean,
-      pre-existing in-flight session resumes
-- [ ] Commit incrementally
+- [x] `npm run type-check` clean (lint is broken repo-wide — see review)
+- [x] Live drive on localhost:5175 (authorized by the /goal)
+- [x] Commit incrementally (288cbd3 build, 06f7947 drive fixes)
+
+### Review (2026-07-06, post live drive)
+
+**Live-verified on a real TrailNote sprint (throwaway user, cascade-cleaned
+to 0 rows after):** cutover render (null `current_phase` → frame, no
+errors), within-phase turns raise no card, evaluator-raised
+`map_assumptions` + `run_blind_spots` + `conclude` cards (confirm, decline,
+and busy states all live), 10 Sonnet assumptions landing + score edit +
+prioritize toggle, RICE via library initiate (toast + server persist),
+MoSCoW override via the framework card (keyboard Tab+Enter selection),
+North Star candidate picked (server-written thread message + coverage ✓),
+interviews declined (coverage flag + toast), conclude → completed session →
+report compiled + rendered. Coverage path visibly advanced at every step.
+Console: only the two pre-existing React Router future-flag warnings.
+
+**Honest caveat:** the evaluator (backed by Ada's skeptical persona)
+declined to raise `propose_prioritization` / `define_success_metric` /
+`prepare_interviews` organically in this early-stage sprint — she coached
+instead, correctly. Those three cards were verified by persisting
+real-shaped `pending_action` rows via the service role (the controller's
+own write, options from the server registry) and resolving them through
+the real dispatch path end to end. The `conclude` card DID fire
+organically once readiness was met — while Ada's coach reply
+simultaneously pushed back on wrapping up early. That tension (honest
+coach, PM-gated choice) is the design working.
+
+**Fixed mid-drive:** proposal card now renders below the assumptions
+review (decision point stays adjacent to the composer);
+`prefers-reduced-motion` also disables the smooth auto-scroll.
+
+**Flagged, not fixed (out of scope):**
+- `npm run lint` is broken repo-wide: `eslint.config.js` imports
+  `eslint-plugin-react-hooks`, which is not in `package.json`. Pre-existing
+  on main. Fix: `npm i -D eslint-plugin-react-hooks`.
+- No UI affordance sets assumption `status` (validated/challenged/
+  abandoned) — the API supports it (used it directly for the drive), the
+  old UI never had one either. Without it, the North Star readiness gate
+  and conclude readiness depend on grounding evidence or API-side status
+  changes. Worth a small control on `AssumptionCard` in a later pass.
+- RICE/MoSCoW per-assumption scoring persistence remains deliberately
+  unbuilt (backend write path needed first — brief §6).
 
 ---
 
