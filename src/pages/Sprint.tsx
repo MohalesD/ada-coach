@@ -227,7 +227,8 @@ export default function Sprint() {
   }, [sessionId, navigate]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    bottomRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'end' });
   }, [messages.length, pendingAction, turnBusy]);
 
   // ── The loop: turns ───────────────────────────────────────────────────────
@@ -568,15 +569,6 @@ export default function Sprint() {
             </section>
           )}
 
-          {!stale && pendingAction && (
-            <ProposalCard
-              key={`${pendingAction.action}-${pendingAction.rationale}`}
-              proposal={pendingAction}
-              busy={dispatch?.source === 'card'}
-              onResolve={handleResolve}
-            />
-          )}
-
           {!stale && assumptions.length > 0 && (
             <section aria-label="Your assumptions" className="mt-1">
               <button
@@ -631,6 +623,18 @@ export default function Sprint() {
                 </div>
               )}
             </section>
+          )}
+
+          {/* The decision point stays last — nearest the composer, where the
+              conversation actually is. Reference material (assumptions) sits
+              above; Ada's outstanding proposal is always the closest card. */}
+          {!stale && pendingAction && (
+            <ProposalCard
+              key={`${pendingAction.action}-${pendingAction.rationale}`}
+              proposal={pendingAction}
+              busy={dispatch?.source === 'card'}
+              onResolve={handleResolve}
+            />
           )}
 
           <div ref={bottomRef} />
