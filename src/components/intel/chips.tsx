@@ -54,6 +54,21 @@ export function RetrievedChip({ iso, prefix = 'Retrieved' }: { iso: string; pref
 // sees the cost of a run BEFORE starting it.
 export const SEARCH_FEE_USD = 0.01;
 
+// Per-run search allocations, mirrored from _shared/intel-config.ts so
+// the cost notes the PM reads match what the server will actually spend.
+export function briefRunSearches(budget: number): number {
+  return Math.max(1, Math.min(6, budget));
+}
+
+export function identifyRunSearches(budget: number): number {
+  return Math.max(1, Math.min(3, budget));
+}
+
+export function perCompetitorSearches(budget: number, count: number): number {
+  if (count < 1 || count > budget) return 0;
+  return Math.min(5, Math.floor(budget / count));
+}
+
 export function searchFeeNote(maxSearches: number): string {
   const fee = (maxSearches * SEARCH_FEE_USD).toFixed(2);
   return `Uses up to ${maxSearches} web search${maxSearches === 1 ? '' : 'es'} (~$${fee} in search fees, plus model tokens).`;

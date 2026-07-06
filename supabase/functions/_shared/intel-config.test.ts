@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  briefSearchBudget,
   DEFAULT_INTEL_SEARCH_BUDGET,
   honestConfidence,
   identifySearchBudget,
@@ -29,23 +30,37 @@ describe("parseIntelSearchBudget", () => {
   });
 });
 
-describe("identifySearchBudget", () => {
-  it("caps identification at 5 searches", () => {
-    expect(identifySearchBudget(15)).toBe(5);
-    expect(identifySearchBudget(100)).toBe(5);
+describe("briefSearchBudget — latency-capped per call", () => {
+  it("caps a single brief run at 6 searches", () => {
+    expect(briefSearchBudget(15)).toBe(6);
+    expect(briefSearchBudget(100)).toBe(6);
   });
 
   it("never exceeds a smaller total budget", () => {
-    expect(identifySearchBudget(3)).toBe(3);
+    expect(briefSearchBudget(3)).toBe(3);
+    expect(briefSearchBudget(1)).toBe(1);
+  });
+});
+
+describe("identifySearchBudget", () => {
+  it("caps identification at 3 searches (latency ceiling)", () => {
+    expect(identifySearchBudget(15)).toBe(3);
+    expect(identifySearchBudget(100)).toBe(3);
+  });
+
+  it("never exceeds a smaller total budget", () => {
+    expect(identifySearchBudget(2)).toBe(2);
     expect(identifySearchBudget(1)).toBe(1);
   });
 });
 
 describe("perCompetitorSearchBudget — the cap must hold across the run", () => {
-  it("divides the budget across confirmed competitors", () => {
+  it("divides the budget across confirmed competitors, latency-capped at 5", () => {
     expect(perCompetitorSearchBudget(15, 3)).toBe(5);
     expect(perCompetitorSearchBudget(15, 4)).toBe(3);
     expect(perCompetitorSearchBudget(15, 15)).toBe(1);
+    expect(perCompetitorSearchBudget(15, 1)).toBe(5);
+    expect(perCompetitorSearchBudget(15, 2)).toBe(5);
     expect(perCompetitorSearchBudget(2, 2)).toBe(1);
   });
 

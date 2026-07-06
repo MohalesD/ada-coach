@@ -15,9 +15,18 @@
 
 export const DEFAULT_INTEL_SEARCH_BUDGET = 15;
 
-// Identification is cheap discovery, not deep research — it never needs
-// the whole budget. 5 mirrors Run 2's market-grounding search cap.
-export const IDENTIFY_SEARCH_CAP = 5;
+// ── Per-CALL latency ceilings ──────────────────────────────────────────
+// The Supabase edge gateway kills a response after 150s idle, and each
+// pause_turn continuation is a full extra model turn — verified live on
+// 2026-07-05 when a 3-search identify call breached 150s and was cut.
+// So beyond the per-RUN budget (cost), every single HTTP call also gets
+// a small search ceiling (latency): a call that wants more coverage ends
+// partial and the PM continues with a refresh/retry, which is the PRD's
+// own hit-the-cap-mid-run behavior. Run 2/3 data: 5-search calls landed
+// in 60–90s.
+export const BRIEF_CALL_SEARCH_CAP = 6;
+export const IDENTIFY_SEARCH_CAP = 3;
+export const PROFILE_CALL_SEARCH_CAP = 5;
 
 export function parseIntelSearchBudget(
   raw: string | null | undefined,
@@ -29,6 +38,12 @@ export function parseIntelSearchBudget(
   return DEFAULT_INTEL_SEARCH_BUDGET;
 }
 
+// What one brief-research run may actually spend: the config budget,
+// latency-capped per call.
+export function briefSearchBudget(totalBudget: number): number {
+  return Math.max(1, Math.min(BRIEF_CALL_SEARCH_CAP, totalBudget));
+}
+
 export function identifySearchBudget(totalBudget: number): number {
   return Math.max(1, Math.min(IDENTIFY_SEARCH_CAP, totalBudget));
 }
@@ -36,12 +51,17 @@ export function identifySearchBudget(totalBudget: number): number {
 // Per-competitor allocation for a profiling run. Returns 0 when the
 // confirmed count exceeds the budget (the confirm endpoint rejects that
 // case up front with too_many_competitors, so profiling never sees it).
+// The run total stays within the budget (count × allocation ≤ budget);
+// the per-call ceiling only ever lowers a slice, never raises it.
 export function perCompetitorSearchBudget(
   totalBudget: number,
   confirmedCount: number,
 ): number {
   if (confirmedCount < 1 || confirmedCount > totalBudget) return 0;
-  return Math.floor(totalBudget / confirmedCount);
+  return Math.min(
+    PROFILE_CALL_SEARCH_CAP,
+    Math.floor(totalBudget / confirmedCount),
+  );
 }
 
 // ── Honest confidence labeling ─────────────────────────────────────────

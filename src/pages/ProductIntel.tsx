@@ -16,7 +16,7 @@ import CompetitorGate from '@/components/intel/CompetitorGate';
 import CompetitorProfileCard from '@/components/intel/CompetitorProfileCard';
 import ComparisonMatrix from '@/components/intel/ComparisonMatrix';
 import GapAnalysisCard from '@/components/intel/GapAnalysisCard';
-import { searchFeeNote } from '@/components/intel/chips';
+import { briefRunSearches, identifyRunSearches, searchFeeNote } from '@/components/intel/chips';
 import {
   confirmCompetitors,
   DiscoveryApiError,
@@ -28,6 +28,7 @@ import {
   listCompetitorEvidence,
   listCompetitors,
   listMarketEvidence,
+  pollIntelStatus,
   profileCompetitor,
   runGapAnalysis,
 } from '@/lib/discovery-api';
@@ -118,10 +119,19 @@ export default function ProductIntel() {
     setGenerating(true);
     setMarketError(null);
     try {
-      const res = await generateMarketBrief(productId);
-      setBrief(res.brief);
-      setMarketEvidence(res.evidence);
-      if (typeof res.budget === 'number') setBudget(res.budget);
+      // 202 + background worker: kick the run, then poll the status cell.
+      const run = await generateMarketBrief(productId);
+      if (typeof run.budget === 'number') setBudget(run.budget);
+      const status = await pollIntelStatus(productId, run.started_at);
+      if (status.state === 'error') {
+        setMarketError(
+          status.message ?? "The market research didn't finish. Nothing was saved — try again."
+        );
+        return;
+      }
+      const b = await getMarketBrief(productId);
+      setBrief(b);
+      setMarketEvidence(b ? await listMarketEvidence(b.id) : []);
     } catch (err) {
       setMarketError(
         errorMessage(err, "The market research didn't finish. Nothing was saved — try again.")
@@ -136,12 +146,19 @@ export default function ProductIntel() {
     setIdentifyError(null);
     setUnmappedNote(null);
     try {
-      const res = await identifyCompetitors(productId);
-      setCompetitors(res.competitors);
-      if (typeof res.budget === 'number') setBudget(res.budget);
-      if (res.unmapped) {
+      const run = await identifyCompetitors(productId);
+      if (typeof run.budget === 'number') setBudget(run.budget);
+      const status = await pollIntelStatus(productId, run.started_at);
+      if (status.state === 'error') {
+        setIdentifyError(status.message ?? "The competitor search didn't finish. Try again.");
+        return;
+      }
+      const comps = await listCompetitors(productId);
+      setCompetitors(comps);
+      setCompetitorEvidence(await listCompetitorEvidence(comps.map((c) => c.id)));
+      if (status.unmapped) {
         setUnmappedNote(
-          res.note ??
+          status.note ??
             'This space looks unmapped from here — the searches turned up no clear competitors. Add the ones you know about; Ada will never invent one.'
         );
       }
@@ -177,12 +194,23 @@ export default function ProductIntel() {
       return next;
     });
     try {
-      const res = await profileCompetitor(competitorId);
-      setCompetitors((prev) => prev.map((c) => (c.id === competitorId ? res.competitor : c)));
-      setCompetitorEvidence((prev) => [
-        ...prev.filter((e) => e.competitor_id !== competitorId),
-        ...res.evidence,
-      ]);
+      const run = await profileCompetitor(competitorId);
+      const status = await pollIntelStatus(productId, run.started_at);
+      if (status.state === 'error') {
+        setProfileErrors((prev) =>
+          new Map(prev).set(
+            competitorId,
+            status.message ??
+              "This competitor's research didn't finish. Nothing was saved — retry when ready."
+          )
+        );
+        return;
+      }
+      const comps = await listCompetitors(productId);
+      setCompetitors(comps);
+      setCompetitorEvidence((prev) => [...prev.filter((e) => e.competitor_id !== competitorId)]);
+      const fresh = await listCompetitorEvidence([competitorId]);
+      setCompetitorEvidence((prev) => [...prev, ...fresh]);
     } catch (err) {
       setProfileErrors((prev) =>
         new Map(prev).set(
@@ -202,8 +230,13 @@ export default function ProductIntel() {
     }
   };
 
-  const handleProfileAll = () => {
-    for (const c of unprofiled) void handleProfile(c.id);
+  // Sequential on purpose: intel runs are serialized per product (one
+  // background worker at a time), and the PM watches each card land.
+  const handleProfileAll = async () => {
+    const targets = [...unprofiled];
+    for (const c of targets) {
+      await handleProfile(c.id);
+    }
   };
 
   const handleGap = async () => {
@@ -276,7 +309,7 @@ export default function ProductIntel() {
             <MarketBriefCard
               brief={brief}
               evidence={marketEvidence}
-              budget={budget}
+              budget={budget !== null ? briefRunSearches(budget) : null}
               generating={generating}
               error={marketError}
               onGenerate={() => void handleGenerateBrief()}
@@ -299,7 +332,7 @@ export default function ProductIntel() {
                       <Button
                         size="sm"
                         className="gap-1.5"
-                        onClick={handleProfileAll}
+                        onClick={() => void handleProfileAll()}
                         disabled={profilingIds.size > 0}
                       >
                         <Search size={13} aria-hidden />
@@ -326,7 +359,7 @@ export default function ProductIntel() {
                     </p>
                     {budget !== null && (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Identification {searchFeeNote(Math.min(5, budget)).toLowerCase()}
+                        Identification {searchFeeNote(identifyRunSearches(budget)).toLowerCase()}
                       </p>
                     )}
                     <Button className="mt-4 gap-1.5" onClick={() => void handleIdentify()}>

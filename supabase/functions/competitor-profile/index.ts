@@ -2,12 +2,18 @@
 // Addendum endpoint 12: deep-profile ONE confirmed competitor per call —
 // positioning, pricing signals, feature surface, recent moves — every
 // claim source-cited. One competitor per call on purpose (the Run 2
-// market-grounding shape): web search is slow, Edge Functions have
-// wall-clock limits, and per-competitor calls give the PM per-card retry.
+// market-grounding shape): per-competitor calls give the PM per-card
+// retry granularity.
+//
+// Latency shape: live search calls routinely exceed the edge gateway's
+// 150s idle window, so POST answers 202 and the research finishes in a
+// background worker; the client polls products.intel_status (which also
+// serializes intel runs per product — the UI profiles a list
+// sequentially).
 //
 // Cost cap: the run's budget is divided across the confirmed competitors
-// at call time (floor(budget / confirmed_count), and the confirm gate
-// already refused more competitors than the budget covers), so the whole
+// at call time (latency-capped per call), and the confirm gate already
+// refused more competitors than the budget covers — so the whole
 // profiling run cannot exceed the configured budget in total.
 //
 // Only URLs the search tool actually returned become evidence; the DB
@@ -16,6 +22,7 @@
 // profile and evidence.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   corsHeaders,
   getServiceClient,
@@ -35,6 +42,10 @@ import {
   perCompetitorSearchBudget,
 } from "../_shared/intel-config.ts";
 import type { ConfidenceLabel } from "../_shared/intel-config.ts";
+import { isRunActive, setIntelStatus } from "../_shared/intel-status.ts";
+import type { IntelStatus } from "../_shared/intel-status.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 const MAX_EVIDENCE_ROWS = 8;
 const CLAIM_MAX = 500;
@@ -100,6 +111,160 @@ function validateProfile(parsed: unknown): ValidatedProfile | null {
   };
 }
 
+// Background worker: search → validate → ground → store the profile and
+// its evidence. Reports through products.intel_status.
+async function runProfiling(opts: {
+  service: SupabaseClient;
+  anthropicKey: string;
+  userId: string;
+  productId: string;
+  competitor: { id: string; name: string };
+  productName: string;
+  productDescription: string | null;
+  perCompetitor: number;
+  startedAt: string;
+}): Promise<void> {
+  const {
+    service,
+    anthropicKey,
+    userId,
+    productId,
+    competitor,
+    productName,
+    productDescription,
+    perCompetitor,
+    startedAt,
+  } = opts;
+  const fail = (message: string) =>
+    setIntelStatus(service, productId, {
+      kind: "competitor_profile",
+      state: "error",
+      competitor_id: competitor.id,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      message,
+    });
+
+  try {
+    const model = await getModelFor(service, "competitor_profiling");
+    const result = await callClaudeWithWebSearch({
+      apiKey: anthropicKey,
+      model,
+      system: PROFILE_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: [
+            `Competitor to profile: ${competitor.name}`,
+            `The PM's product (for competitive relevance): ${productName}`,
+            productDescription ? `Product description: ${productDescription}` : null,
+            "",
+            `Search the web (budget: ${perCompetitor} searches) and profile this competitor.`,
+          ]
+            .filter((l) => l !== null)
+            .join("\n"),
+        },
+      ],
+      maxTokens: 4000,
+      maxSearches: perCompetitor,
+      maxContinuations: 2,
+    });
+
+    await recordModelUsage(service, {
+      userId,
+      sessionId: null,
+      callType: "competitor_profiling",
+      model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      webSearchRequests: result.webSearchRequests,
+    });
+
+    const validated = validateProfile(extractFirstJson(result.text));
+    if (!validated) {
+      console.error("competitor-profile malformed output:", result.text);
+      await fail(
+        `Ada's research on ${competitor.name} came back garbled — nothing was saved. It usually works on a second try.`,
+      );
+      return;
+    }
+
+    // Run 2 enforcement: only search-returned URLs become evidence.
+    const realUrls = new Set(
+      [...result.sources, ...result.citations].map((s) => s.url),
+    );
+    const grounded = validated.evidence.filter((e) => realUrls.has(e.url));
+    const dropped = validated.evidence.length - grounded.length;
+    if (dropped > 0) {
+      console.error(
+        `competitor-profile dropped ${dropped} URL(s) not present in search results`,
+      );
+    }
+
+    const confidence = honestConfidence(validated.confidence, grounded.length);
+    const retrievedAt = new Date().toISOString();
+
+    const { error: upErr } = await service
+      .from("competitors")
+      .update({
+        positioning: validated.positioning,
+        pricing_signal: validated.pricing_signal,
+        feature_notes: { features: validated.features },
+        recent_moves: validated.recent_moves,
+        confidence_label: confidence,
+        retrieved_at: retrievedAt,
+        profiled_at: retrievedAt,
+      })
+      .eq("id", competitor.id);
+    if (upErr) {
+      console.error("competitor profile update failed:", upErr);
+      await fail(`Couldn't save ${competitor.name}'s profile. Retry when ready.`);
+      return;
+    }
+
+    // Re-profiling replaces this competitor's evidence.
+    const { error: delErr } = await service
+      .from("competitor_evidence")
+      .delete()
+      .eq("competitor_id", competitor.id);
+    if (delErr) console.error("profile evidence delete failed:", delErr);
+
+    const queryTrail = result.queries.join(" | ").slice(0, 500) || null;
+    if (grounded.length > 0) {
+      const { error: insErr } = await service.from("competitor_evidence").insert(
+        grounded.map((e) => ({
+          user_id: userId,
+          competitor_id: competitor.id,
+          claim: e.claim,
+          source_url: e.url,
+          title: e.title,
+          query_used: queryTrail,
+          retrieved_at: retrievedAt,
+        })),
+      );
+      if (insErr) {
+        console.error("profile evidence insert failed:", insErr);
+        await fail(`Couldn't save ${competitor.name}'s sources. Retry when ready.`);
+        return;
+      }
+    }
+
+    await setIntelStatus(service, productId, {
+      kind: "competitor_profile",
+      state: "done",
+      competitor_id: competitor.id,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      searches: result.webSearchRequests,
+    });
+  } catch (err) {
+    console.error("competitor-profile worker error:", err);
+    await fail(
+      `The research on ${competitor.name} didn't finish. Nothing was saved — retry when ready.`,
+    );
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders(req) });
@@ -158,9 +323,25 @@ Deno.serve(async (req) => {
 
     const { data: product } = await service
       .from("products")
-      .select("name, description")
+      .select("name, description, intel_status")
       .eq("id", competitor.product_id)
       .maybeSingle();
+
+    if (
+      isRunActive(
+        (product?.intel_status ?? null) as IntelStatus | null,
+        Date.now(),
+      )
+    ) {
+      return jsonResponse(
+        {
+          error: "intel_run_in_progress",
+          detail: "Ada is already researching this product — give her a moment.",
+        },
+        409,
+        req,
+      );
+    }
 
     // The run's budget divides across the confirmed competitors.
     const budget = await getIntelSearchBudget(service);
@@ -185,123 +366,38 @@ Deno.serve(async (req) => {
       );
     }
 
-    const model = await getModelFor(service, "competitor_profiling");
-    const result = await callClaudeWithWebSearch({
-      apiKey: anthropicKey,
-      model,
-      system: PROFILE_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            `Competitor to profile: ${competitor.name}`,
-            `The PM's product (for competitive relevance): ${product?.name ?? "Unnamed product"}`,
-            product?.description ? `Product description: ${product.description}` : null,
-            "",
-            `Search the web (budget: ${perCompetitor} searches) and profile this competitor.`,
-          ]
-            .filter((l) => l !== null)
-            .join("\n"),
+    const startedAt = new Date().toISOString();
+    await setIntelStatus(service, competitor.product_id as string, {
+      kind: "competitor_profile",
+      state: "running",
+      competitor_id: competitor.id as string,
+      started_at: startedAt,
+    });
+
+    EdgeRuntime.waitUntil(
+      runProfiling({
+        service,
+        anthropicKey,
+        userId: user.id,
+        productId: competitor.product_id as string,
+        competitor: {
+          id: competitor.id as string,
+          name: competitor.name as string,
         },
-      ],
-      maxTokens: 4000,
-      maxSearches: perCompetitor,
-    });
-
-    await recordModelUsage(service, {
-      userId: user.id,
-      sessionId: null,
-      callType: "competitor_profiling",
-      model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      webSearchRequests: result.webSearchRequests,
-    });
-
-    const validated = validateProfile(extractFirstJson(result.text));
-    if (!validated) {
-      console.error("competitor-profile malformed output:", result.text);
-      return jsonResponse(
-        { error: "malformed_model_output", retryable: true },
-        502,
-        req,
-      );
-    }
-
-    // Run 2 enforcement: only search-returned URLs become evidence.
-    const realUrls = new Set(
-      [...result.sources, ...result.citations].map((s) => s.url),
+        productName: (product?.name as string | undefined) ?? "Unnamed product",
+        productDescription: (product?.description as string | null) ?? null,
+        perCompetitor,
+        startedAt,
+      }),
     );
-    const grounded = validated.evidence.filter((e) => realUrls.has(e.url));
-    const dropped = validated.evidence.length - grounded.length;
-    if (dropped > 0) {
-      console.error(
-        `competitor-profile dropped ${dropped} URL(s) not present in search results`,
-      );
-    }
-
-    const confidence = honestConfidence(validated.confidence, grounded.length);
-    const retrievedAt = new Date().toISOString();
-
-    const { data: updated, error: upErr } = await service
-      .from("competitors")
-      .update({
-        positioning: validated.positioning,
-        pricing_signal: validated.pricing_signal,
-        feature_notes: { features: validated.features },
-        recent_moves: validated.recent_moves,
-        confidence_label: confidence,
-        retrieved_at: retrievedAt,
-        profiled_at: retrievedAt,
-      })
-      .eq("id", competitor.id)
-      .select("*")
-      .single();
-    if (upErr || !updated) {
-      console.error("competitor profile update failed:", upErr);
-      return jsonResponse({ error: "Could not save the profile." }, 500, req);
-    }
-
-    // Re-profiling replaces this competitor's evidence.
-    const { error: delErr } = await service
-      .from("competitor_evidence")
-      .delete()
-      .eq("competitor_id", competitor.id);
-    if (delErr) console.error("profile evidence delete failed:", delErr);
-
-    const queryTrail = result.queries.join(" | ").slice(0, 500) || null;
-    let inserted: unknown[] = [];
-    if (grounded.length > 0) {
-      const { data, error: insErr } = await service
-        .from("competitor_evidence")
-        .insert(
-          grounded.map((e) => ({
-            user_id: user.id,
-            competitor_id: competitor.id,
-            claim: e.claim,
-            source_url: e.url,
-            title: e.title,
-            query_used: queryTrail,
-            retrieved_at: retrievedAt,
-          })),
-        )
-        .select("*");
-      if (insErr || !data) {
-        console.error("profile evidence insert failed:", insErr);
-        return jsonResponse({ error: "Could not save evidence." }, 500, req);
-      }
-      inserted = data;
-    }
 
     return jsonResponse(
       {
-        competitor: updated,
-        evidence: inserted,
-        searches: result.webSearchRequests,
+        started: true,
         per_competitor_budget: perCompetitor,
-        model,
+        started_at: startedAt,
       },
-      201,
+      202,
       req,
     );
   } catch (err) {

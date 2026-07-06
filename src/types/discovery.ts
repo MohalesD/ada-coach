@@ -16,8 +16,25 @@ export interface Product {
   description: string | null;
   competitive_gap: CompetitiveGap | null;
   gap_generated_at: string | null;
+  intel_status: IntelStatus | null;
   created_at: string;
   updated_at: string;
+}
+
+// Intel search runs finish in a background worker (live web-search calls
+// outlast the edge gateway's response window); this is the status cell
+// the worker reports through and the client polls.
+export interface IntelStatus {
+  kind: 'market_brief' | 'competitor_identification' | 'competitor_profile';
+  state: 'running' | 'done' | 'error';
+  started_at: string;
+  finished_at?: string;
+  competitor_id?: string;
+  searches?: number;
+  partial?: boolean;
+  unmapped?: boolean;
+  note?: string | null;
+  message?: string;
 }
 
 // ── Market + competitive intelligence (Run 5) ──────────────────────────────

@@ -10,12 +10,19 @@
 // sourced brief. Only URLs the search tool actually returned become
 // evidence rows; the DB CHECK refuses anything without a real URL.
 //
+// Latency shape: live search calls routinely exceed the edge gateway's
+// 150s idle window (verified 2026-07-05), so POST answers 202 and the
+// research finishes in a background worker (EdgeRuntime.waitUntil).
+// products.intel_status is the worker's report line and the client's
+// poll target; it also serializes runs per product.
+//
 // Honesty rules (PRD): zero grounded evidence forces confidence "none",
-// thin evidence caps it at "thin"/"moderate" — the model can claim
-// strength, but the stored label never exceeds what the citations
-// support. Hitting the search cap marks the brief partial.
+// thin evidence caps the label — the model can claim strength, but the
+// stored label never exceeds what the citations support. Hitting the
+// search cap marks the brief partial.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   corsHeaders,
   getServiceClient,
@@ -30,11 +37,16 @@ import {
 import { getModelFor } from "../_shared/models.ts";
 import { recordModelUsage } from "../_shared/usage.ts";
 import {
+  briefSearchBudget,
   CONFIDENCE_LABELS,
   getIntelSearchBudget,
   honestConfidence,
 } from "../_shared/intel-config.ts";
 import type { ConfidenceLabel } from "../_shared/intel-config.ts";
+import { isRunActive, setIntelStatus } from "../_shared/intel-status.ts";
+import type { IntelStatus } from "../_shared/intel-status.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 const MAX_EVIDENCE_ROWS = 12;
 const CLAIM_MAX = 500;
@@ -122,60 +134,28 @@ function fallbackAngles(name: string, description: string | null): string[] {
   ];
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders(req) });
-  }
-  if (req.method !== "POST" && req.method !== "GET") {
-    return jsonResponse({ error: "Method not allowed" }, 405, req);
-  }
-
-  const authResult = await requireUser(req);
-  if (authResult.error) return authResult.error;
-  const { user, userClient } = authResult;
-
-  // GET: the current search budget, so the UI can surface the cost of a
-  // run BEFORE the PM starts it (app_settings itself is owner-only).
-  if (req.method === "GET") {
-    const budget = await getIntelSearchBudget(getServiceClient());
-    return jsonResponse({ budget }, 200, req);
-  }
+// The background worker: everything from planning to storage. Reports
+// its outcome ONLY through products.intel_status — by the time it runs,
+// the 202 has already gone out.
+async function runMarketResearch(opts: {
+  service: SupabaseClient;
+  anthropicKey: string;
+  userId: string;
+  product: { id: string; name: string; description: string | null };
+  budget: number;
+  startedAt: string;
+}): Promise<void> {
+  const { service, anthropicKey, userId, product, budget, startedAt } = opts;
+  const fail = (message: string) =>
+    setIntelStatus(service, product.id, {
+      kind: "market_brief",
+      state: "error",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      message,
+    });
 
   try {
-    const body = (await req.json()) as IntelBody;
-    const productId =
-      typeof body.product_id === "string" ? body.product_id : "";
-    if (!productId) {
-      return jsonResponse({ error: "product_id is required" }, 400, req);
-    }
-
-    // RLS: visible only if the caller owns the product.
-    const { data: product, error: pErr } = await userClient
-      .from("products")
-      .select("id, name, description")
-      .eq("id", productId)
-      .maybeSingle();
-    if (pErr) {
-      console.error("product lookup failed:", pErr);
-      return jsonResponse({ error: "Could not load product." }, 500, req);
-    }
-    if (!product) {
-      return jsonResponse({ error: "Product not found" }, 404, req);
-    }
-
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) {
-      console.error("Missing ANTHROPIC_API_KEY");
-      return jsonResponse(
-        { error: "Ada is not configured correctly. Please try again later." },
-        500,
-        req,
-      );
-    }
-
-    const service = getServiceClient();
-    const budget = await getIntelSearchBudget(service);
-
     const productContext = [
       `Product: ${product.name}`,
       product.description ? `Description: ${product.description}` : null,
@@ -183,7 +163,7 @@ Deno.serve(async (req) => {
       .filter((l) => l !== null)
       .join("\n");
 
-    // ── Step 1: plan bounded search angles (Sonnet 4.6, no search) ────────
+    // ── Step 1: plan bounded search angles (Sonnet 4.6, no search) ────
     const planModel = await getModelFor(service, "market_intel_plan");
     let angles: string[] = [];
     try {
@@ -195,7 +175,7 @@ Deno.serve(async (req) => {
         maxTokens: 1000,
       });
       await recordModelUsage(service, {
-        userId: user.id,
+        userId,
         sessionId: null,
         callType: "market_intel_plan",
         model: planModel,
@@ -215,7 +195,7 @@ Deno.serve(async (req) => {
       angles = fallbackAngles(product.name, product.description);
     }
 
-    // ── Step 2: bounded research + synthesis (Sonnet 4.6 + web search) ────
+    // ── Step 2: bounded research + synthesis (Sonnet 4.6 + search) ────
     const researchModel = await getModelFor(service, "market_intel_research");
     const result = await callClaudeWithWebSearch({
       apiKey: anthropicKey,
@@ -236,10 +216,11 @@ Deno.serve(async (req) => {
       ],
       maxTokens: 5000,
       maxSearches: budget,
+      maxContinuations: 2,
     });
 
     await recordModelUsage(service, {
-      userId: user.id,
+      userId,
       sessionId: null,
       callType: "market_intel_research",
       model: researchModel,
@@ -251,11 +232,10 @@ Deno.serve(async (req) => {
     const validated = validateBrief(extractFirstJson(result.text));
     if (!validated) {
       console.error("market-intel malformed output:", result.text);
-      return jsonResponse(
-        { error: "malformed_model_output", retryable: true },
-        502,
-        req,
+      await fail(
+        "Ada's research came back garbled — nothing was saved. It usually works on a second try.",
       );
+      return;
     }
 
     // Run 2 enforcement: only URLs the search tool actually returned
@@ -291,7 +271,7 @@ Deno.serve(async (req) => {
       .eq("product_id", product.id)
       .maybeSingle();
 
-    let brief;
+    let briefId: string;
     if (existing) {
       const { data, error } = await service
         .from("market_briefs")
@@ -303,18 +283,19 @@ Deno.serve(async (req) => {
           retrieved_at: retrievedAt,
         })
         .eq("id", (existing as { id: string }).id)
-        .select("*")
+        .select("id")
         .single();
       if (error || !data) {
         console.error("brief update failed:", error);
-        return jsonResponse({ error: "Could not save the brief." }, 500, req);
+        await fail("Couldn't save the brief. Nothing was lost — try again.");
+        return;
       }
-      brief = data;
+      briefId = (data as { id: string }).id;
     } else {
       const { data, error } = await service
         .from("market_briefs")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           product_id: product.id,
           summary: summaryJson,
           confidence_label: confidence,
@@ -322,17 +303,17 @@ Deno.serve(async (req) => {
           search_count: result.webSearchRequests,
           retrieved_at: retrievedAt,
         })
-        .select("*")
+        .select("id")
         .single();
       if (error || !data) {
         console.error("brief insert failed:", error);
-        return jsonResponse({ error: "Could not save the brief." }, 500, req);
+        await fail("Couldn't save the brief. Nothing was lost — try again.");
+        return;
       }
-      brief = data;
+      briefId = (data as { id: string }).id;
     }
 
     // Refresh replaces the evidence set.
-    const briefId = (brief as { id: string }).id;
     const { error: delErr } = await service
       .from("market_evidence")
       .delete()
@@ -340,38 +321,143 @@ Deno.serve(async (req) => {
     if (delErr) console.error("market evidence delete failed:", delErr);
 
     const queryTrail = result.queries.join(" | ").slice(0, 500) || null;
-    let inserted: unknown[] = [];
     if (grounded.length > 0) {
-      const { data, error: insErr } = await service
-        .from("market_evidence")
-        .insert(
-          grounded.map((e) => ({
-            user_id: user.id,
-            market_brief_id: briefId,
-            claim: e.claim,
-            source_url: e.url,
-            title: e.title,
-            query_used: queryTrail,
-            retrieved_at: retrievedAt,
-          })),
-        )
-        .select("*");
-      if (insErr || !data) {
+      const { error: insErr } = await service.from("market_evidence").insert(
+        grounded.map((e) => ({
+          user_id: userId,
+          market_brief_id: briefId,
+          claim: e.claim,
+          source_url: e.url,
+          title: e.title,
+          query_used: queryTrail,
+          retrieved_at: retrievedAt,
+        })),
+      );
+      if (insErr) {
         console.error("market evidence insert failed:", insErr);
-        return jsonResponse({ error: "Could not save evidence." }, 500, req);
+        await fail("Couldn't save the sources. Refresh the brief to retry.");
+        return;
       }
-      inserted = data;
     }
 
+    await setIntelStatus(service, product.id, {
+      kind: "market_brief",
+      state: "done",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      searches: result.webSearchRequests,
+      partial,
+    });
+  } catch (err) {
+    console.error("market-intel worker error:", err);
+    await fail(
+      "The market research didn't finish. Nothing was saved — try again.",
+    );
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders(req) });
+  }
+  if (req.method !== "POST" && req.method !== "GET") {
+    return jsonResponse({ error: "Method not allowed" }, 405, req);
+  }
+
+  const authResult = await requireUser(req);
+  if (authResult.error) return authResult.error;
+  const { user, userClient } = authResult;
+
+  // GET: the current search budget, so the UI can surface the cost of a
+  // run BEFORE the PM starts it (app_settings itself is owner-only).
+  // brief_run_cap is what one brief run may actually spend (the budget,
+  // latency-capped per call).
+  if (req.method === "GET") {
+    const budget = await getIntelSearchBudget(getServiceClient());
     return jsonResponse(
-      {
-        brief,
-        evidence: inserted,
-        searches: result.webSearchRequests,
+      { budget, brief_run_cap: briefSearchBudget(budget) },
+      200,
+      req,
+    );
+  }
+
+  try {
+    const body = (await req.json()) as IntelBody;
+    const productId =
+      typeof body.product_id === "string" ? body.product_id : "";
+    if (!productId) {
+      return jsonResponse({ error: "product_id is required" }, 400, req);
+    }
+
+    // RLS: visible only if the caller owns the product.
+    const { data: product, error: pErr } = await userClient
+      .from("products")
+      .select("id, name, description, intel_status")
+      .eq("id", productId)
+      .maybeSingle();
+    if (pErr) {
+      console.error("product lookup failed:", pErr);
+      return jsonResponse({ error: "Could not load product." }, 500, req);
+    }
+    if (!product) {
+      return jsonResponse({ error: "Product not found" }, 404, req);
+    }
+
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicKey) {
+      console.error("Missing ANTHROPIC_API_KEY");
+      return jsonResponse(
+        { error: "Ada is not configured correctly. Please try again later." },
+        500,
+        req,
+      );
+    }
+
+    // One intel run per product at a time.
+    if (isRunActive(product.intel_status as IntelStatus | null, Date.now())) {
+      return jsonResponse(
+        {
+          error: "intel_run_in_progress",
+          detail: "Ada is already researching this product — give her a moment.",
+        },
+        409,
+        req,
+      );
+    }
+
+    const service = getServiceClient();
+    const configBudget = await getIntelSearchBudget(service);
+    // The run's spendable searches: config budget, latency-capped so the
+    // background call finishes well inside the worker's wall clock. A
+    // capped run comes back marked partial and the PM refreshes to
+    // continue.
+    const budget = briefSearchBudget(configBudget);
+
+    const startedAt = new Date().toISOString();
+    await setIntelStatus(service, product.id, {
+      kind: "market_brief",
+      state: "running",
+      started_at: startedAt,
+    });
+
+    EdgeRuntime.waitUntil(
+      runMarketResearch({
+        service,
+        anthropicKey,
+        userId: user.id,
+        product: {
+          id: product.id as string,
+          name: product.name as string,
+          description: (product.description as string | null) ?? null,
+        },
         budget,
-        model: researchModel,
-      },
-      existing ? 200 : 201,
+        startedAt,
+      }),
+    );
+
+    return jsonResponse(
+      { started: true, budget, started_at: startedAt },
+      202,
       req,
     );
   } catch (err) {

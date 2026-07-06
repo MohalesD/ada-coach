@@ -12,6 +12,7 @@ import type {
   CompetitorEvidence,
   CompetitiveGap,
   Evidence,
+  IntelStatus,
   InterviewGuide,
   MarketBrief,
   MarketEvidence,
@@ -290,16 +291,53 @@ export async function getIntelSearchBudget(): Promise<number> {
   return budget;
 }
 
-export async function generateMarketBrief(productId: string): Promise<{
-  brief: MarketBrief;
-  evidence: MarketEvidence[];
-  searches: number;
-  budget: number;
-}> {
+// The three search endpoints answer 202 and finish in a background
+// worker; poll products.intel_status for the outcome.
+export interface IntelRunStart {
+  started: boolean;
+  started_at: string;
+  budget?: number;
+}
+
+export async function generateMarketBrief(productId: string): Promise<IntelRunStart> {
   return invoke('market-intel', {
     method: 'POST',
     body: { product_id: productId },
   });
+}
+
+// Poll until the background run that began at sinceIso reports done or
+// error. The timeout is generous (workers can run minutes); on timeout a
+// synthetic error status comes back with honest next-step copy.
+export async function pollIntelStatus(
+  productId: string,
+  sinceIso: string,
+  timeoutMs = 420_000
+): Promise<IntelStatus> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    const { data, error } = await supabase
+      .from('products')
+      .select('intel_status')
+      .eq('id', productId)
+      .maybeSingle();
+    if (!error) {
+      const status = (data?.intel_status ?? null) as IntelStatus | null;
+      if (status && status.started_at >= sinceIso && status.state !== 'running') {
+        return status;
+      }
+    }
+    if (Date.now() > deadline) {
+      return {
+        kind: 'market_brief',
+        state: 'error',
+        started_at: sinceIso,
+        message:
+          'This is taking longer than it should. Ada may still finish — reload the page in a minute, or run it again.',
+      };
+    }
+  }
 }
 
 export async function getMarketBrief(productId: string): Promise<MarketBrief | null> {
@@ -326,13 +364,7 @@ export async function listMarketEvidence(briefId: string): Promise<MarketEvidenc
   return (data ?? []) as MarketEvidence[];
 }
 
-export async function identifyCompetitors(productId: string): Promise<{
-  competitors: Competitor[];
-  unmapped: boolean;
-  note: string | null;
-  searches: number;
-  budget: number;
-}> {
+export async function identifyCompetitors(productId: string): Promise<IntelRunStart> {
   return invoke('competitive-intel', {
     method: 'POST',
     body: { product_id: productId },
@@ -376,12 +408,9 @@ export async function listCompetitorEvidence(
   return (data ?? []) as CompetitorEvidence[];
 }
 
-export async function profileCompetitor(competitorId: string): Promise<{
-  competitor: Competitor;
-  evidence: CompetitorEvidence[];
-  searches: number;
-  per_competitor_budget: number;
-}> {
+export async function profileCompetitor(
+  competitorId: string
+): Promise<IntelRunStart & { per_competitor_budget: number }> {
   return invoke('competitor-profile', {
     method: 'POST',
     body: { competitor_id: competitorId },

@@ -107,6 +107,10 @@ export interface ClaudeWebSearchOptions {
   messages: ClaudeMessage[];
   maxTokens: number;
   maxSearches?: number;
+  // Each pause_turn continuation is a full extra model turn (60–120s).
+  // Latency-sensitive callers (Run 5 intel, behind the edge gateway's
+  // 150s idle timeout) bound this below the default of 3.
+  maxContinuations?: number;
 }
 
 type RawBlock = Record<string, unknown>;
@@ -162,6 +166,10 @@ export async function callClaudeWithWebSearch(
   opts: ClaudeWebSearchOptions,
 ): Promise<ClaudeWebSearchResult> {
   const searchBudget = opts.maxSearches ?? 5;
+  const maxContinuations = Math.min(
+    opts.maxContinuations ?? MAX_PAUSE_TURN_CONTINUATIONS,
+    MAX_PAUSE_TURN_CONTINUATIONS,
+  );
 
   // Content may be raw block arrays once we echo assistant turns back.
   const messages: Array<{ role: string; content: unknown }> = [
@@ -178,7 +186,7 @@ export async function callClaudeWithWebSearch(
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
 
-  for (let turn = 0; turn <= MAX_PAUSE_TURN_CONTINUATIONS; turn++) {
+  for (let turn = 0; turn <= maxContinuations; turn++) {
     // Run 5 cost-cap ledger: our own count is authoritative. Each
     // continuation gets only the budget that remains after searches
     // already consumed, and a paused turn with nothing left is not

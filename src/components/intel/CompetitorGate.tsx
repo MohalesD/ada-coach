@@ -10,7 +10,7 @@ import { Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { SEARCH_FEE_USD } from '@/components/intel/chips';
+import { perCompetitorSearches, SEARCH_FEE_USD } from '@/components/intel/chips';
 import type { Competitor } from '@/types/discovery';
 
 export default function CompetitorGate({
@@ -43,10 +43,7 @@ export default function CompetitorGate({
     [visible, checked, added]
   );
 
-  const perCompetitor =
-    budget !== null && selectedCount >= 1 && selectedCount <= budget
-      ? Math.floor(budget / selectedCount)
-      : 0;
+  const perCompetitor = budget !== null ? perCompetitorSearches(budget, selectedCount) : 0;
   const totalSearches = perCompetitor * selectedCount;
   const overBudget = budget !== null && selectedCount > budget;
 

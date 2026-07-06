@@ -1,11 +1,15 @@
 // Ada Coach /competitive-intel Edge Function (Run 5)
 // Addendum endpoints 10 + 11 — the two sides of the confirm gate:
 //   POST  { product_id }  → identify candidate competitors (Sonnet 4.6 +
-//         bounded web search, min(5, budget) searches). Candidates land
-//         with confirmed = false and are NEVER profiled automatically.
+//         bounded web search). Live search calls routinely exceed the
+//         edge gateway's 150s idle window, so identification runs as a
+//         background worker (EdgeRuntime.waitUntil) behind a 202; the
+//         client polls products.intel_status. Candidates land with
+//         confirmed = false and are NEVER profiled automatically.
 //   PATCH { product_id, confirm, add, remove } → the PM confirms/adds/
-//         removes BEFORE deep profiling spends the search budget. The
-//         response carries the profiling cost math the UI must surface.
+//         removes BEFORE deep profiling spends the search budget. Fast,
+//         synchronous; the response carries the profiling cost math the
+//         UI must surface.
 //
 // Honesty rules: if search finds nothing, the space is reported as
 // unmapped and the PM is asked for known competitors — Ada never invents
@@ -13,6 +17,7 @@
 // competitors the PM confirmed (or already paid to profile) survive.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   corsHeaders,
   getServiceClient,
@@ -30,6 +35,10 @@ import {
   identifySearchBudget,
   perCompetitorSearchBudget,
 } from "../_shared/intel-config.ts";
+import { isRunActive, setIntelStatus } from "../_shared/intel-status.ts";
+import type { IntelStatus } from "../_shared/intel-status.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
 const MAX_CANDIDATES = 8;
 const NAME_MAX = 120;
@@ -81,6 +90,161 @@ function validateCandidates(parsed: unknown): {
   };
 }
 
+// Background worker: search → validate → replace unconfirmed candidates
+// → store identification evidence. Reports through products.intel_status.
+async function runIdentification(opts: {
+  service: SupabaseClient;
+  anthropicKey: string;
+  userId: string;
+  product: { id: string; name: string; description: string | null };
+  identifyBudget: number;
+  startedAt: string;
+}): Promise<void> {
+  const { service, anthropicKey, userId, product, identifyBudget, startedAt } =
+    opts;
+  const fail = (message: string) =>
+    setIntelStatus(service, product.id, {
+      kind: "competitor_identification",
+      state: "error",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      message,
+    });
+
+  try {
+    const model = await getModelFor(service, "competitor_identification");
+    const result = await callClaudeWithWebSearch({
+      apiKey: anthropicKey,
+      model,
+      system: IDENTIFY_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: [
+            `Product: ${product.name}`,
+            product.description
+              ? `Description: ${product.description}`
+              : null,
+            "",
+            "Search the web and identify the named competitors for this product.",
+          ]
+            .filter((l) => l !== null)
+            .join("\n"),
+        },
+      ],
+      maxTokens: 2000,
+      maxSearches: identifyBudget,
+      maxContinuations: 1,
+    });
+
+    await recordModelUsage(service, {
+      userId,
+      sessionId: null,
+      callType: "competitor_identification",
+      model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      webSearchRequests: result.webSearchRequests,
+    });
+
+    const validated = validateCandidates(extractFirstJson(result.text));
+    if (!validated) {
+      console.error("competitive-intel malformed output:", result.text);
+      await fail(
+        "Ada's search came back garbled — nothing was saved. It usually works on a second try.",
+      );
+      return;
+    }
+
+    // Re-identifying replaces only unconfirmed, unprofiled candidates.
+    const { error: delErr } = await service
+      .from("competitors")
+      .delete()
+      .eq("product_id", product.id)
+      .eq("confirmed", false)
+      .is("profiled_at", null);
+    if (delErr) console.error("candidate replace failed:", delErr);
+
+    // Survivors (confirmed/profiled) keep their names off the new list.
+    const { data: survivors } = await service
+      .from("competitors")
+      .select("id, name")
+      .eq("product_id", product.id);
+    const survivorNames = new Set(
+      (survivors ?? []).map((c) => (c.name as string).toLowerCase()),
+    );
+    const fresh = validated.competitors.filter(
+      (c) => !survivorNames.has(c.name.toLowerCase()),
+    );
+
+    const realUrls = new Set(
+      [...result.sources, ...result.citations].map((s) => s.url),
+    );
+    const queryTrail = result.queries.join(" | ").slice(0, 500) || null;
+    const retrievedAt = new Date().toISOString();
+
+    if (fresh.length > 0) {
+      const { data: inserted, error: insErr } = await service
+        .from("competitors")
+        .insert(
+          fresh.map((c) => ({
+            user_id: userId,
+            product_id: product.id,
+            name: c.name,
+            added_by: "ada",
+            confirmed: false,
+            retrieved_at: retrievedAt,
+          })),
+        )
+        .select("id, name");
+      if (insErr || !inserted) {
+        console.error("candidate insert failed:", insErr);
+        await fail("Couldn't save the candidates. Try the search again.");
+        return;
+      }
+
+      // Identification evidence: only search-returned URLs are stored
+      // (the DB CHECK refuses anything without a real URL anyway).
+      const evidenceRows = inserted.flatMap((row) => {
+        const cand = fresh.find(
+          (c) => c.name.toLowerCase() === (row.name as string).toLowerCase(),
+        );
+        if (!cand?.url || !realUrls.has(cand.url)) return [];
+        return [
+          {
+            user_id: userId,
+            competitor_id: row.id,
+            claim: cand.why ?? `Identified as a competitor of ${product.name}.`,
+            source_url: cand.url,
+            title: null,
+            query_used: queryTrail,
+            retrieved_at: retrievedAt,
+          },
+        ];
+      });
+      if (evidenceRows.length > 0) {
+        const { error } = await service
+          .from("competitor_evidence")
+          .insert(evidenceRows);
+        if (error) console.error("identify evidence insert failed:", error);
+      }
+    }
+
+    await setIntelStatus(service, product.id, {
+      kind: "competitor_identification",
+      state: "done",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      searches: result.webSearchRequests,
+      unmapped: validated.unmapped,
+      note: validated.note,
+    });
+  } catch (err) {
+    console.error("competitive-intel worker error:", err);
+    await fail("The competitor search didn't finish. Try again.");
+  }
+}
+
 type Body = {
   product_id?: unknown;
   confirm?: unknown;
@@ -111,7 +275,7 @@ Deno.serve(async (req) => {
     // RLS: visible only if the caller owns the product.
     const { data: product, error: pErr } = await userClient
       .from("products")
-      .select("id, name, description")
+      .select("id, name, description, intel_status")
       .eq("id", productId)
       .maybeSingle();
     if (pErr) {
@@ -125,7 +289,7 @@ Deno.serve(async (req) => {
     const service = getServiceClient();
     const budget = await getIntelSearchBudget(service);
 
-    // ── PATCH: the confirm gate ────────────────────────────────────────
+    // ── PATCH: the confirm gate (fast, synchronous) ────────────────────
     if (req.method === "PATCH") {
       const confirmIds = Array.isArray(body.confirm)
         ? body.confirm.filter((v): v is string => typeof v === "string")
@@ -274,7 +438,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── POST: identify candidates (Sonnet 4.6 + bounded search) ────────
+    // ── POST: identify candidates (202 + background worker) ────────────
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
       console.error("Missing ANTHROPIC_API_KEY");
@@ -285,142 +449,43 @@ Deno.serve(async (req) => {
       );
     }
 
-    const identifyBudget = identifySearchBudget(budget);
-    const model = await getModelFor(service, "competitor_identification");
-    const result = await callClaudeWithWebSearch({
-      apiKey: anthropicKey,
-      model,
-      system: IDENTIFY_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            `Product: ${product.name}`,
-            product.description
-              ? `Description: ${product.description}`
-              : null,
-            "",
-            "Search the web and identify the named competitors for this product.",
-          ]
-            .filter((l) => l !== null)
-            .join("\n"),
-        },
-      ],
-      maxTokens: 3000,
-      maxSearches: identifyBudget,
-    });
-
-    await recordModelUsage(service, {
-      userId: user.id,
-      sessionId: null,
-      callType: "competitor_identification",
-      model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      webSearchRequests: result.webSearchRequests,
-    });
-
-    const validated = validateCandidates(extractFirstJson(result.text));
-    if (!validated) {
-      console.error("competitive-intel malformed output:", result.text);
+    if (isRunActive(product.intel_status as IntelStatus | null, Date.now())) {
       return jsonResponse(
-        { error: "malformed_model_output", retryable: true },
-        502,
+        {
+          error: "intel_run_in_progress",
+          detail: "Ada is already researching this product — give her a moment.",
+        },
+        409,
         req,
       );
     }
 
-    // Re-identifying replaces only unconfirmed, unprofiled candidates.
-    const { error: delErr } = await service
-      .from("competitors")
-      .delete()
-      .eq("product_id", product.id)
-      .eq("confirmed", false)
-      .is("profiled_at", null);
-    if (delErr) console.error("candidate replace failed:", delErr);
+    const identifyBudget = identifySearchBudget(budget);
+    const startedAt = new Date().toISOString();
+    await setIntelStatus(service, product.id, {
+      kind: "competitor_identification",
+      state: "running",
+      started_at: startedAt,
+    });
 
-    // Survivors (confirmed/profiled) keep their names off the new list.
-    const { data: survivors } = await service
-      .from("competitors")
-      .select("id, name")
-      .eq("product_id", product.id);
-    const survivorNames = new Set(
-      (survivors ?? []).map((c) => (c.name as string).toLowerCase()),
+    EdgeRuntime.waitUntil(
+      runIdentification({
+        service,
+        anthropicKey,
+        userId: user.id,
+        product: {
+          id: product.id as string,
+          name: product.name as string,
+          description: (product.description as string | null) ?? null,
+        },
+        identifyBudget,
+        startedAt,
+      }),
     );
-    const fresh = validated.competitors.filter(
-      (c) => !survivorNames.has(c.name.toLowerCase()),
-    );
-
-    const realUrls = new Set(
-      [...result.sources, ...result.citations].map((s) => s.url),
-    );
-    const queryTrail = result.queries.join(" | ").slice(0, 500) || null;
-    const retrievedAt = new Date().toISOString();
-
-    let inserted: Array<Record<string, unknown>> = [];
-    if (fresh.length > 0) {
-      const { data, error: insErr } = await service
-        .from("competitors")
-        .insert(
-          fresh.map((c) => ({
-            user_id: user.id,
-            product_id: product.id,
-            name: c.name,
-            added_by: "ada",
-            confirmed: false,
-            retrieved_at: retrievedAt,
-          })),
-        )
-        .select("*");
-      if (insErr || !data) {
-        console.error("candidate insert failed:", insErr);
-        return jsonResponse({ error: "Could not save candidates." }, 500, req);
-      }
-      inserted = data;
-
-      // Identification evidence: only search-returned URLs are stored
-      // (the DB CHECK refuses anything without a real URL anyway).
-      const evidenceRows = inserted.flatMap((row) => {
-        const cand = fresh.find(
-          (c) => c.name.toLowerCase() === (row.name as string).toLowerCase(),
-        );
-        if (!cand?.url || !realUrls.has(cand.url)) return [];
-        return [
-          {
-            user_id: user.id,
-            competitor_id: row.id,
-            claim: cand.why ?? `Identified as a competitor of ${product.name}.`,
-            source_url: cand.url,
-            title: null,
-            query_used: queryTrail,
-            retrieved_at: retrievedAt,
-          },
-        ];
-      });
-      if (evidenceRows.length > 0) {
-        const { error } = await service
-          .from("competitor_evidence")
-          .insert(evidenceRows);
-        if (error) console.error("identify evidence insert failed:", error);
-      }
-    }
-
-    const { data: all } = await service
-      .from("competitors")
-      .select("*")
-      .eq("product_id", product.id)
-      .order("created_at", { ascending: true });
 
     return jsonResponse(
-      {
-        competitors: all ?? [],
-        unmapped: validated.unmapped,
-        note: validated.note,
-        searches: result.webSearchRequests,
-        budget,
-        model,
-      },
-      201,
+      { started: true, budget, started_at: startedAt },
+      202,
       req,
     );
   } catch (err) {
