@@ -8,7 +8,12 @@ import { useState } from 'react';
 import { ExternalLink, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineError, WorkingNote } from '@/components/portfolio/notes';
-import { ConfidenceChip, RetrievedChip, formatRetrieved } from '@/components/intel/chips';
+import {
+  ConfidenceChip,
+  RetrievedChip,
+  SavedChip,
+  formatRetrieved,
+} from '@/components/intel/chips';
 import type { Competitor, CompetitorEvidence } from '@/types/discovery';
 
 export default function CompetitorProfileCard({
@@ -45,6 +50,7 @@ export default function CompetitorProfileCard({
           <div className="flex flex-wrap items-center gap-2">
             <ConfidenceChip label={competitor.confidence_label} />
             <RetrievedChip iso={competitor.retrieved_at} />
+            {competitor.profiled_at && <SavedChip iso={competitor.profiled_at} />}
           </div>
         )}
       </header>

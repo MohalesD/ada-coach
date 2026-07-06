@@ -4,7 +4,7 @@
 // analysis, and report all read the same way (Locality Law 7: preserve
 // learned placement and meaning).
 
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, ShieldCheck } from 'lucide-react';
 import type { ConfidenceLabel } from '@/types/discovery';
 
 // Never color alone: the label text always carries the meaning.
@@ -45,6 +45,24 @@ export function RetrievedChip({ iso, prefix = 'Retrieved' }: { iso: string; pref
     <span className="inline-flex items-center gap-1 rounded-full bg-secondary/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
       <CalendarDays size={11} aria-hidden />
       {prefix} {formatRetrieved(iso)}
+    </span>
+  );
+}
+
+// This is the trust layer for intel data: every market brief, competitor
+// profile, and gap analysis is written to Postgres by its Edge Function
+// before the browser ever sees a response — there is no unsaved
+// client-side draft state for this chip to protect. The title attribute
+// says so explicitly rather than just asserting "Saved," since a bare
+// claim is not what earns trust.
+export function SavedChip({ iso }: { iso: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
+      title="Saved to your account the moment Ada finished — stored in the database, not this browser tab, so it survives a reload, a lost connection, or switching devices."
+    >
+      <ShieldCheck size={11} aria-hidden />
+      Saved {formatRetrieved(iso)}
     </span>
   );
 }

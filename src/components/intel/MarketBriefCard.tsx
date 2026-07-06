@@ -13,6 +13,7 @@ import { InlineError, WorkingNote } from '@/components/portfolio/notes';
 import {
   ConfidenceChip,
   RetrievedChip,
+  SavedChip,
   formatRetrieved,
   searchFeeNote,
 } from '@/components/intel/chips';
@@ -54,6 +55,7 @@ export default function MarketBriefCard({
           <div className="flex flex-wrap items-center gap-2">
             <ConfidenceChip label={brief.confidence_label} />
             <RetrievedChip iso={brief.retrieved_at} />
+            <SavedChip iso={brief.updated_at} />
             <Button
               size="sm"
               variant="outline"

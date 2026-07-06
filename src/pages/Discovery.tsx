@@ -3,9 +3,9 @@
 // (PRD post-action experience). Creation flows open in place over the
 // dashboard (Locality-First: no route detour for a local task).
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Compass, FileText, Globe, Play, Plus } from 'lucide-react';
+import { ArrowLeft, Compass, FileText, Globe, MoreVertical, Play, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { createProduct, listProducts, listSessions, startSession } from '@/lib/discovery-api';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  createProduct,
+  listProducts,
+  listSessions,
+  renameProduct,
+  startSession,
+} from '@/lib/discovery-api';
 import type { Product, Session } from '@/types/discovery';
 
 const INTAKE_MAX = 50_000;
@@ -39,6 +51,10 @@ export default function Discovery() {
   const [intake, setIntake] = useState('');
   const [starting, setStarting] = useState(false);
 
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingValue, setRenamingValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
   const load = useCallback(async () => {
     setLoadError(false);
     try {
@@ -55,6 +71,39 @@ export default function Discovery() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (renamingId) renameInputRef.current?.focus();
+  }, [renamingId]);
+
+  const startRename = (p: Product) => {
+    setRenamingId(p.id);
+    setRenamingValue(p.name);
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenamingValue('');
+  };
+
+  const commitRename = async () => {
+    const id = renamingId;
+    if (!id) return;
+    const current = products.find((p) => p.id === id);
+    const next = renamingValue.trim();
+    setRenamingId(null);
+    setRenamingValue('');
+
+    if (!next || !current || next === current.name) return;
+
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, name: next } : p)));
+    try {
+      await renameProduct(id, next);
+    } catch {
+      toast.error("Couldn't rename the product. Please try again.");
+      void load();
+    }
+  };
 
   const sessionsByProduct = useMemo(() => {
     const map = new Map<string, Session[]>();
@@ -214,11 +263,56 @@ export default function Discovery() {
               return (
                 <div
                   key={p.id}
-                  className="flex flex-col rounded-xl border border-border bg-card p-5"
+                  className="group/card flex flex-col rounded-xl border border-border bg-card p-5"
                 >
-                  <h3 className="font-display text-lg font-semibold tracking-tight text-foreground">
-                    {p.name}
-                  </h3>
+                  <div className="flex items-start justify-between gap-2">
+                    {renamingId === p.id ? (
+                      <Input
+                        ref={renameInputRef}
+                        value={renamingValue}
+                        onChange={(e) => setRenamingValue(e.target.value)}
+                        onBlur={() => void commitRename()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void commitRename();
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            cancelRename();
+                          }
+                        }}
+                        maxLength={200}
+                        aria-label="Product name"
+                        className="h-8 font-display text-lg font-semibold tracking-tight"
+                      />
+                    ) : (
+                      <h3
+                        className="font-display text-lg font-semibold tracking-tight text-foreground"
+                        onDoubleClick={() => startRename(p)}
+                        title="Double-click to rename"
+                      >
+                        {p.name}
+                      </h3>
+                    )}
+                    {renamingId !== p.id && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/card:opacity-100 data-[state=open]:opacity-100 hover:bg-muted hover:text-foreground"
+                            aria-label="Product actions"
+                          >
+                            <MoreVertical size={15} aria-hidden />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onSelect={() => startRename(p)}>
+                            Rename
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
                   {p.description && (
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                       {p.description}
