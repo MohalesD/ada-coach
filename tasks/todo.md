@@ -7,6 +7,56 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-06 — Agent-loop FRONTEND (Fable run, `/goal`)
+
+Branch `feat/discovery-frontend`. Source of truth:
+`docs/discovery-frontend-fable-brief.md`. Frontend only — hard boundary,
+no Edge Function or migration edits. Chat-first v1 accepted (my read of
+Sprint.tsx confirms the per-step narratives already land in the thread
+and the report carries the structured detail; rebuilding the evidence /
+blind-spot / guide panels would triple surface area for no decision value).
+
+Contract facts pinned from a read-only pass over `discovery-turn`:
+- `propose_prioritization` confirm ALWAYS needs `params.framework` (no
+  server fallback to the suggested id) — send it on confirm and override.
+- `define_success_metric` candidates only exist on the evaluator path;
+  `initiate` requires a `chosen` candidate. So the library's North Star
+  entry sends a normal turn message ("let's define success") and lets the
+  server-side readiness gate answer — never a fake client-side quiz.
+- `conclude` completes the session but does not compile the report;
+  ReportPage already compiles on demand → navigate to `/report/:id`.
+- Turn mode never 409s; resolve/initiate 409 `stale_session` → the
+  existing stale-tab guard, now keyed off `session_updated_at`.
+
+### Build checklist
+
+- [ ] `CoveragePath.tsx` — coverage read over the 7 goals (+ current phase);
+      replaces `SprintProgress` in the Sprint (component file stays put)
+- [ ] `ProposalCard.tsx` — the one PM-gated decision card: all 8
+      direction-changing actions; framework options w/ when-why expander +
+      suggested pre-select + real decline; North Star candidates w/ drift
+      risk + decline; confirm/override/dismiss wiring
+- [ ] `FrameworkLibrary.tsx` — dialog: browse + teaching text + invoke out
+      of turn (prioritization/interview direct initiate; North Star via a
+      turn message)
+- [ ] `NotesDialog.tsx` — grounding-notes paste + redaction feedback,
+      moved out of the old grounding step
+- [ ] `Sprint.tsx` rewrite — engine swap to `sendDiscoveryTurn` /
+      `resolveDiscoveryAction` / `initiateDiscoveryAction`; keep thread
+      spine, footer input, abandon dialog, stale guard, Ada's read,
+      assumptions review (editable scores + prioritize toggle); cutover
+      defaults (`current_phase ?? 'frame'`, `coverage ?? {}`)
+- [ ] `Discovery.tsx` resume hint: prefer `current_phase` over the retired
+      `current_step`
+- [ ] `npm run type-check` + `npm run lint` clean
+- [ ] Live drive on localhost:5175 (authorized by the /goal): proposal
+      renders, framework confirms, North Star pickable, coverage updates,
+      declines work, reduced-motion + keyboard fallbacks, console clean,
+      pre-existing in-flight session resumes
+- [ ] Commit incrementally
+
+---
+
 ## 🔨 In progress 2026-07-06 — Agent-Loop Redesign + Framework Library
 
 Branch `feat/agent-loop-discovery`. Source of truth:

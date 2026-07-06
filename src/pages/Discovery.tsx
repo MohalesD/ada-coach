@@ -31,6 +31,7 @@ import {
   renameProduct,
   startSession,
 } from '@/lib/discovery-api';
+import { GOAL_LABELS } from '@/components/discovery/CoveragePath';
 import type { Product, Session } from '@/types/discovery';
 
 const INTAKE_MAX = 50_000;
@@ -222,7 +223,11 @@ export default function Discovery() {
                     {productName(s.product_id)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Last step: {(s.current_step ?? 'getting started').replace('_', ' ')} · started{' '}
+                    Picking up at:{' '}
+                    {s.current_phase
+                      ? GOAL_LABELS[s.current_phase].toLowerCase()
+                      : (s.current_step ?? 'getting started').replace(/_/g, ' ')}{' '}
+                    · started{' '}
                     {new Date(s.created_at).toLocaleDateString([], {
                       month: 'short',
                       day: 'numeric',
