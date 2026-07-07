@@ -512,6 +512,15 @@ verify_jwt = false
 import_map = "./functions/admin-spend/deno.json"
 entrypoint = "./functions/admin-spend/index.ts"
 
+# RAG debug view (owner-only). verify_jwt = false mirrors the other
+# admin-* functions; requireAdmin + an explicit owner-role check gate
+# in-function, matching the owner-only RLS on document_chunks.
+[functions.admin-retrieval-debug]
+enabled = true
+verify_jwt = false
+import_map = "./functions/admin-retrieval-debug/deno.json"
+entrypoint = "./functions/admin-retrieval-debug/index.ts"
+
 # Discovery platform Run 4 functions (intake router + portfolio coaching
 # track). verify_jwt = false mirrors the Run 1/2 discovery functions
 # (browser-facing; auth enforced in-function by requireUser).

@@ -298,3 +298,41 @@ export async function setDailyMessageLimit(value: number): Promise<void> {
     .eq('key', 'daily_message_limit');
   if (error) throw new Error(error.message);
 }
+
+// ── Retrieval debug (owner-only) ──────────────────────────────────
+
+export type RecentMessage = {
+  id: string;
+  conversation_id: string;
+  content: string;
+  created_at: string;
+};
+
+export type RetrievalDebugChunk = {
+  content: string;
+  similarity: number;
+};
+
+export type RetrievalDebugResponse = {
+  message: string;
+  embedding_model: string;
+  threshold: number;
+  match_count: number;
+  chunks: RetrievalDebugChunk[];
+};
+
+export async function getRecentMessages(): Promise<RecentMessage[]> {
+  const { messages } = await adminFetch<{ messages: RecentMessage[] }>('admin-retrieval-debug');
+  return messages;
+}
+
+export async function runRetrievalDebug(
+  message: string,
+  threshold?: number,
+  matchCount?: number
+): Promise<RetrievalDebugResponse> {
+  return await adminFetch<RetrievalDebugResponse>('admin-retrieval-debug', {
+    method: 'POST',
+    body: { message, threshold, match_count: matchCount },
+  });
+}

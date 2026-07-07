@@ -22,6 +22,15 @@ process.stdin.on('end', () => {
       filePath.endsWith('.js')
     );
 
+    // Owner-only admin surfaces are exempt: their entire job is to show
+    // retrieval mechanics to the owner, never hide them. Scope kept
+    // narrow on purpose, only paths containing "admin", nothing else.
+    const isAdminOnly = /admin/i.test(filePath);
+
+    if (!isUserFacing || isAdminOnly) {
+      process.exit(0);
+    }
+
     if (!isUserFacing) {
       process.exit(0);
     }

@@ -34,11 +34,13 @@ import {
   getConversation,
   getDailyMessageLimit,
   getInsights,
+  getRecentMessages,
   getSpend,
   listConversations,
   listPrompts,
   listUsers,
   resetUserCredits,
+  runRetrievalDebug,
   setDailyMessageLimit,
   updateConversationStatus,
   updatePrompt,
@@ -50,6 +52,8 @@ import {
   type InsightsResponse,
   type PromptStat,
   type RecentFeedbackEvent,
+  type RecentMessage,
+  type RetrievalDebugResponse,
   type SpendResponse,
 } from '@/lib/admin-api';
 
@@ -102,6 +106,7 @@ export default function Admin() {
             <TabsTrigger value="insights">Insights</TabsTrigger>
             <TabsTrigger value="spend">Spend</TabsTrigger>
             {profile?.role === 'owner' && <TabsTrigger value="documents">Documents</TabsTrigger>}
+            {profile?.role === 'owner' && <TabsTrigger value="rag-debug">RAG Debug</TabsTrigger>}
             {profile?.role === 'owner' && <TabsTrigger value="users">Users</TabsTrigger>}
             {profile?.role === 'owner' && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
@@ -129,6 +134,12 @@ export default function Admin() {
           {profile?.role === 'owner' && (
             <TabsContent value="documents" className="mt-6">
               <DocumentsTab onUnauthorized={handleUnauthorized} />
+            </TabsContent>
+          )}
+
+          {profile?.role === 'owner' && (
+            <TabsContent value="rag-debug" className="mt-6">
+              <RagDebugTab onUnauthorized={handleUnauthorized} />
             </TabsContent>
           )}
 
@@ -1368,6 +1379,201 @@ function DocumentStatusBadge({ status }: { status: DocumentRow['status'] }) {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// RAG Debug tab (owner-only) — for a test message, show which document
+// chunks were retrieved and their cosine similarity scores.
+// ──────────────────────────────────────────────────────────────────
+
+function RagDebugTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [testMessage, setTestMessage] = useState('');
+  const [threshold, setThreshold] = useState('0.6');
+  const [matchCount, setMatchCount] = useState('3');
+  const [result, setResult] = useState<RetrievalDebugResponse | null>(null);
+  const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isLoadingRecent, setIsLoadingRecent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRecent = useCallback(async () => {
+    setIsLoadingRecent(true);
+    try {
+      setRecentMessages(await getRecentMessages());
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      // Non-fatal — the free-text box still works without the picker.
+    } finally {
+      setIsLoadingRecent(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void loadRecent();
+  }, [loadRecent]);
+
+  const handleRun = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!testMessage.trim() || isRunning) return;
+    setIsRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const parsedThreshold = parseFloat(threshold);
+      const parsedCount = parseInt(matchCount, 10);
+      const res = await runRetrievalDebug(
+        testMessage.trim(),
+        Number.isFinite(parsedThreshold) ? parsedThreshold : undefined,
+        Number.isInteger(parsedCount) ? parsedCount : undefined
+      );
+      setResult(res);
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      setError((err as Error).message);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>RAG Debug</CardTitle>
+          <CardDescription>
+            Run a test message through live retrieval and see which document chunks come back, with
+            their cosine similarity scores. Read-only — this does not affect production chat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <p className="mb-4 text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          <form onSubmit={handleRun} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="rag-debug-message">Test message</Label>
+              <Textarea
+                id="rag-debug-message"
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                rows={4}
+                placeholder="What should I do when a customer tells me they love my idea?"
+                required
+              />
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="rag-debug-threshold">Similarity threshold</Label>
+                <Input
+                  id="rag-debug-threshold"
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  className="w-32"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="rag-debug-count">Match count</Label>
+                <Input
+                  id="rag-debug-count"
+                  type="number"
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={matchCount}
+                  onChange={(e) => setMatchCount(e.target.value)}
+                  className="w-32"
+                />
+              </div>
+            </div>
+            <div>
+              <Button
+                type="submit"
+                disabled={isRunning || !testMessage.trim()}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isRunning ? 'Running...' : 'Run retrieval'}
+              </Button>
+            </div>
+          </form>
+
+          {recentMessages.length > 0 && (
+            <div className="mt-6 flex flex-col gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Or pick a recent message
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {recentMessages.slice(0, 8).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setTestMessage(m.content)}
+                    className="line-clamp-1 rounded-md border border-border bg-background/40 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {m.content}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {isLoadingRecent && recentMessages.length === 0 && (
+            <p className="mt-4 text-xs text-muted-foreground">Loading recent messages...</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {result && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Results</CardTitle>
+            <CardDescription>
+              {result.chunks.length} chunk{result.chunks.length === 1 ? '' : 's'} above threshold{' '}
+              {result.threshold} · model {result.embedding_model} · match_count {result.match_count}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {result.chunks.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No chunks matched above this threshold.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Rank</TableHead>
+                    <TableHead className="w-28">Similarity</TableHead>
+                    <TableHead>Content</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {result.chunks.map((c, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className="font-mono">{c.similarity.toFixed(3)}</TableCell>
+                      <TableCell className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {c.content}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Bits
 // ──────────────────────────────────────────────────────────────────
 
@@ -1660,8 +1866,8 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
         <p className="text-sm text-muted-foreground">
           Every production model call, priced all-in from{' '}
           <code className="rounded bg-muted px-1">model_usage</code>. Web-search cost is the
-          separable component of market-grounding calls; it is already included in the model
-          totals, not additional.
+          separable component of market-grounding calls; it is already included in the model totals,
+          not additional.
         </p>
         <div className="flex items-center gap-1">
           {[7, 30, 90].map((d) => (
