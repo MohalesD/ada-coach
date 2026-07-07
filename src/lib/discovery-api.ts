@@ -17,6 +17,7 @@ import type {
   DiscoveryGoal,
   DiscoveryTurnResponse,
   Evidence,
+  FrameworkScores,
   FrameworkSlot,
   IntelStatus,
   InterviewGuide,
@@ -206,6 +207,26 @@ export async function updateAssumption(
   const { assumption } = await invoke<{ assumption: Assumption }>(`assumptions?id=${id}`, {
     method: 'PATCH',
     body: patch,
+  });
+  return assumption;
+}
+
+// RICE/MoSCoW per-assumption scores live in assumptions.framework_scores,
+// which is service-only (mirrors the loop-state lockdown) — so this routes
+// through the discovery-turn controller rather than the plain /assumptions
+// PATCH. Requires an active RICE/MoSCoW prioritization framework on the
+// session; the server 400s otherwise.
+export async function scoreAssumptionFramework(
+  sessionId: string,
+  assumptionId: string,
+  frameworkScores: FrameworkScores
+): Promise<Assumption> {
+  const { assumption } = await invoke<{ assumption: Assumption }>('discovery-turn', {
+    method: 'POST',
+    body: {
+      session_id: sessionId,
+      score_assumption: { assumption_id: assumptionId, framework_scores: frameworkScores },
+    },
   });
   return assumption;
 }

@@ -14,6 +14,14 @@
 //   POST { session_id, initiate: { action, params? } }
 //                                     -> a PM-initiated action, out of turn
 //                                        (bypasses the evaluator).
+//   POST { session_id, score_assumption: { assumption_id, framework_scores } }
+//                                     -> write a per-assumption RICE/MoSCoW
+//                                        score. Not a loop action (no gate, no
+//                                        phase/coverage change) — plain data
+//                                        entry that happens to need the
+//                                        service role, since framework_scores
+//                                        is service-only (mirrors sessions'
+//                                        loop-state lockdown).
 //
 // Loop state (current_phase, coverage, active_framework, pending_action) is
 // service-owned — written here, never by the browser. The model only proposes;
@@ -50,6 +58,7 @@ import {
   getFramework,
   publicFrameworks,
   publicFrameworksForSlot,
+  validateFrameworkScores,
 } from "../_shared/frameworks.ts";
 
 const MESSAGE_MAX = 8000;
@@ -325,6 +334,7 @@ Deno.serve(async (req) => {
       message?: unknown;
       resolve?: { decision?: unknown; action?: unknown; params?: unknown };
       initiate?: { action?: unknown; params?: unknown };
+      score_assumption?: { assumption_id?: unknown; framework_scores?: unknown };
       if_unmodified_since?: unknown;
     };
 
@@ -352,6 +362,12 @@ Deno.serve(async (req) => {
         409,
         req,
       );
+    }
+
+    // Plain data entry, no model call — handle before the ANTHROPIC_API_KEY
+    // gate so a missing key can't block saving a score.
+    if (body.score_assumption) {
+      return await handleScoreAssumption(req, service, session, body.score_assumption);
     }
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -631,6 +647,57 @@ async function buildProposal(
       // map_assumptions, run_blind_spots
       return { action, rationale };
   }
+}
+
+// ── Per-assumption framework scoring (data entry, not a loop action) ────────
+
+// Writes assumptions.framework_scores via the service role (the column is
+// locked down to service-only — see the agent_loop_session_state migration).
+// Requires an active non-legacy prioritization framework (RICE/MoSCoW): the
+// default confidence×impact framework keeps using the existing confidence/
+// impact columns via the plain /assumptions PATCH, so there's nothing to
+// score here in that case.
+async function handleScoreAssumption(
+  req: Request,
+  service: SupabaseClient,
+  session: SessionRow,
+  input: { assumption_id?: unknown; framework_scores?: unknown },
+): Promise<Response> {
+  const assumptionId = typeof input.assumption_id === "string" ? input.assumption_id : "";
+  if (!assumptionId) {
+    return jsonResponse({ error: "assumption_id is required" }, 400, req);
+  }
+
+  const framework = getFramework(session.active_framework?.prioritization);
+  if (!framework || framework.slot !== "prioritization" || framework.usesLegacyScoreColumns) {
+    return jsonResponse(
+      {
+        error: "no_framework_scoring_active",
+        detail: "Pick a RICE or MoSCoW prioritization framework first.",
+      },
+      400,
+      req,
+    );
+  }
+
+  const validation = validateFrameworkScores(framework, input.framework_scores);
+  if (!validation.ok) {
+    return jsonResponse({ error: validation.error }, 400, req);
+  }
+
+  const { data, error } = await service
+    .from("assumptions")
+    .update({ framework_scores: validation.scores })
+    .eq("id", assumptionId)
+    .eq("session_id", session.id)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    console.error("assumption framework score update failed:", error);
+    return jsonResponse({ error: "Could not save the score." }, 500, req);
+  }
+  if (!data) return jsonResponse({ error: "Assumption not found" }, 404, req);
+  return jsonResponse({ assumption: data }, 200, req);
 }
 
 // ── Resolve / initiate mode ──────────────────────────────────────────────────
