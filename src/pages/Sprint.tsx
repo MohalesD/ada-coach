@@ -51,6 +51,7 @@ import {
   listSessionDocuments,
   loadThread,
   resolveDiscoveryAction,
+  scoreAssumptionFramework,
   sendDiscoveryTurn,
   updateAssumption,
   type DispatchResult,
@@ -59,8 +60,10 @@ import {
 import type {
   ActionType,
   Assumption,
+  AssumptionStatus,
   Coverage,
   DiscoveryGoal,
+  FrameworkScores,
   FrameworkSlot,
   PendingAction,
   Product,
@@ -215,6 +218,14 @@ export default function Sprint() {
         setCoverage(s.coverage ?? {});
         setActiveFramework(s.active_framework ?? {});
         setPendingAction(s.pending_action ?? null);
+        // Non-fatal: framework score inputs just don't render without it.
+        getFrameworks()
+          .then((list) => {
+            if (!cancelled) setFrameworks(list);
+          })
+          .catch(() => {
+            if (!cancelled) setFrameworksError(true);
+          });
       } catch {
         if (!cancelled) setLoadError(true);
       } finally {
@@ -448,6 +459,35 @@ export default function Sprint() {
     }
   };
 
+  const handleStatusChange = async (a: Assumption, status: AssumptionStatus) => {
+    const prev = assumptions;
+    setAssumptions((list) => list.map((x) => (x.id === a.id ? { ...x, status } : x)));
+    try {
+      await updateAssumption(a.id, { status });
+    } catch {
+      setAssumptions(prev);
+      toast.error("That status didn't save. Back to what it was.");
+    }
+  };
+
+  // RICE/MoSCoW scores are service-owned (framework_scores), so this goes
+  // through the discovery-turn controller rather than the plain /assumptions
+  // PATCH used above.
+  const handleFrameworkScoreChange = async (a: Assumption, scores: FrameworkScores) => {
+    if (!session) return;
+    const prev = assumptions;
+    setAssumptions((list) =>
+      list.map((x) => (x.id === a.id ? { ...x, framework_scores: scores } : x))
+    );
+    try {
+      const updated = await scoreAssumptionFramework(session.id, a.id, scores);
+      setAssumptions((list) => list.map((x) => (x.id === a.id ? updated : x)));
+    } catch {
+      setAssumptions(prev);
+      toast.error("That score didn't save. Back to what it was.");
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -473,6 +513,15 @@ export default function Sprint() {
   }
 
   const prioritizedCount = assumptions.filter((a) => a.is_prioritized).length;
+  // Only RICE/MoSCoW carry a framework_scores UI here — the default
+  // confidence×impact framework already renders via the columns above, so
+  // it's deliberately excluded (categorical = MoSCoW, formula 'rice' = RICE).
+  const scoredFramework =
+    frameworks?.find(
+      (f) =>
+        f.id === activeFramework.prioritization &&
+        (f.scoring?.kind === 'categorical' || f.scoring?.formula === 'rice')
+    ) ?? null;
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -610,6 +659,11 @@ export default function Sprint() {
                       index={i + 1}
                       editable
                       onScoreChange={(field, value) => void handleScoreChange(a, field, value)}
+                      onStatusChange={(status) => void handleStatusChange(a, status)}
+                      framework={scoredFramework}
+                      onFrameworkScoreChange={(scores) =>
+                        void handleFrameworkScoreChange(a, scores)
+                      }
                     >
                       <Button
                         size="sm"

@@ -207,3 +207,56 @@ export function computeRiceScore(s: {
   const effort = s.effort > 0 ? s.effort : 1;
   return Math.round(((s.reach * s.impact * s.confidence) / effort) * 10) / 10;
 }
+
+export type FrameworkScoreValidation =
+  | { ok: true; scores: Record<string, number | string> }
+  | { ok: false; error: string };
+
+// Validates a client-submitted assumptions.framework_scores payload against
+// the active framework's scoring schema (RICE fields + derived score, or a
+// MoSCoW bucket). Pure so it's unit-testable without a DB or Deno APIs.
+export function validateFrameworkScores(
+  framework: Framework,
+  raw: unknown,
+): FrameworkScoreValidation {
+  if (!framework.scoring) {
+    return { ok: false, error: "This framework has no per-item score." };
+  }
+  if (typeof raw !== "object" || raw === null) {
+    return { ok: false, error: "framework_scores must be an object" };
+  }
+  const record = raw as Record<string, unknown>;
+
+  if (framework.scoring.kind === "numeric") {
+    const scores: Record<string, number> = {};
+    for (const field of framework.scoring.fields) {
+      const v = record[field.key];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < field.min || v > field.max) {
+        return {
+          ok: false,
+          error: `${field.key} must be an integer from ${field.min} to ${field.max}`,
+        };
+      }
+      scores[field.key] = v;
+    }
+    if (framework.scoring.formula === "rice") {
+      scores.score = computeRiceScore({
+        reach: scores.reach,
+        impact: scores.impact,
+        confidence: scores.confidence,
+        effort: scores.effort,
+      });
+    }
+    return { ok: true, scores };
+  }
+
+  const bucket = record.bucket;
+  const valid = framework.scoring.buckets.some((b) => b.key === bucket);
+  if (typeof bucket !== "string" || !valid) {
+    return {
+      ok: false,
+      error: `bucket must be one of ${framework.scoring.buckets.map((b) => b.key).join(", ")}`,
+    };
+  }
+  return { ok: true, scores: { bucket } };
+}

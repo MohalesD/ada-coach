@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Compass } from 'lucide-react';
+import { Briefcase, Compass } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -426,6 +426,19 @@ export default function Index() {
                 <Compass size={14} strokeWidth={2} aria-hidden />
                 Discovery
               </button>
+              <button
+                type="button"
+                onClick={() => navigate('/portfolio')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
+                  'text-xs font-semibold text-[#8B6324] transition-colors',
+                  'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
+                )}
+              >
+                <Briefcase size={14} strokeWidth={2} aria-hidden />
+                Portfolio
+              </button>
               <CreditsBadge state={credits} />
               <UserMenu
                 user={user}
@@ -615,7 +628,6 @@ function UserMenu({
           )}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onNavigate('/portfolio')}>Portfolio</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onNavigate('/settings')}>Settings</DropdownMenuItem>
         {showAdmin && (
           <DropdownMenuItem onSelect={() => onNavigate('/admin')}>Admin</DropdownMenuItem>
