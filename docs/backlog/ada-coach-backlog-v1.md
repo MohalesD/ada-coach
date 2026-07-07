@@ -76,6 +76,29 @@ before scoping any of them individually:
 
 ---
 
+## Sonnet follow-ups (mechanical, apply an existing pattern; no Fable needed)
+
+Small, low-ambiguity technical follow-ups from the agent-loop frontend +
+production-401 work (2026-07-06). Each applies a known pattern, not a design
+call.
+
+- [ ] Replace the fixed 2-origin CORS allowlist (`ALLOWED_ORIGINS`) with a
+  pattern match that trusts any `*.vercel.app` preview URL for this project,
+  so preview branches don't need manual allowlisting. Scope: the `corsHeaders`
+  check in `supabase/functions/_shared/auth.ts`; keep the exact-match
+  localhost + prod origins and add a wildcard only for this project's Vercel
+  preview subdomain (`https://ada-coach-*.vercel.app`). Distinct from the
+  "Supabase redirect allowlist" blocking item above — that's the Auth URL
+  config in the Dashboard; this is the Edge Function CORS secret.
+- [ ] Add the same `isEdgeAuthError` / `recoverSession` 401-retry wrapper
+  (from `src/lib/discovery-api.ts`'s `invoke()`, commit `3df42f2`; helper in
+  `src/lib/session-recovery.ts`) to `portfolio-api.ts` and `admin-api.ts`, so
+  an expired session on the portfolio and admin surfaces refreshes-and-retries
+  or bounces to `/login` instead of a generic error. Frontend only; the helper
+  already exists.
+
+---
+
 ## Hypothesis-stage, needs validation before it's a real feature
 
 - [ ] **Product discovery and product development coaching expansion.**
