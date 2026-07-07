@@ -58,8 +58,23 @@ Two corpora share the same pipeline and tables but never mix:
 
 This split exists so a PM's private session notes never leak into another PM's coaching context, and so the owner's curated corpus never gets diluted by session-specific text.
 
-## Status: mid-evaluation
+## Status: mid-evaluation — retrieval barely fires at the production threshold
 
 As of this writing, retrieval and injection are implemented and correct, but **the injection step is disabled in production** behind a code comment (`ARM B EVAL: RAG DISABLED`). The system is mid-way through a structured A/B evaluation: Arm A (RAG on) vs. Arm B (RAG off, today's live behavior), scored across 15 hand-picked questions spanning high, medium, and low retrieval relevance (see `docs/eval/20260502_ADA_EVAL_RAGEvalHarness_v0.1.md`). The retrieval query itself, and a debug view in the admin panel, can both be exercised live without flipping that flag — which is how this evaluation gets real evidence before the feature ships.
 
-The decision to ship Arm A depends on whether grounded responses score meaningfully higher on specificity and coaching value than ungrounded ones, without ever surfacing the retrieval mechanism to the PM — a critical-fail condition in the rubric if it happens even once.
+**A first full regression run (`docs/eval/results/rag-regression-2026-07-07T04-39-02-466Z.md`) surfaced a finding that has to be resolved before the eval can answer its own question: at the production similarity threshold of 0.60, only 1 of the 15 questions retrieved any chunks at all.** The other 14 got zero chunks, so Arm A and Arm B received the *identical* system prompt for those — they aren't a RAG-on/RAG-off comparison, they're two independent samples of RAG-off, and any difference between them is sampling noise, not a retrieval effect. The one true pair (Q07) did retrieve — top similarity 0.690 — but a single data point can't carry the harness's Tier-1 success threshold (a mean delta across 7 questions).
+
+The likely cause: `text-embedding-3-small` tends to compress topically-related-but-differently-phrased text into cosine similarities in the 0.3–0.5 range, well under 0.60, even when the content is genuinely relevant (the corpus's best match for "What should I do when a customer tells me they love my idea?" topped out at 0.517). The 0.60 threshold may be filtering out useful context, not just noise.
+
+**This means the decision to ship Arm A can't be made from the 0.60 run alone.** A follow-up sweep at 0.35 / 0.45 / 0.55 / 0.60 (same 15 questions, same corpus) confirms the pattern is real and monotonic, not noise:
+
+| Threshold | Questions with ≥1 chunk retrieved |
+|---|---|
+| 0.35 | 12 / 15 |
+| 0.45 | 9 / 15 |
+| 0.55 | 5 / 15 |
+| 0.60 (production default) | 1 / 15 |
+
+Lowering the threshold does produce real, gradable A/B pairs — at 0.35, every Tier 1 (high-relevance) and Tier 2 (medium-relevance) question retrieves at least one chunk, while 3 of the 4 Tier 3 (off-topic/adversarial) questions correctly retrieve nothing. That's the shape the harness was designed to score: retrieval firing where it should and staying quiet where it shouldn't. One Tier 3 question ("I'm feeling burned out — should I take a break from my startup?") retrieved 2 chunks even at 0.35, which is worth a manual look — either the corpus genuinely covers founder resilience, or this is exactly the over-triggering the harness's authenticity dimension exists to catch.
+
+The eval owner should score the 0.35 (or 0.45) run against the harness rubric, not the 0.60 run — that's where the hypothesis is actually testable. Whatever threshold ships, the same critical-fail condition applies: grounded responses must never surface the retrieval mechanism to the PM.

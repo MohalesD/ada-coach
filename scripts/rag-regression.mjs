@@ -49,9 +49,20 @@ const RESULTS_DIR = path.join(REPO_ROOT, "docs/eval/results");
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const CHAT_MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 4000;
-const MATCH_THRESHOLD = 0.6;
 const MATCH_COUNT = 3;
 const CONTEXT_CHAR_CAP = 4000 * 4;
+
+// Threshold is overridable via --threshold=<n> or RAG_THRESHOLD, for running
+// a sweep (see docs/rag-architecture.md — 0.60, the production default,
+// retrieved chunks for only 1 of 15 questions against this corpus, so most
+// pairs weren't a real RAG-on/off comparison). Defaults to the production
+// value when not given.
+const thresholdArg = process.argv.find((a) => a.startsWith("--threshold="));
+const MATCH_THRESHOLD = thresholdArg
+  ? parseFloat(thresholdArg.split("=")[1])
+  : process.env.RAG_THRESHOLD
+    ? parseFloat(process.env.RAG_THRESHOLD)
+    : 0.6;
 
 function requireEnv(name, ...fallbacks) {
   for (const key of [name, ...fallbacks]) {
@@ -199,7 +210,10 @@ async function main() {
 
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outPath = path.join(RESULTS_DIR, `rag-regression-${stamp}.md`);
+  const outPath = path.join(
+    RESULTS_DIR,
+    `rag-regression-t${MATCH_THRESHOLD}-${stamp}.md`,
+  );
 
   const lines = [];
   lines.push("# RAG Regression Run");
