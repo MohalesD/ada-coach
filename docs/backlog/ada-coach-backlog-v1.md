@@ -154,6 +154,9 @@ Deferred, with the specific reason for each:
   table disagree about which migrations were "officially" applied; a
   record-keeping mismatch, not a functional bug).
 - [ ] Linear workspace setup (separate chat, per Mo).
+- [ ] RAG Debug admin tab: test-message textarea is too small for
+  realistic input length, needs a larger default height or
+  auto-grow.
 
 ---
 
