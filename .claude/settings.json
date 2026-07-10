@@ -20,6 +20,24 @@
             "command": "node .claude/hooks/brand-voice-guard.js"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\mohal\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe\" -m graphify hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\Users\\mohal\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe\" -m graphify hook-guard read"
+          }
+        ]
       }
     ]
   }
