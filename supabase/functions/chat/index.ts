@@ -226,7 +226,6 @@ Deno.serve(async (req) => {
               input: message,
             }),
           });
-/* ARM B EVAL: RAG DISABLED
           if (embedRes.ok) {
             const embedData = await embedRes.json();
             const queryEmbedding: number[] | undefined =
@@ -273,7 +272,7 @@ Deno.serve(async (req) => {
                 `RAG: chunks=${chunkCount}, injected=${contextBody.length > 0}`,
               );
             }
-          }*/ // END ARM B EVAL
+          }
         } catch (ragErr) {
           console.error("RAG retrieval error, continuing without context:", ragErr);
         }

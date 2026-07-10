@@ -31,9 +31,6 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
-    if (!isUserFacing) {
-      process.exit(0);
-    }
 
     // Strings that break Ada's product illusion or reveal internal mechanics
     const bannedPhrases = [
