@@ -1461,7 +1461,7 @@ function RagDebugTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 id="rag-debug-message"
                 value={testMessage}
                 onChange={(e) => setTestMessage(e.target.value)}
-                rows={4}
+                rows={8}
                 placeholder="What should I do when a customer tells me they love my idea?"
                 required
               />

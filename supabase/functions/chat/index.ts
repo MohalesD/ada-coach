@@ -13,6 +13,7 @@ import {
   jsonResponse,
   requireUser,
 } from "../_shared/auth.ts";
+import { recordModelUsage } from "../_shared/usage.ts";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-haiku-4-5-20251001";
@@ -236,7 +237,7 @@ Deno.serve(async (req) => {
                 "match_document_chunks",
                 {
                   query_embedding: queryEmbedding,
-                  match_threshold: 0.60,
+                  match_threshold: 0.45,
                   match_count: 3,
                 },
               );
@@ -374,6 +375,17 @@ Deno.serve(async (req) => {
       console.error("Failed to save assistant message:", assistantMsgErr);
       return jsonResponse({ error: "Could not save Ada's reply." }, 500, req);
     }
+
+    // 6.5. Record model usage (B-002) so coaching-chat spend shows up in
+    // the admin Spend tab. Best-effort — recordModelUsage never throws.
+    await recordModelUsage(service, {
+      userId: user.id,
+      sessionId: null,
+      callType: "chat",
+      model: MODEL,
+      inputTokens,
+      outputTokens,
+    });
 
     // 7. Touch conversation updated_at so it sorts to the top
     await service

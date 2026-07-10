@@ -126,7 +126,7 @@ const SCENARIOS: Scenario[] = [
     icon: <SignpostIcon />,
     title: 'New here? Find your track',
     subtitle:
-      'Two quick questions route you to discovery coaching or portfolio building — aspiring PMs welcome, skip anytime',
+      'Two quick questions route you to discovery coaching or portfolio building. Aspiring PMs welcome — skip anytime.',
     // Routed to /start — the Run 4 intake router owns this flow.
     openingMessage: '',
     featured: true,

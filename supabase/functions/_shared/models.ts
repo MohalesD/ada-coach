@@ -12,6 +12,7 @@
 // by Vitest.
 
 export type CallType =
+  | "chat"
   | "stage_classification"
   | "session_summary"
   | "assumption_mapping"
@@ -34,6 +35,10 @@ export type CallType =
   | "success_metric_candidates";
 
 export const DEFAULT_MODEL_ROUTES: Record<CallType, string> = {
+  // Coaching chat itself doesn't route through getModelFor (the model is
+  // hardcoded in chat/index.ts) — this entry exists only so "chat" has a
+  // CallType default, matching the model chat/index.ts actually calls.
+  chat: "claude-haiku-4-5",
   stage_classification: "claude-haiku-4-5",
   session_summary: "claude-haiku-4-5",
   assumption_mapping: "claude-sonnet-4-6",
