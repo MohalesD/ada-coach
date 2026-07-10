@@ -209,3 +209,12 @@ Deferred, with the specific reason for each:
 
 - Cohort dashboard. The cohort/instructor model no longer applies to
   Ada; there's no coach or instructor role left to build it for.
+
+## Post-demo, cosmetic
+
+- [ ] Consider whether precise book-title citation on RAG-hit
+  responses (vs. generic voice on RAG-miss) creates a detectable
+  style tell across questions. Not a literal authenticity breach,
+  current system-prompt rule explicitly allows author/book
+  references as recommendations. Revisit only if it becomes a real
+  signal in practice, not preemptively.
