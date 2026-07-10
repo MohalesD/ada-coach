@@ -58,9 +58,11 @@ Two corpora share the same pipeline and tables but never mix:
 
 This split exists so a PM's private session notes never leak into another PM's coaching context, and so the owner's curated corpus never gets diluted by session-specific text.
 
-## Status: mid-evaluation — retrieval barely fires at the production threshold
+## Status: live — Arm A shipped 2026-07-10, eval ended
 
-As of this writing, retrieval and injection are implemented and correct, but **the injection step is disabled in production** behind a code comment (`ARM B EVAL: RAG DISABLED`). The system is mid-way through a structured A/B evaluation: Arm A (RAG on) vs. Arm B (RAG off, today's live behavior), scored across 15 hand-picked questions spanning high, medium, and low retrieval relevance (see `docs/eval/20260502_ADA_EVAL_RAGEvalHarness_v0.1.md`). The retrieval query itself, and a debug view in the admin panel, can both be exercised live without flipping that flag — which is how this evaluation gets real evidence before the feature ships.
+**Update 2026-07-10:** the decision below was made — production ships at 0.45, and the `ARM B EVAL: RAG DISABLED` gate has been removed from `chat/index.ts`. Retrieval and injection are live in production coaching chat. The A/B eval this section describes is now historical context for *why* 0.45, not a description of current status.
+
+As of the eval described below, retrieval and injection were implemented and correct, but **the injection step was disabled in production** behind a code comment (`ARM B EVAL: RAG DISABLED`). The system was mid-way through a structured A/B evaluation: Arm A (RAG on) vs. Arm B (RAG off, then-live behavior), scored across 15 hand-picked questions spanning high, medium, and low retrieval relevance (see `docs/eval/20260502_ADA_EVAL_RAGEvalHarness_v0.1.md`). The retrieval query itself, and a debug view in the admin panel, could both be exercised live without flipping that flag — which is how this evaluation got real evidence before the feature shipped.
 
 **A first full regression run (`docs/eval/results/rag-regression-2026-07-07T04-39-02-466Z.md`) surfaced a finding that has to be resolved before the eval can answer its own question: at the production similarity threshold of 0.60, only 1 of the 15 questions retrieved any chunks at all.** The other 14 got zero chunks, so Arm A and Arm B received the *identical* system prompt for those — they aren't a RAG-on/RAG-off comparison, they're two independent samples of RAG-off, and any difference between them is sampling noise, not a retrieval effect. The one true pair (Q07) did retrieve — top similarity 0.690 — but a single data point can't carry the harness's Tier-1 success threshold (a mean delta across 7 questions).
 

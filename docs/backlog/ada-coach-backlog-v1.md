@@ -177,12 +177,12 @@ Deferred, with the specific reason for each:
 
 ## Open product decisions, not code tasks
 
-- [ ] **DECIDE: RAG similarity threshold.** Regression sweep
-  (`docs/eval/results/rag-regression-t0.35-2026-07-07...`) shows 0.60
-  retrieves for 1/15 test questions; 0.35 retrieves for 12/15.
-  Production is currently running at 0.60. This is a real product
-  decision (more retrieval vs. more noise), not a code task, decide
-  deliberately, don't let it default.
+- [x] **DECIDE: RAG similarity threshold.** Decided 2026-07-10: shipped
+  at 0.45 (between the 12/15-retrieval 0.35 and the near-silent 1/15
+  0.60), and the `ARM B EVAL: RAG DISABLED` gate in
+  `supabase/functions/chat/index.ts` was removed — Arm A (RAG on) is
+  now live in production, ending the Arm A/B eval. See
+  `docs/qa/2026-07-10-rag-arm-b-gate-removed.md`.
 - [ ] **Document retention claim, pick one and state it precisely.**
   Current real behavior: uploaded documents are session-scoped and
   purged when the conversation ends, genuinely no persistence. A
