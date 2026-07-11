@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react';
+import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DndContext,
@@ -985,7 +986,6 @@ function FolderRow({
               ref={inputRef}
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
-              onBlur={onCommitRename}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -1010,6 +1010,34 @@ function FolderRow({
             </button>
           )}
         </div>
+        {isEditing && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCommitRename();
+              }}
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              aria-label="Save name"
+              title="Save"
+            >
+              <Check size={13} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancelRename();
+              }}
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              aria-label="Cancel rename"
+              title="Cancel"
+            >
+              <X size={13} aria-hidden />
+            </button>
+          </div>
+        )}
         <span className="shrink-0 text-[10px] text-muted-foreground/70">{chats.length}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1191,7 +1219,6 @@ function Row({
             ref={inputRef}
             value={editingValue}
             onChange={(e) => setEditingValue(e.target.value)}
-            onBlur={onCommitRename}
             onKeyDown={handleKey}
             onClick={(e) => e.stopPropagation()}
             className="h-7 text-sm"
@@ -1211,6 +1238,35 @@ function Row({
           </>
         )}
       </div>
+
+      {isEditing && (
+        <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCommitRename();
+            }}
+            className="rounded p-1 text-muted-foreground hover:text-foreground"
+            aria-label="Save name"
+            title="Save"
+          >
+            <Check size={14} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancelRename();
+            }}
+            className="rounded p-1 text-muted-foreground hover:text-foreground"
+            aria-label="Cancel rename"
+            title="Cancel"
+          >
+            <X size={14} aria-hidden />
+          </button>
+        </div>
+      )}
 
       {!isEditing && !selectionMode && (
         <div className="mt-0.5 flex shrink-0 items-center gap-0.5">

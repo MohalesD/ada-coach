@@ -5,7 +5,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Compass, FileText, Globe, MoreVertical, Play, Plus } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Compass,
+  FileText,
+  Globe,
+  MoreVertical,
+  Play,
+  Plus,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -276,7 +286,6 @@ export default function Discovery() {
                         ref={renameInputRef}
                         value={renamingValue}
                         onChange={(e) => setRenamingValue(e.target.value)}
-                        onBlur={() => void commitRename()}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
@@ -299,7 +308,28 @@ export default function Discovery() {
                         {p.name}
                       </h3>
                     )}
-                    {renamingId !== p.id && (
+                    {renamingId === p.id ? (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => void commitRename()}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label="Save name"
+                          title="Save"
+                        >
+                          <Check size={15} aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cancelRename()}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label="Cancel rename"
+                          title="Cancel"
+                        >
+                          <X size={15} aria-hidden />
+                        </button>
+                      </div>
+                    ) : (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
