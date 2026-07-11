@@ -51,6 +51,19 @@ declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const MAX_EVIDENCE_ROWS = 12;
 const CLAIM_MAX = 500;
 
+// Per-user hard cap on Market Intelligence runs — independent of the
+// (broken) credits system. Owner-tunable via app_settings without a
+// redeploy, mirroring intel_search_budget's pattern in intel-config.ts.
+const DEFAULT_MARKET_INTEL_RUN_CAP = 3;
+
+function parseMarketIntelRunCap(raw: string | null | undefined): number {
+  if (raw && /^[0-9]+$/.test(raw.trim())) {
+    const n = parseInt(raw.trim(), 10);
+    if (n >= 1) return n;
+  }
+  return DEFAULT_MARKET_INTEL_RUN_CAP;
+}
+
 const PLAN_SYSTEM = `You are Ada, an AI customer discovery coach, planning bounded market research for a PM's product.
 
 Given the product context, produce 3 to 5 focused web-search queries that together cover: market size signals, market trends, demand/behavioral evidence, and adjacent or substitute players. Make each query specific enough to return useful results.
@@ -403,6 +416,45 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Product not found" }, 404, req);
     }
 
+    // Per-user hard cap on Market Intelligence runs. Counts lifetime
+    // `market_intel_research` rows in model_usage — the billed
+    // web-search step, 1:1 with a completed run (market_intel_plan is
+    // not counted: its recordModelUsage call can be skipped on a plan
+    // failure that still falls through to fallbackAngles()). Fails
+    // closed: a model_usage lookup error declines rather than letting
+    // spend through uncapped.
+    const service = getServiceClient();
+    const { count: intelRunCount, error: capCheckErr } = await service
+      .from("model_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("call_type", "market_intel_research");
+
+    const capDecline = () =>
+      jsonResponse(
+        {
+          error: "market_intel_run_cap_reached",
+          detail:
+            "You've used up the Market Intelligence previews available in this build. Thanks for trying it, that's the kind of feature we're still tuning.",
+        },
+        403,
+        req,
+      );
+
+    if (capCheckErr) {
+      console.error("market-intel run-cap check failed:", capCheckErr);
+      return capDecline();
+    }
+
+    const { data: capSetting } = await service
+      .from("app_settings")
+      .select("value")
+      .eq("key", "market_intel_run_cap")
+      .maybeSingle();
+    if ((intelRunCount ?? 0) >= parseMarketIntelRunCap(capSetting?.value ?? null)) {
+      return capDecline();
+    }
+
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
       console.error("Missing ANTHROPIC_API_KEY");
@@ -425,7 +477,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const service = getServiceClient();
     const configBudget = await getIntelSearchBudget(service);
     // The run's spendable searches: config budget, latency-capped so the
     // background call finishes well inside the worker's wall clock. A
