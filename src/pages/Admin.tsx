@@ -33,6 +33,7 @@ import {
   deletePrompt,
   getConversation,
   getDailyMessageLimit,
+  getFeedbackLog,
   getInsights,
   getRecentMessages,
   getSpend,
@@ -49,6 +50,7 @@ import {
   type ConversationDetail,
   type ConversationStat,
   type ConversationSummary,
+  type FeedbackEntry,
   type InsightsResponse,
   type PromptStat,
   type RecentFeedbackEvent,
@@ -105,6 +107,7 @@ export default function Admin() {
             <TabsTrigger value="prompts">Coaching Prompts</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
             <TabsTrigger value="spend">Spend</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
             {profile?.role === 'owner' && <TabsTrigger value="documents">Documents</TabsTrigger>}
             {profile?.role === 'owner' && <TabsTrigger value="rag-debug">RAG Debug</TabsTrigger>}
             {profile?.role === 'owner' && <TabsTrigger value="users">Users</TabsTrigger>}
@@ -129,6 +132,10 @@ export default function Admin() {
 
           <TabsContent value="spend" className="mt-6">
             <SpendTab onUnauthorized={handleUnauthorized} />
+          </TabsContent>
+
+          <TabsContent value="feedback" className="mt-6">
+            <FeedbackTab onUnauthorized={handleUnauthorized} />
           </TabsContent>
 
           {profile?.role === 'owner' && (
@@ -2009,6 +2016,117 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
             </Card>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// ─── Feedback tab ─────────────────────────────────────────────────────────────
+// Read-only list of the unified user_feedback log (FAB/Settings submissions
+// + message thumb events). Triage actions are a later backlog item.
+
+function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
+  const [entries, setEntries] = useState<FeedbackEntry[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setEntries(await getFeedbackLog());
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      setError("Couldn't load the feedback log. Try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const typeBadge = (e: FeedbackEntry) => {
+    if (e.feedback_type === 'message_rating') {
+      return (
+        <Badge variant="outline">
+          {e.rating === 'up' ? '👍' : '👎'} rating
+        </Badge>
+      );
+    }
+    const label =
+      e.feedback_type === 'bug' ? 'Bug' : e.feedback_type === 'praise' ? 'Praise' : 'Idea';
+    return <Badge variant={e.feedback_type === 'bug' ? 'destructive' : 'secondary'}>{label}</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Everything users have sent through the feedback button, Settings, and message
+        thumbs — newest first, latest 200.
+      </p>
+
+      {isLoading && (
+        <p className="py-10 text-center text-sm text-muted-foreground">Loading feedback…</p>
+      )}
+
+      {error && !isLoading && (
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button size="sm" variant="outline" onClick={() => void load()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {entries && !isLoading && !error && entries.length === 0 && (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          Nothing yet. The first submission will land here.
+        </p>
+      )}
+
+      {entries && !isLoading && !error && entries.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Type</TableHead>
+              <TableHead>Comment</TableHead>
+              <TableHead>User</TableHead>
+              <TableHead>Surface</TableHead>
+              <TableHead>When</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((e) => (
+              <TableRow key={e.id}>
+                <TableCell className="whitespace-nowrap">{typeBadge(e)}</TableCell>
+                <TableCell className="max-w-md">
+                  <span className="line-clamp-3 text-sm">
+                    {e.comment ?? <span className="text-muted-foreground">—</span>}
+                  </span>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-sm">
+                  {e.user_display_name ?? e.user_email ?? e.user_id.slice(0, 8)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                  {e.source_surface}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                  {new Date(e.created_at).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

@@ -4,15 +4,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/lib/auth-context';
+import FeedbackForm from '@/components/FeedbackForm';
 
 const PASSWORD_MIN = 8;
 
@@ -42,9 +37,7 @@ export default function Settings() {
     const result = await updateProfile({ display_name: trimmedName });
     setSavingProfile(false);
     if (result.error) {
-      setProfileError(
-        'Could not save your profile. Please try again.',
-      );
+      setProfileError('Could not save your profile. Please try again.');
       return;
     }
     toast.success('Profile updated');
@@ -70,15 +63,12 @@ export default function Settings() {
     else if (newPassword.length < PASSWORD_MIN)
       e.next = `Password must be at least ${PASSWORD_MIN} characters`;
     if (!confirmPassword) e.confirm = 'Please confirm your new password';
-    else if (confirmPassword !== newPassword)
-      e.confirm = 'Passwords do not match';
+    else if (confirmPassword !== newPassword) e.confirm = 'Passwords do not match';
     return e;
   }, [currentPassword, newPassword, confirmPassword]);
 
-  const showPwError = (
-    key: 'currentPassword' | 'newPassword' | 'confirmPassword',
-    msg?: string,
-  ) => ((passwordTouched[key] || passwordSubmitAttempted) ? msg : undefined);
+  const showPwError = (key: 'currentPassword' | 'newPassword' | 'confirmPassword', msg?: string) =>
+    passwordTouched[key] || passwordSubmitAttempted ? msg : undefined;
 
   const passwordValid = !Object.values(passwordErrors).some(Boolean);
 
@@ -120,9 +110,7 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
-            <CardDescription>
-              Update how Ada addresses you.
-            </CardDescription>
+            <CardDescription>Update how Ada addresses you.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleProfileSave} noValidate className="flex flex-col gap-4">
@@ -147,16 +135,9 @@ export default function Settings() {
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={user?.email ?? ''}
-                  disabled
-                  readOnly
-                />
+                <Input id="email" type="email" value={user?.email ?? ''} disabled readOnly />
                 <p className="text-xs text-muted-foreground">
-                  Email is managed by your auth provider and cannot be changed
-                  here.
+                  Email is managed by your auth provider and cannot be changed here.
                 </p>
               </div>
 
@@ -178,19 +159,13 @@ export default function Settings() {
             <Separator className="my-6" />
 
             <div className="mb-3">
-              <h2 className="text-base font-semibold text-foreground">
-                Change password
-              </h2>
+              <h2 className="text-base font-semibold text-foreground">Change password</h2>
               <p className="text-sm text-muted-foreground">
                 Enter your current password to set a new one.
               </p>
             </div>
 
-            <form
-              onSubmit={handlePasswordSave}
-              noValidate
-              className="flex flex-col gap-4"
-            >
+            <form onSubmit={handlePasswordSave} noValidate className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="currentPassword">Current password</Label>
                 <Input
@@ -200,9 +175,7 @@ export default function Settings() {
                   required
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  onBlur={() =>
-                    setPasswordTouched((t) => ({ ...t, currentPassword: true }))
-                  }
+                  onBlur={() => setPasswordTouched((t) => ({ ...t, currentPassword: true }))}
                   disabled={savingPassword}
                   aria-invalid={!!showPwError('currentPassword', passwordErrors.current)}
                 />
@@ -222,9 +195,7 @@ export default function Settings() {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  onBlur={() =>
-                    setPasswordTouched((t) => ({ ...t, newPassword: true }))
-                  }
+                  onBlur={() => setPasswordTouched((t) => ({ ...t, newPassword: true }))}
                   disabled={savingPassword}
                   aria-invalid={!!showPwError('newPassword', passwordErrors.next)}
                 />
@@ -244,9 +215,7 @@ export default function Settings() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  onBlur={() =>
-                    setPasswordTouched((t) => ({ ...t, confirmPassword: true }))
-                  }
+                  onBlur={() => setPasswordTouched((t) => ({ ...t, confirmPassword: true }))}
                   disabled={savingPassword}
                   aria-invalid={!!showPwError('confirmPassword', passwordErrors.confirm)}
                 />
@@ -271,6 +240,18 @@ export default function Settings() {
                 {savingPassword ? 'Updating...' : 'Update password'}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Send feedback</CardTitle>
+            <CardDescription>
+              A bug, an idea, or a win — it all gets read, and it all shapes what Ada becomes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FeedbackForm surface="settings" />
           </CardContent>
         </Card>
       </div>

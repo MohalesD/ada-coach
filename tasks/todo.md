@@ -7,6 +7,48 @@ platform expansion are Run 2+).
 
 ---
 
+## 🔨 In progress 2026-07-10 — Unified feedback system (`/goal`, two phases)
+
+Out of scope (hard boundary): credits/gating, Market Intelligence, RAG
+threshold/retrieval, auth, the merged kickoff starter-prompts work.
+
+Schema locked against reality: Mo's proposed `user_feedback` verbatim +
+one integrity CHECK (message_rating requires rating). Existing chat
+thumbs (`messages.feedback` via PostgREST, column-GRANT) stays as
+per-message UI state; `use-feedback.ts` dual-writes a `user_feedback`
+event row. Insights tab untouched. FAB surfaces: `/` (chat), `/discovery`
++ `/sprint/:id` (Discovery). Admin: new read-only Feedback tab +
+`admin-feedback` Edge Function.
+
+### Phase 1 — functional
+
+- [x] Migration `user_feedback` (RLS own-rows, service_role full,
+      lockdown GRANTs) — applied via MCP, .sql committed alongside;
+      grants/policies verified live via execute_sql
+- [x] `src/lib/feedback-api.ts` — one insert helper
+- [x] `use-feedback.ts` — dual-write + source surface param
+- [x] Extract `FeedbackButtons` → `src/components/FeedbackButtons.tsx`;
+      Index imports it (surface 'chat')
+- [x] Sprint thumbs: `ThreadMessage.feedback`, loadThread select,
+      thumbs on assistant bubbles (surface 'discovery')
+- [x] `FeedbackForm.tsx` (shared) + `FeedbackFab.tsx` (dialog +
+      first-use tooltip, Ada voice, localStorage lazy-init)
+- [x] Mount FAB on Index (raised), Discovery, Sprint (raised)
+- [x] Settings: "Send feedback" card (surface 'settings')
+- [x] `admin-feedback` function deployed (CLI, + per-function deno.json)
+      + admin-api `getFeedbackLog` + Admin Feedback tab
+- [x] RLS batch review (in build-log-feedback.md), type-check clean,
+      new-file lint clean — awaiting Mo's manual click-through before
+      commit + Phase 2
+
+### Phase 2 — motion polish (gated on Mo's explicit verification)
+
+- [ ] FAB first-appearance + tooltip entrance + starter-chips entrance
+      (Remotion skill if it genuinely fits in-app; else CSS — call it
+      honestly), thumbs/press feedback via Tailwind transitions
+
+---
+
 ## 🔨 In progress 2026-07-06 — Agent-loop FRONTEND (Fable run, `/goal`)
 
 Branch `feat/discovery-frontend`. Source of truth:

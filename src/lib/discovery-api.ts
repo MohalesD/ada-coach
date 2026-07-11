@@ -515,13 +515,14 @@ export interface ThreadMessage {
   role: 'user' | 'assistant';
   content: string;
   kind?: 'message' | 'summary';
+  feedback?: 'positive' | 'negative' | null;
   created_at: string;
 }
 
 export async function loadThread(conversationId: string): Promise<ThreadMessage[]> {
   const { data, error } = await supabase
     .from('messages')
-    .select('id, role, content, kind, created_at')
+    .select('id, role, content, kind, feedback, created_at')
     .eq('conversation_id', conversationId)
     .in('role', ['user', 'assistant'])
     .order('created_at', { ascending: true });

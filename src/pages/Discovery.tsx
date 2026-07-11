@@ -42,6 +42,7 @@ import {
   startSession,
 } from '@/lib/discovery-api';
 import { GOAL_LABELS } from '@/components/discovery/CoveragePath';
+import FeedbackFab from '@/components/FeedbackFab';
 import type { Product, Session } from '@/types/discovery';
 
 const INTAKE_MAX = 50_000;
@@ -491,6 +492,8 @@ export default function Discovery() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <FeedbackFab />
     </div>
   );
 }

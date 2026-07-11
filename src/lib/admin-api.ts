@@ -336,3 +336,23 @@ export async function runRetrievalDebug(
     body: { message, threshold, match_count: matchCount },
   });
 }
+
+// ── Unified feedback log (admin-feedback) ─────────────────────────
+
+export type FeedbackEntry = {
+  id: string;
+  user_id: string;
+  feedback_type: 'bug' | 'feedback' | 'praise' | 'message_rating';
+  rating: 'up' | 'down' | null;
+  message_id: string | null;
+  source_surface: string;
+  comment: string | null;
+  created_at: string;
+  user_email: string | null;
+  user_display_name: string | null;
+};
+
+export async function getFeedbackLog(): Promise<FeedbackEntry[]> {
+  const res = await adminFetch<{ feedback: FeedbackEntry[] }>('admin-feedback');
+  return res.feedback;
+}

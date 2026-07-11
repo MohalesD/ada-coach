@@ -35,6 +35,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import FeedbackButtons from '@/components/FeedbackButtons';
+import FeedbackFab from '@/components/FeedbackFab';
 import AssumptionCard from '@/components/discovery/AssumptionCard';
 import CoveragePath from '@/components/discovery/CoveragePath';
 import ProposalCard from '@/components/discovery/ProposalCard';
@@ -113,20 +115,25 @@ function ThreadBubble({ m }: { m: ThreadMessage }) {
   }
   const isSummary = m.kind === 'summary';
   return (
-    <div
-      className={cn(
-        'mr-auto max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-        isSummary ? 'border border-accent/30 bg-secondary/50' : 'bg-muted'
-      )}
-    >
-      {isSummary && (
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
-          Session summary
-        </p>
-      )}
-      <div className={PROSE}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+    <div className="group mr-auto flex w-full max-w-[92%] flex-col items-start gap-1">
+      <div
+        className={cn(
+          'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+          isSummary ? 'border border-accent/30 bg-secondary/50' : 'bg-muted'
+        )}
+      >
+        {isSummary && (
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-accent">
+            Session summary
+          </p>
+        )}
+        <div className={PROSE}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+        </div>
       </div>
+      {!isSummary && (
+        <FeedbackButtons messageId={m.id} initial={m.feedback ?? null} surface="discovery" />
+      )}
     </div>
   );
 }
@@ -839,6 +846,8 @@ export default function Sprint() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FeedbackFab raised />
     </div>
   );
 }
