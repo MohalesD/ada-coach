@@ -81,6 +81,18 @@ const PROSE = cn(
   '[&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm'
 );
 
+// First-move prompts offered when a sprint opens with only the PM's intake
+// and no coach reply yet. Each is sent as a real PM turn (handleTurn), so
+// the coach reads the already-persisted intake from history and answers —
+// the top chip in particular produces Ada's first diagnostic read. Phrased
+// first-person because they render as the PM's own message when clicked.
+const STARTER_PROMPTS = [
+  'Give me your honest first read on this.',
+  "What's the riskiest assumption I'm making?",
+  'Where should I focus my discovery first?',
+  'What am I not seeing here?',
+];
+
 function errorCopy(err: unknown, fallback: string): string {
   if (err instanceof DiscoveryApiError) {
     if (err.code === 'malformed_model_output') {
@@ -241,6 +253,13 @@ export default function Sprint() {
     const instant = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     bottomRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'end' });
   }, [messages.length, pendingAction, turnBusy]);
+
+  // Session creation persists the PM's intake but never calls the coach, so
+  // a fresh sprint opens with the PM's own message and no reply — put focus
+  // straight in the composer so the next step is obvious.
+  useEffect(() => {
+    if (!loading && !loadError) chatRef.current?.focus();
+  }, [loading, loadError]);
 
   // ── The loop: turns ───────────────────────────────────────────────────────
 
@@ -594,6 +613,39 @@ export default function Sprint() {
           {messages.map((m) => (
             <ThreadBubble key={m.id} m={m} />
           ))}
+
+          {/* A fresh sprint opens with only the PM's intake — session
+              creation persists it but doesn't call the coach (the zero-click
+              auto-kickoff is a backend change slated for Polish Sprint 1).
+              These first moves hand the PM a one-click way to get Ada going:
+              the intake is already in history, so any of them prompt a real
+              reply, and the top one gives Ada's first diagnostic read. */}
+          {!stale && !turnBusy && messages.length === 1 && messages[0].role === 'user' && (
+            <div className="mr-auto max-w-[92%] space-y-2.5">
+              <p className="text-sm text-muted-foreground">
+                Pick a first move to get Ada's read — or just start typing below.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {STARTER_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    disabled={inputLocked}
+                    onClick={() => void handleTurn(prompt)}
+                    className={cn(
+                      'rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground',
+                      'transition-colors hover:border-accent/60 hover:bg-muted',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
+                      'disabled:cursor-not-allowed disabled:opacity-50'
+                    )}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {turnBusy && <WorkingNote label="Ada is thinking…" />}
           {dispatch?.source === 'library' && <WorkingNote label={dispatch.note} />}
 
