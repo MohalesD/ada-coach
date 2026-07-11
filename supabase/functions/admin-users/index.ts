@@ -2,6 +2,7 @@
 // GET                           → list all user_profiles with credit fields.
 // POST ?id=<uuid>&action=reset  → reset that user's credits_remaining to the
 //                                 current daily_message_limit; stamp last_credit_reset.
+// POST ?action=reset_all        → same reset for every user in one call.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
 import {
@@ -44,7 +45,9 @@ Deno.serve(async (req) => {
   if (req.method === "POST") {
     const id = url.searchParams.get("id");
     const action = url.searchParams.get("action");
-    if (!id || action !== "reset") {
+    const isSingle = action === "reset" && !!id;
+    const isAll = action === "reset_all";
+    if (!isSingle && !isAll) {
       return jsonResponse({ error: "Invalid request" }, 400, req);
     }
 
@@ -71,6 +74,21 @@ Deno.serve(async (req) => {
     }
 
     const today = new Date().toISOString().slice(0, 10);
+
+    if (isAll) {
+      // PostgREST requires a filter on UPDATE; match every row by id.
+      const { data: updatedRows, error: allErr } = await service
+        .from("user_profiles")
+        .update({ credits_remaining: limit, last_credit_reset: today })
+        .not("id", "is", null)
+        .select("id");
+      if (allErr) {
+        console.error("admin-users reset_all failed:", allErr);
+        return jsonResponse({ error: "Could not reset credits." }, 500, req);
+      }
+      return jsonResponse({ reset_count: updatedRows?.length ?? 0 }, 200, req);
+    }
+
     const { data: updated, error: updErr } = await service
       .from("user_profiles")
       .update({ credits_remaining: limit, last_credit_reset: today })

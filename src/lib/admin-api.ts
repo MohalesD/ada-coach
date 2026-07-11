@@ -275,6 +275,14 @@ export async function resetUserCredits(id: string): Promise<AdminUser> {
   return user;
 }
 
+export async function resetAllCredits(): Promise<number> {
+  const { reset_count } = await adminFetch<{ reset_count: number }>('admin-users', {
+    method: 'POST',
+    params: { action: 'reset_all' },
+  });
+  return reset_count;
+}
+
 // ── App settings (owner-only via RLS, queried directly) ──────────
 
 export async function getDailyMessageLimit(): Promise<number | null> {
@@ -347,6 +355,7 @@ export type FeedbackEntry = {
   message_id: string | null;
   source_surface: string;
   comment: string | null;
+  contact_email: string | null;
   created_at: string;
   user_email: string | null;
   user_display_name: string | null;

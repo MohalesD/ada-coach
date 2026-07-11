@@ -97,3 +97,68 @@
     @apply bg-gradient-to-r from-[#8B6324] to-[#B8853A] bg-clip-text text-transparent;
   }
 }
+
+/* ── Feedback & kickoff motion (Phase 2) ──────────────────────────────
+   Sequenced entrances, pure CSS: the page settles, the FAB pops in,
+   the first-use tip leans in after it, starter chips cascade upward.
+   All of it is gated on prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ada-pop-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.6) translateY(8px);
+    }
+    70% {
+      transform: scale(1.06);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  @keyframes ada-tip-in {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes ada-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes ada-thumb-pop {
+    0% {
+      transform: scale(1);
+    }
+    45% {
+      transform: scale(1.35) rotate(-6deg);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .animate-fab-in {
+    animation: ada-pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: 350ms;
+  }
+  .animate-tip-in {
+    animation: ada-tip-in 320ms ease-out both;
+    animation-delay: 950ms;
+  }
+  .animate-rise-in {
+    animation: ada-rise-in 360ms ease-out both;
+  }
+  .animate-thumb-pop {
+    animation: ada-thumb-pop 260ms ease-out;
+  }
+}

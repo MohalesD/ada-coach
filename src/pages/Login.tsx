@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PasswordStrengthMeter } from '@/components/PasswordStrengthMeter';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import DemoBadge from '@/components/DemoBadge';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'magic';
 
@@ -218,6 +219,9 @@ export default function Login() {
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
             Customer Discovery Coach
           </p>
+          <div className="mt-2 flex justify-center">
+            <DemoBadge />
+          </div>
         </div>
 
         {awaitingEmailConfirmation ? (

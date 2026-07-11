@@ -98,7 +98,80 @@ free text per the spec (display-only in admin; React escapes it).
   confirmation. TDD-via-subagent was not used this run — the goal
   defined its own definition-of-done and manual-verification protocol.
 
-## Phase 2 — Motion & design polish
+## Phase 2 — Polish, guidance, and the expanded creative brief
 
-Not started. Gated on Mo confirming every Phase 1 item above works in
-the browser.
+Mo verified Phase 1 and widened the brief: be creative, close gaps he
+hadn't considered, add wiring he'd find useful. Web search was used
+once (feedback-widget UX best practices) — findings that shaped the
+build: passive always-visible widgets far out-respond triggered
+surveys; every extra required field costs submissions; giving a reason
+for asking and closing the loop are what make people submit again.
+
+### Follow-up email (opt-in, not a field tax)
+
+`contact_email` added to `user_feedback`
+(`20260710140000_user_feedback_contact_email.sql`, applied via MCP).
+Users are signed in, so the account email is already known — the value
+of the field is *intent*. The form shows an "I'd like a reply about
+this" checkbox; ticking it reveals an email input prefilled with the
+account address (editable). Unticked → NULL. Loose format validation
+client-side; 320-char CHECK server-side. Same migration closes the
+Phase 1 flagged gap: comment now has a DB-side 4,000-char CHECK.
+Column INSERT grant extended to include `contact_email`. Admin
+Feedback tab shows "↩ wants a reply: …" under the submitter when
+present.
+
+### Admin wiring
+
+- **Users → Reset all** — `admin-users` gained `POST ?action=reset_all`
+  (owner-only, same limit lookup, one bulk UPDATE, returns count);
+  redeployed (v5). UI: two-step inline confirm ("Reset all" → arms to
+  "Really reset all N?" for 5s → fires), then refreshes the table.
+- **Spend** — Total card now shows ≈ $/day and a 30-day run rate;
+  "Export CSV" downloads the window's per-day, per-call-type rows
+  client-side (date, call_type, model, calls, tokens, web searches,
+  cost).
+- `admin-feedback` redeployed (v2) to return `contact_email`.
+
+### Demo pill
+
+`DemoBadge` component ("Demo" chosen over "Prototype" — shorter, sets
+expectations without apologizing). Placed beside the header title on
+the chat page and under the wordmark on the login page. The pill
+itself carries a tooltip explaining what "demo" means and pointing at
+the feedback button — the cue doubles as guidance.
+
+### Guidance tooltips
+
+`TooltipProvider` (250ms delay) now wraps the app. Tooltips added
+where a label alone doesn't convey the destination: header
+Discovery/Portfolio buttons (chat), Start Discovery Sprint and
+Market & competitors (product cards), Frameworks and grounding-notes
+buttons (sprint header — the notes button's native `title` was
+replaced so it doesn't double-render). Copy follows the voice rules:
+says what you'll find, no jargon, 1–2 sentences.
+
+### Motion
+
+**Remotion honestly doesn't fit here** — it composes and renders video
+timelines; it does not animate live React UI. The sequenced feel the
+goal described (FAB first-appearance, tooltip entrance, chips arriving)
+is built with CSS keyframes + staggered delays in `src/index.css`, all
+inside `@media (prefers-reduced-motion: no-preference)`:
+
+- `ada-pop-in` — FAB springs in (overshoot curve) 350ms after mount.
+- `ada-tip-in` — first-use tip leans in from the right at ~950ms, after
+  the FAB has landed. The two delays make it read as one composed
+  sequence: page → button → whisper.
+- `ada-rise-in` — starter chips cascade upward, 80ms apart.
+- `ada-thumb-pop` — selected thumb scales/tilts for a beat.
+- FAB also gets hover scale-up / active scale-down press feedback
+  (plain Tailwind transitions — no timeline needed).
+
+### Verification state
+
+Type-check clean; every new/authored file lints clean (the one error
+in `Login.tsx` is a pre-existing mode-reset effect untouched by this
+work). `admin-users` v5 and `admin-feedback` v2 confirmed ACTIVE via
+`functions list`. Migration applied and grant verified by application.
+Feature flows to be eyeballed by Mo — the polish is judged on taste.

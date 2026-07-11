@@ -24,6 +24,7 @@ type FeedbackRow = {
   message_id: string | null;
   source_surface: string;
   comment: string | null;
+  contact_email: string | null;
   created_at: string;
 };
 
@@ -46,7 +47,9 @@ Deno.serve(async (req) => {
 
     const { data: rows, error: rowsErr } = await service
       .from("user_feedback")
-      .select("id, user_id, feedback_type, rating, message_id, source_surface, comment, created_at")
+      .select(
+        "id, user_id, feedback_type, rating, message_id, source_surface, comment, contact_email, created_at",
+      )
       .order("created_at", { ascending: false })
       .limit(FETCH_LIMIT);
     if (rowsErr) {

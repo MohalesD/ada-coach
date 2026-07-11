@@ -37,6 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import FeedbackButtons from '@/components/FeedbackButtons';
 import FeedbackFab from '@/components/FeedbackFab';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AssumptionCard from '@/components/discovery/AssumptionCard';
 import CoveragePath from '@/components/discovery/CoveragePath';
 import ProposalCard from '@/components/discovery/ProposalCard';
@@ -576,15 +577,23 @@ export default function Sprint() {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={openLibrary}
-              className="flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-            >
-              <BookOpen size={17} aria-hidden />
-              <span className="hidden text-xs font-semibold sm:inline">Frameworks</span>
-              <span className="sr-only sm:hidden">Framework library</span>
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={openLibrary}
+                  className="flex items-center gap-1.5 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                >
+                  <BookOpen size={17} aria-hidden />
+                  <span className="hidden text-xs font-semibold sm:inline">Frameworks</span>
+                  <span className="sr-only sm:hidden">Framework library</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[240px]">
+                The frameworks Ada coaches with — Mom Test, RICE, MoSCoW, North Star. Browse what
+                each is for, or switch lenses mid-sprint.
+              </TooltipContent>
+            </Tooltip>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -633,14 +642,15 @@ export default function Sprint() {
                 Pick a first move to get Ada's read — or just start typing below.
               </p>
               <div className="flex flex-wrap gap-2">
-                {STARTER_PROMPTS.map((prompt) => (
+                {STARTER_PROMPTS.map((prompt, i) => (
                   <button
                     key={prompt}
                     type="button"
                     disabled={inputLocked}
+                    style={{ animationDelay: `${150 + i * 80}ms` }}
                     onClick={() => void handleTurn(prompt)}
                     className={cn(
-                      'rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground',
+                      'animate-rise-in rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground',
                       'transition-colors hover:border-accent/60 hover:bg-muted',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
                       'disabled:cursor-not-allowed disabled:opacity-50'
@@ -756,25 +766,32 @@ export default function Sprint() {
 
       <footer className="border-t border-border bg-background">
         <div className="mx-auto flex max-w-3xl items-end gap-2 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            aria-label="Add grounding notes"
-            title="Add grounding notes"
-            onClick={() => setNotesOpen(true)}
-            className={cn(
-              'relative mb-0.5 rounded-md p-2 text-muted-foreground transition-colors',
-              'hover:bg-muted hover:text-foreground',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60'
-            )}
-          >
-            <NotebookPen size={18} aria-hidden />
-            {docs.length > 0 && (
-              <span
-                aria-hidden
-                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent"
-              />
-            )}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Add grounding notes"
+                onClick={() => setNotesOpen(true)}
+                className={cn(
+                  'relative mb-0.5 rounded-md p-2 text-muted-foreground transition-colors',
+                  'hover:bg-muted hover:text-foreground',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60'
+                )}
+              >
+                <NotebookPen size={18} aria-hidden />
+                {docs.length > 0 && (
+                  <span
+                    aria-hidden
+                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent"
+                  />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[240px]">
+              Paste interview notes or research — Ada grounds this sprint's coaching in what you
+              drop here.
+            </TooltipContent>
+          </Tooltip>
           <Textarea
             ref={chatRef}
             value={chatInput}

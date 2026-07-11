@@ -22,6 +22,8 @@ import ConversationSidebar from '@/components/ConversationSidebar';
 import { type FeedbackValue } from '@/hooks/use-feedback';
 import FeedbackButtons from '@/components/FeedbackButtons';
 import FeedbackFab from '@/components/FeedbackFab';
+import DemoBadge from '@/components/DemoBadge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { exportConversation } from '@/lib/export';
 
 type MessageKind = 'message' | 'summary';
@@ -408,39 +410,58 @@ export default function Index() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
-            <h1 className="truncate text-xl font-extrabold tracking-tight">
-              <span className="gradient-text">Ada</span>{' '}
-              <span className="text-sm font-medium text-muted-foreground">
-                · Customer Discovery Coach
-              </span>
-            </h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-xl font-extrabold tracking-tight">
+                <span className="gradient-text">Ada</span>{' '}
+                <span className="text-sm font-medium text-muted-foreground">
+                  · Customer Discovery Coach
+                </span>
+              </h1>
+              <DemoBadge />
+            </div>
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('/discovery')}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
-                  'text-xs font-semibold text-[#8B6324] transition-colors',
-                  'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
-                )}
-              >
-                <Compass size={14} strokeWidth={2} aria-hidden />
-                Discovery
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/portfolio')}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
-                  'text-xs font-semibold text-[#8B6324] transition-colors',
-                  'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
-                )}
-              >
-                <Briefcase size={14} strokeWidth={2} aria-hidden />
-                Portfolio
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/discovery')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
+                      'text-xs font-semibold text-[#8B6324] transition-colors',
+                      'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
+                    )}
+                  >
+                    <Compass size={14} strokeWidth={2} aria-hidden />
+                    Discovery
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[230px]">
+                  Discovery Sprints — pick one product idea and Ada pressure-tests it end to end:
+                  assumptions, evidence, priorities, a report.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/portfolio')}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border border-[#B8853A]/40 bg-background px-3 py-1.5',
+                      'text-xs font-semibold text-[#8B6324] transition-colors',
+                      'hover:border-[#B8853A]/70 hover:bg-[#B8853A]/10',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B8853A]/60'
+                    )}
+                  >
+                    <Briefcase size={14} strokeWidth={2} aria-hidden />
+                    Portfolio
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[230px]">
+                  Several ideas competing for your time? Portfolio coaching helps you decide which
+                  one deserves discovery first.
+                </TooltipContent>
+              </Tooltip>
               <CreditsBadge state={credits} />
               <UserMenu
                 user={user}

@@ -41,11 +41,21 @@ event row. Insights tab untouched. FAB surfaces: `/` (chat), `/discovery`
       new-file lint clean — awaiting Mo's manual click-through before
       commit + Phase 2
 
-### Phase 2 — motion polish (gated on Mo's explicit verification)
+### Phase 2 — polish + expanded creative brief (Mo verified Phase 1)
 
-- [ ] FAB first-appearance + tooltip entrance + starter-chips entrance
-      (Remotion skill if it genuinely fits in-app; else CSS — call it
-      honestly), thumbs/press feedback via Tailwind transitions
+- [x] Motion: FAB pop-in → tip lean-in sequence, starter-chip cascade,
+      thumb pop — CSS keyframes (Remotion honestly doesn't fit live UI),
+      all behind prefers-reduced-motion
+- [x] Feedback follow-up: contact_email migration + opt-in "I'd like a
+      reply" flow + admin "wants a reply" display
+- [x] Users tab: Reset all (admin-users reset_all, redeployed) with
+      two-step inline confirm
+- [x] Spend tab: $/day + 30-day run rate + Export CSV
+- [x] Demo pill (DemoBadge) on chat header + login, with expectation-
+      setting tooltip
+- [x] Guidance tooltips: Discovery/Portfolio nav, sprint-start +
+      market-intel cards, Frameworks + grounding-notes buttons;
+      TooltipProvider app-wide
 
 ---
 

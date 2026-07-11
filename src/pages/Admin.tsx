@@ -40,6 +40,7 @@ import {
   listConversations,
   listPrompts,
   listUsers,
+  resetAllCredits,
   resetUserCredits,
   runRetrievalDebug,
   setDailyMessageLimit,
@@ -1610,6 +1611,10 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  // Two-step inline confirm for the bulk reset — first click arms it,
+  // second click fires, and it disarms itself after a beat.
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  const [resettingAll, setResettingAll] = useState(false);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -1648,6 +1653,29 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
     }
   };
 
+  const handleResetAll = async () => {
+    if (!confirmingAll) {
+      setConfirmingAll(true);
+      window.setTimeout(() => setConfirmingAll(false), 5000);
+      return;
+    }
+    setConfirmingAll(false);
+    setResettingAll(true);
+    try {
+      const count = await resetAllCredits();
+      toast.success(`Credits reset for ${count} user${count === 1 ? '' : 's'}`);
+      await refresh();
+    } catch (err) {
+      if ((err as Error).name === 'UnauthorizedError') {
+        onUnauthorized();
+        return;
+      }
+      toast.error(`Reset all failed: ${(err as Error).message}`);
+    } finally {
+      setResettingAll(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
@@ -1657,9 +1685,23 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
             {users.length} total · reset credits to the current daily limit
           </CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
-          {isLoading ? 'Refreshing...' : 'Refresh'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={confirmingAll ? 'destructive' : 'outline'}
+            size="sm"
+            onClick={() => void handleResetAll()}
+            disabled={resettingAll || isLoading || users.length === 0}
+          >
+            {resettingAll
+              ? 'Resetting…'
+              : confirmingAll
+                ? `Really reset all ${users.length}?`
+                : 'Reset all'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
+            {isLoading ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {error && (
@@ -1888,6 +1930,34 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
               {d}d
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-2"
+            disabled={isLoading || !data || data.days.length === 0}
+            onClick={() => {
+              if (!data) return;
+              const header =
+                'date,call_type,model,calls,input_tokens,output_tokens,web_search_requests,cost_usd';
+              const lines = data.days.flatMap((day) =>
+                day.rows.map(
+                  (r) =>
+                    `${day.date},${r.call_type},${r.model},${r.calls},${r.input_tokens},${r.output_tokens},${r.web_search_requests},${r.cost_usd}`
+                )
+              );
+              const blob = new Blob([[header, ...lines].join('\n')], {
+                type: 'text/csv;charset=utf-8',
+              });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `ada-spend-${data.window_days}d.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Export CSV
+          </Button>
         </div>
       </div>
 
@@ -1914,6 +1984,11 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 {data.totals.calls} calls{data.truncated ? ' · window truncated' : ''}
+                <span className="mt-0.5 block">
+                  ≈ {formatUsd(data.totals.cost_usd / Math.max(data.window_days, 1))}/day ·{' '}
+                  {formatUsd((data.totals.cost_usd / Math.max(data.window_days, 1)) * 30)}/mo run
+                  rate
+                </span>
               </CardContent>
             </Card>
             <Card>
@@ -2052,11 +2127,7 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   const typeBadge = (e: FeedbackEntry) => {
     if (e.feedback_type === 'message_rating') {
-      return (
-        <Badge variant="outline">
-          {e.rating === 'up' ? '👍' : '👎'} rating
-        </Badge>
-      );
+      return <Badge variant="outline">{e.rating === 'up' ? '👍' : '👎'} rating</Badge>;
     }
     const label =
       e.feedback_type === 'bug' ? 'Bug' : e.feedback_type === 'praise' ? 'Praise' : 'Idea';
@@ -2066,8 +2137,8 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Everything users have sent through the feedback button, Settings, and message
-        thumbs — newest first, latest 200.
+        Everything users have sent through the feedback button, Settings, and message thumbs —
+        newest first, latest 200.
       </p>
 
       {isLoading && (
@@ -2109,8 +2180,15 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                     {e.comment ?? <span className="text-muted-foreground">—</span>}
                   </span>
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-sm">
-                  {e.user_display_name ?? e.user_email ?? e.user_id.slice(0, 8)}
+                <TableCell className="text-sm">
+                  <span className="whitespace-nowrap">
+                    {e.user_display_name ?? e.user_email ?? e.user_id.slice(0, 8)}
+                  </span>
+                  {e.contact_email && (
+                    <span className="block whitespace-nowrap text-xs font-medium text-[#8B6324]">
+                      ↩ wants a reply: {e.contact_email}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                   {e.source_surface}

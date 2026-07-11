@@ -43,6 +43,7 @@ import {
 } from '@/lib/discovery-api';
 import { GOAL_LABELS } from '@/components/discovery/CoveragePath';
 import FeedbackFab from '@/components/FeedbackFab';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Product, Session } from '@/types/discovery';
 
 const INTAKE_MAX = 50_000;
@@ -392,25 +393,41 @@ export default function Discovery() {
                         Resume sprint
                       </Button>
                     ) : (
-                      <Button
-                        className="gap-1.5"
-                        onClick={() => {
-                          setIntakeFor(p);
-                          setIntake('');
-                        }}
-                      >
-                        <Compass size={15} aria-hidden />
-                        Start Discovery Sprint
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            className="gap-1.5"
+                            onClick={() => {
+                              setIntakeFor(p);
+                              setIntake('');
+                            }}
+                          >
+                            <Compass size={15} aria-hidden />
+                            Start Discovery Sprint
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-[240px]">
+                          A guided working session: Ada reads where you are, then coaches you
+                          through framing, assumptions, and what to test first.
+                        </TooltipContent>
+                      </Tooltip>
                     )}
-                    <Button
-                      variant="outline"
-                      className="gap-1.5"
-                      onClick={() => navigate(`/product/${p.id}/intel`)}
-                    >
-                      <Globe size={15} aria-hidden />
-                      Market & competitors
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="gap-1.5"
+                          onClick={() => navigate(`/product/${p.id}/intel`)}
+                        >
+                          <Globe size={15} aria-hidden />
+                          Market & competitors
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[240px]">
+                        A live market scan and competitor profiles for this product — so the
+                        coaching is grounded in what's actually out there.
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               );

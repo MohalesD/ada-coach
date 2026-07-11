@@ -13,6 +13,8 @@ export type FeedbackEvent = {
   rating?: 'up' | 'down';
   message_id?: string;
   comment?: string;
+  // Opt-in follow-up address. Absent = no reply requested.
+  contact_email?: string;
 };
 
 export async function submitFeedbackEvent(event: FeedbackEvent): Promise<{ error: string | null }> {
@@ -27,6 +29,7 @@ export async function submitFeedbackEvent(event: FeedbackEvent): Promise<{ error
     rating: event.rating ?? null,
     message_id: event.message_id ?? null,
     comment: event.comment?.trim() || null,
+    contact_email: event.contact_email?.trim() || null,
   });
   return { error: error ? error.message : null };
 }

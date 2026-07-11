@@ -95,8 +95,8 @@ function FeedbackButton({
         'disabled:cursor-wait',
         selected
           ? isPositive
-            ? 'text-[#B8853A] hover:bg-[#B8853A]/10'
-            : 'text-[#A93226] hover:bg-[#A93226]/10'
+            ? 'animate-thumb-pop text-[#B8853A] hover:bg-[#B8853A]/10'
+            : 'animate-thumb-pop text-[#A93226] hover:bg-[#A93226]/10'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >

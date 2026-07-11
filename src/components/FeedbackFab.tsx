@@ -52,7 +52,7 @@ export default function FeedbackFab({ raised = false }: { raised?: boolean }) {
         {showTip && (
           <div
             role="status"
-            className="relative mb-1 max-w-[220px] rounded-xl border border-accent/40 bg-card px-3.5 py-2.5 shadow-md"
+            className="animate-tip-in relative mb-1 max-w-[220px] rounded-xl border border-accent/40 bg-card px-3.5 py-2.5 shadow-md"
           >
             <p className="text-xs leading-relaxed text-foreground">
               Spot a bug, or have a thought while you work? This button comes straight to me.
@@ -73,8 +73,8 @@ export default function FeedbackFab({ raised = false }: { raised?: boolean }) {
           aria-label="Send feedback"
           title="Send feedback"
           className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-full shadow-lg',
-            'bg-primary text-primary-foreground transition-colors hover:bg-primary/90',
+            'animate-fab-in flex h-12 w-12 items-center justify-center rounded-full shadow-lg',
+            'bg-primary text-primary-foreground transition-transform hover:scale-105 active:scale-95',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60'
           )}
         >
