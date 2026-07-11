@@ -9,3 +9,4 @@ One line per completed task: date, slug, link, quiz result.
 - 2026-07-10 — sprint-kickoff-starter-prompts — [QA](2026-07-10-sprint-kickoff-starter-prompts.md) — quiz: pass
 - 2026-07-10 — unified-feedback-system — [QA](2026-07-10-unified-feedback-system.md) — quiz: pass
 - 2026-07-10 — feedback-phase2-polish — [QA](2026-07-10-feedback-phase2-polish.md) — quiz: pass
+- 2026-07-10 — favicon-and-social-preview — [QA](2026-07-10-favicon-and-social-preview.md) — quiz: pass
