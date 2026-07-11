@@ -43,6 +43,19 @@ declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const MAX_CANDIDATES = 8;
 const NAME_MAX = 120;
 
+// Per-user hard cap on competitor identification runs — same pattern as
+// market-intel's market_intel_run_cap. Owner-tunable via app_settings
+// without a redeploy.
+const DEFAULT_COMPETITIVE_INTEL_RUN_CAP = 2;
+
+function parseCompetitiveIntelRunCap(raw: string | null | undefined): number {
+  if (raw && /^[0-9]+$/.test(raw.trim())) {
+    const n = parseInt(raw.trim(), 10);
+    if (n >= 1) return n;
+  }
+  return DEFAULT_COMPETITIVE_INTEL_RUN_CAP;
+}
+
 const IDENTIFY_SYSTEM = `You are Ada, an AI customer discovery coach, identifying the real competitive landscape for a PM's product.
 
 Search the web for named products or companies that solve the same problem for the same kind of customer — direct competitors first, then close substitutes. Only name competitors you actually found evidence of in your search results. If the searches return nothing genuinely relevant, say the space looks unmapped — NEVER invent a competitor to seem thorough.
@@ -440,6 +453,46 @@ Deno.serve(async (req) => {
     }
 
     // ── POST: identify candidates (202 + background worker) ────────────
+    // Per-user hard cap on competitor identification runs. Counts
+    // lifetime `competitor_identification` rows in model_usage — the
+    // billed search step, 1:1 with a completed identify run. Fails
+    // closed: a lookup error declines rather than letting spend through
+    // uncapped. Does not apply to the PATCH confirm gate above (no AI
+    // spend there).
+    const { count: identifyRunCount, error: capCheckErr } = await service
+      .from("model_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("call_type", "competitor_identification");
+
+    const capDecline = () =>
+      jsonResponse(
+        {
+          error: "competitive_intel_run_cap_reached",
+          detail:
+            "You've used up the Competitive Intelligence previews available in this build. Thanks for trying it, that's the kind of feature we're still tuning.",
+        },
+        403,
+        req,
+      );
+
+    if (capCheckErr) {
+      console.error("competitive-intel run-cap check failed:", capCheckErr);
+      return capDecline();
+    }
+
+    const { data: capSetting } = await service
+      .from("app_settings")
+      .select("value")
+      .eq("key", "competitive_intel_run_cap")
+      .maybeSingle();
+    if (
+      (identifyRunCount ?? 0) >=
+      parseCompetitiveIntelRunCap(capSetting?.value ?? null)
+    ) {
+      return capDecline();
+    }
+
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
       console.error("Missing ANTHROPIC_API_KEY");

@@ -28,6 +28,19 @@ import { recordModelUsage } from "../_shared/usage.ts";
 import { CONFIDENCE_LABELS } from "../_shared/intel-config.ts";
 import type { ConfidenceLabel } from "../_shared/intel-config.ts";
 
+// Per-user hard cap on competitive gap analysis runs — same pattern as
+// market-intel's market_intel_run_cap. Owner-tunable via app_settings
+// without a redeploy.
+const DEFAULT_COMPETITIVE_GAP_RUN_CAP = 2;
+
+function parseCompetitiveGapRunCap(raw: string | null | undefined): number {
+  if (raw && /^[0-9]+$/.test(raw.trim())) {
+    const n = parseInt(raw.trim(), 10);
+    if (n >= 1) return n;
+  }
+  return DEFAULT_COMPETITIVE_GAP_RUN_CAP;
+}
+
 const GAP_SYSTEM = `You are Ada, an AI customer discovery coach, mapping where a competitive landscape is UNSERVED for a PM's product.
 
 You are given source-cited competitor profiles (already researched) and the PM's own discovery assumptions. Reason ONLY over what is given — do not invent competitors, features, or numbers that are not in the material.
@@ -144,6 +157,46 @@ Deno.serve(async (req) => {
     }
 
     const service = getServiceClient();
+
+    // Per-user hard cap on competitive gap analysis runs. Counts
+    // lifetime `competitive_gap_analysis` rows in model_usage. This call
+    // has no background worker (synchronous, no web search), so the row
+    // lands within the same request cycle as the next attempt. Fails
+    // closed: a lookup error declines rather than letting spend through
+    // uncapped.
+    const { count: gapRunCount, error: capCheckErr } = await service
+      .from("model_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("call_type", "competitive_gap_analysis");
+
+    const capDecline = () =>
+      jsonResponse(
+        {
+          error: "competitive_gap_run_cap_reached",
+          detail:
+            "You've used up the Competitive Intelligence previews available in this build. Thanks for trying it, that's the kind of feature we're still tuning.",
+        },
+        403,
+        req,
+      );
+
+    if (capCheckErr) {
+      console.error("competitive-gap run-cap check failed:", capCheckErr);
+      return capDecline();
+    }
+
+    const { data: capSetting } = await service
+      .from("app_settings")
+      .select("value")
+      .eq("key", "competitive_gap_run_cap")
+      .maybeSingle();
+    if (
+      (gapRunCount ?? 0) >=
+      parseCompetitiveGapRunCap(capSetting?.value ?? null)
+    ) {
+      return capDecline();
+    }
 
     const { data: competitors } = await service
       .from("competitors")

@@ -50,6 +50,22 @@ declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const MAX_EVIDENCE_ROWS = 8;
 const CLAIM_MAX = 500;
 
+// Per-user hard cap on competitor profiling runs — same pattern as
+// market-intel's market_intel_run_cap. Owner-tunable via app_settings
+// without a redeploy. Higher than the sibling caps (identification, gap
+// analysis) on purpose: this call runs once PER COMPETITOR, not once
+// per session, so a cap of 2 would block most of a confirmed list after
+// the first couple of profiles.
+const DEFAULT_COMPETITOR_PROFILE_RUN_CAP = 5;
+
+function parseCompetitorProfileRunCap(raw: string | null | undefined): number {
+  if (raw && /^[0-9]+$/.test(raw.trim())) {
+    const n = parseInt(raw.trim(), 10);
+    if (n >= 1) return n;
+  }
+  return DEFAULT_COMPETITOR_PROFILE_RUN_CAP;
+}
+
 const PROFILE_SYSTEM = `You are Ada, an AI customer discovery coach, profiling ONE competitor for a PM's competitive landscape.
 
 Search the web for this competitor's positioning, pricing signals, feature surface, and recent moves (launches, funding, pivots, shutdowns). Prefer the competitor's own site, recent coverage, and primary sources. Report what the evidence shows — including weaknesses and gaps. If you cannot find something (e.g. pricing is not public), say exactly that; NEVER guess a number or invent a move.
@@ -309,6 +325,46 @@ Deno.serve(async (req) => {
       );
     }
 
+    const service = getServiceClient();
+
+    // Per-user hard cap on competitor profiling runs. Counts lifetime
+    // `competitor_profiling` rows in model_usage — the billed search
+    // step, 1:1 with a completed profile call. Fails closed: a lookup
+    // error declines rather than letting spend through uncapped.
+    const { count: profileRunCount, error: capCheckErr } = await service
+      .from("model_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("call_type", "competitor_profiling");
+
+    const capDecline = () =>
+      jsonResponse(
+        {
+          error: "competitor_profile_run_cap_reached",
+          detail:
+            "You've used up the Competitive Intelligence previews available in this build. Thanks for trying it, that's the kind of feature we're still tuning.",
+        },
+        403,
+        req,
+      );
+
+    if (capCheckErr) {
+      console.error("competitor-profile run-cap check failed:", capCheckErr);
+      return capDecline();
+    }
+
+    const { data: capSetting } = await service
+      .from("app_settings")
+      .select("value")
+      .eq("key", "competitor_profile_run_cap")
+      .maybeSingle();
+    if (
+      (profileRunCount ?? 0) >=
+      parseCompetitorProfileRunCap(capSetting?.value ?? null)
+    ) {
+      return capDecline();
+    }
+
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
       console.error("Missing ANTHROPIC_API_KEY");
@@ -318,8 +374,6 @@ Deno.serve(async (req) => {
         req,
       );
     }
-
-    const service = getServiceClient();
 
     const { data: product } = await service
       .from("products")
