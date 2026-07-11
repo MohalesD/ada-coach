@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How I Found (and Fixed) a Silent RAG Failure in Ada Coach</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cerulean: #9BB7D4;
+    --deep-cerulean: #1B4F72;
+    --gold: #C9A84C;
+    --near-black: #0D1B2A;
+    --off-white: #F7F5F0;
+    --mid: #E4DFD6;
+    --muted: #7A8899;
+    --success: #2D7D46;
+    --error: #C0392B;
+    --warning: #D68910;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--off-white); color: var(--near-black); font-size: 16px; line-height: 1.7; }
+
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--near-black);
+    padding: 0 48px; display: flex; align-items: center; gap: 4px; height: 52px;
+    border-bottom: 1px solid rgba(155,183,212,0.15); overflow-x: auto;
+  }
+  .nav-label { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cerulean); margin-right: 10px; white-space: nowrap; }
+  nav button {
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,0.6); font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 500; padding: 6px 11px; border-radius: 14px;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  nav button:hover { background: rgba(155,183,212,0.12); color: var(--cerulean); }
+
+  .hero { background: var(--near-black); color: white; padding: 80px 48px 72px; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; top: -120px; right: -100px; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(155,183,212,0.08) 0%, transparent 70%); }
+  .hero-inner { max-width: 900px; margin: 0 auto; position: relative; z-index: 1; }
+  .hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.3); color: #E8C97A; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 14px; border-radius: 20px; margin-bottom: 28px; }
+  .hero h1 { font-family: 'Playfair Display', serif; font-size: 44px; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 20px; }
+  .hero h1 em { font-style: italic; color: var(--cerulean); }
+  .hero-sub { font-size: 17px; color: rgba(255,255,255,0.65); max-width: 620px; line-height: 1.65; margin-bottom: 40px; }
+  .hero-meta { display: flex; gap: 40px; flex-wrap: wrap; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1); }
+  .hero-meta-item { display: flex; flex-direction: column; gap: 4px; }
+  .hero-meta-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.35); }
+  .hero-meta-value { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.85); }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 0 48px 80px; }
+  .section { margin-top: 64px; }
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cerulean); margin-bottom: 8px; }
+  h2 { font-family: 'Playfair Display', serif; font-size: 30px; letter-spacing: -0.01em; color: var(--deep-cerulean); margin-bottom: 20px; line-height: 1.25; }
+  h3 { font-size: 17px; font-weight: 600; color: var(--near-black); margin: 32px 0 14px; }
+  p { margin-bottom: 16px; color: #2A3C4F; }
+  ul, ol { margin: 10px 0 18px 24px; }
+  li { margin-bottom: 7px; color: #2A3C4F; line-height: 1.6; }
+  .divider { height: 1px; background: linear-gradient(to right, var(--cerulean), transparent); margin: 56px 0; opacity: 0.3; }
+
+  pre { background: #0D1B2A; border-radius: 10px; padding: 24px; overflow-x: auto; margin: 20px 0; border: 1px solid rgba(155,183,212,0.15); }
+  pre code { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #E8F0F8; line-height: 1.75; background: none; padding: 0; display: block; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: rgba(27,79,114,0.1); color: var(--deep-cerulean); padding: 2px 6px; border-radius: 4px; }
+  .code-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(155,183,212,0.55); margin-bottom: 10px; font-family: 'DM Sans', sans-serif; }
+
+  .callout { background: white; border-left: 3px solid var(--gold); padding: 20px 26px; border-radius: 0 10px 10px 0; margin: 24px 0; box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
+  .callout-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 8px; }
+  .callout p { margin: 0; font-style: italic; color: #3D5166; }
+  .callout.error { border-color: var(--error); }
+  .callout.error .callout-label { color: var(--error); }
+  .callout.error p { font-style: normal; }
+  .callout.lesson { border-color: var(--success); }
+  .callout.lesson .callout-label { color: var(--success); }
+  .callout.lesson p { font-style: normal; color: #1A3A2A; }
+  .callout.info { border-color: var(--cerulean); }
+  .callout.info .callout-label { color: var(--deep-cerulean); }
+  .callout.info p { color: #1A3A55; }
+
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 24px 0; }
+  .card { background: white; border: 1px solid var(--mid); border-radius: 12px; padding: 24px; position: relative; overflow: hidden; }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(to right, var(--cerulean), var(--deep-cerulean)); }
+  .card.gold::before { background: linear-gradient(to right, var(--gold), #A07C2A); }
+  .card-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; }
+  .card h4 { margin: 0 0 10px; text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--near-black); }
+  .card p { font-size: 14px; margin: 0; }
+
+  .schema-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13.5px; }
+  .schema-table th { background: var(--deep-cerulean); color: white; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; padding: 12px 16px; text-align: left; }
+  .schema-table th:first-child { border-radius: 8px 0 0 0; }
+  .schema-table th:last-child { border-radius: 0 8px 0 0; }
+  .schema-table td { padding: 11px 16px; border-bottom: 1px solid var(--mid); color: #2A3C4F; vertical-align: top; }
+  .schema-table tr:nth-child(even) td { background: rgba(155,183,212,0.04); }
+  .schema-table td.num { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+  .analogy { background: linear-gradient(135deg, rgba(27,79,114,0.05) 0%, rgba(155,183,212,0.08) 100%); border: 1px solid rgba(155,183,212,0.2); border-radius: 12px; padding: 24px 28px; margin: 24px 0; }
+  .analogy-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--cerulean); margin-bottom: 10px; }
+  .analogy p { font-size: 15px; color: var(--near-black); margin: 0; line-height: 1.65; }
+
+  footer { background: var(--near-black); color: rgba(255,255,255,0.45); text-align: center; padding: 32px 48px; font-size: 12px; line-height: 1.8; }
+
+  @media (max-width: 720px) {
+    nav { padding: 0 16px; }
+    .hero, .container { padding-left: 20px; padding-right: 20px; }
+    .hero h1 { font-size: 28px; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-label">Ada Coach · RAG</span>
+  <button onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">How RAG Works</button>
+  <button onclick="document.getElementById('problem').scrollIntoView({behavior:'smooth'})">The Problem</button>
+  <button onclick="document.getElementById('rootcause').scrollIntoView({behavior:'smooth'})">Root Cause</button>
+  <button onclick="document.getElementById('fix').scrollIntoView({behavior:'smooth'})">The Fix</button>
+  <button onclick="document.getElementById('now').scrollIntoView({behavior:'smooth'})">RAG Today</button>
+  <button onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">Lessons</button>
+</nav>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Ada Coach · Engineering Notes</div>
+    <h1>How I Found (and Fixed) a <em>Silent</em> RAG Failure</h1>
+    <p class="hero-sub">Ada Coach uses retrieval-augmented generation (RAG) to ground her coaching in a curated body of customer-discovery material. I recently ran a real test of that system for the first time in a while, and what I found wasn't what I expected: a threshold that was quietly filtering out almost everything, and a leftover switch that had been left off. Here's what I found, how I traced it, and how I fixed it.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item"><span class="hero-meta-label">Product</span><span class="hero-meta-value">Ada Coach</span></div>
+      <div class="hero-meta-item"><span class="hero-meta-label">Focus</span><span class="hero-meta-value">Retrieval-Augmented Generation (RAG)</span></div>
+      <div class="hero-meta-item"><span class="hero-meta-label">Author</span><span class="hero-meta-value">Mohales (Mo) Deis</span></div>
+      <div class="hero-meta-item"><span class="hero-meta-label">Status</span><span class="hero-meta-value">Live and verified</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="section" id="how">
+    <div class="section-label">Background</div>
+    <h2>How RAG Works in Ada</h2>
+    <p>Ada coaches product managers through customer discovery, using frameworks like the Mom Test, Jobs-to-be-Done, and RICE prioritization. A general-purpose model already knows a lot about these frameworks, but I wanted Ada to coach from a specific, curated body of customer-development material I chose deliberately, not just whatever a model happened to absorb during training.</p>
+    <p>That's what retrieval-augmented generation does: when someone sends Ada a message, the system converts that message into a mathematical representation of its meaning, searches a database of pre-processed source material for the closest matches, and quietly folds the most relevant passages into the context before Ada responds. Done well, it's invisible. Ada should sound like she simply knows the material, never like she's looking anything up.</p>
+    <div class="analogy">
+      <div class="analogy-label">In plain terms</div>
+      <p>Think of it as a well-read coach who's internalized a specific shelf of books, not one flipping through them live in front of you. The material shapes what she says. It should never show up as a citation, a footnote, or an "according to my documents."</p>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="problem">
+    <div class="section-label">The Problem</div>
+    <h2>A Threshold That Was Quietly Filtering Out Almost Everything</h2>
+    <p>RAG systems use a similarity score, a number between 0 and 1, to decide whether a retrieved passage is relevant enough to use. Set it too low and you inject noise. Set it too high and you inject nothing. Ada's threshold had been set at 0.60, based on an earlier check that looked reasonable at the time.</p>
+    <p>When I ran a proper test, real, varied, question-style prompts across a representative set of topics, only 1 out of 15 questions retrieved any matching content at all. The other 14 got no supporting material whatsoever, meaning the retrieval system was, in practice, doing almost nothing.</p>
+    <p>To understand whether the threshold itself was the problem, I re-ran the same 15 questions at four different threshold levels:</p>
+    <table class="schema-table">
+      <thead><tr><th>Threshold</th><th>Questions retrieving relevant content</th><th>Off-topic questions incorrectly triggered</th></tr></thead>
+      <tbody>
+        <tr><td class="num">0.35</td><td class="num">12 / 15</td><td class="num">1 / 4</td></tr>
+        <tr><td class="num">0.45</td><td class="num">9 / 15</td><td class="num">0 / 4</td></tr>
+        <tr><td class="num">0.55</td><td class="num">5 / 15</td><td class="num">0 / 4</td></tr>
+        <tr><td class="num">0.60 (original setting)</td><td class="num">1 / 15</td><td class="num">0 / 4</td></tr>
+      </tbody>
+    </table>
+    <p>The pattern was clear and consistent, retrieval climbed steadily as the threshold dropped. This wasn't noise. The original setting was simply too strict for real, natural-language questions.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="rootcause">
+    <div class="section-label">Root Cause</div>
+    <h2>Two Kinds of "Similar" Aren't the Same</h2>
+    <p>The original threshold came from a real check, comparing one passage of source material against other passages in the same corpus. Passages from the same book, written in the same style, naturally score highly against each other.</p>
+    <div class="analogy">
+      <div class="analogy-label">The gap, plainly</div>
+      <p>A real person's question doesn't read anything like a formal passage from a book. "What should I do when a customer tells me they love my idea?" and the actual paragraph covering that exact topic scored only 0.517, not because the match was bad, but because a short, conversational question and a dense written passage simply don't share much surface-level wording, even when the underlying meaning lines up well.</p>
+    </div>
+    <p>The original check tested passage-to-passage similarity. The threshold needed to hold up against question-to-passage similarity, a distinct and lower-scoring comparison. That distinction is the whole story: not a broken system, a threshold calibrated against the wrong kind of test.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="fix">
+    <div class="section-label">The Bigger Find, and the Fix</div>
+    <h2>A Leftover Switch, Still in the Off Position</h2>
+    <p>Fixing the threshold felt like the whole job, until I found something more consequential while reviewing the underlying code: a block of retrieval logic had been intentionally disabled during an earlier testing phase, to compare Ada's coaching with and without grounding, and it had simply never been switched back on.</p>
+    <pre><span class="code-label">The retrieval block, found still disabled</span><code>/* TEMPORARILY DISABLED FOR COMPARISON TESTING
+  if (embedRes.ok) {
+    ...
+    retrieval and context-injection logic
+    ...
+  }
+*/ // END COMPARISON TESTING</code></pre>
+    <p>That meant retrieval hadn't actually been reaching real conversations at all, independent of the threshold problem. Two separate issues, stacked on top of each other: a threshold too strict to matter, sitting behind a switch that was off regardless.</p>
+    <p>Before re-enabling it, I re-verified the one safeguard most directly relevant, a check that prevents any technical or retrieval-related language from ever leaking into a user-facing response. Confirmed it was scoped correctly, then removed the disabled block and set the threshold to <strong>0.45</strong>, the point that gave the cleanest balance: strong retrieval on real, relevant questions, with zero false positives on off-topic ones.</p>
+    <p>I verified the result two independent ways before trusting it: a live conversation I drove myself, asking a genuine mix of questions, and a separate automated pass, each response cross-checked against the system's own retrieval log rather than judged on text alone. A good-sounding answer is consistent with retrieval working, but it's just as consistent with the model already knowing the topic. Only a direct log check tells you which one actually happened.</p>
+    <pre><span class="code-label">Retrieval log, correlated to a real request</span><code>RAG: chunks=3, injected=true</code></pre>
+    <p>Across both passes, retrieval fired correctly on relevant questions, stayed silent on off-topic ones, and never once leaked any hint of its own mechanism into a response.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="now">
+    <div class="section-label">RAG Today</div>
+    <h2>How It Actually Looks in Ada Now</h2>
+    <p>When a PM asks Ada a question that touches the curated material, relevant passages are retrieved and folded into her response automatically, in real time, with no visible sign that a lookup happened. Ask something off-topic, and nothing gets injected, Ada just coaches from her general knowledge, exactly as she would without any source material at all. Either way, the experience stays seamless.</p>
+    <p>I also built a small internal tool that lets me test any message and see exactly which passages get retrieved and how closely they matched, so I can keep tuning and expanding the source material with real evidence instead of guesswork going forward.</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="lessons">
+    <div class="section-label">Lessons</div>
+    <h2>What This Debugging Process Taught Me</h2>
+    <div class="callout lesson">
+      <div class="callout-label">Lesson 1: Validate against the comparison you'll actually see in production</div>
+      <p>Passage-to-passage similarity and question-to-passage similarity are not interchangeable tests, even against the same source material. A threshold tuned on one can fail badly on the other, and the failure won't look like an error, it will look like a quiet drop-off that nobody notices until it's measured directly.</p>
+    </div>
+    <div class="callout lesson">
+      <div class="callout-label">Lesson 2: A temporary switch has no built-in expiration</div>
+      <p>Code disabled for a legitimate, short-term reason stays exactly as disabled as the day it was written, until someone deliberately goes back and checks whether that reason still applies.</p>
+    </div>
+    <div class="callout lesson">
+      <div class="callout-label">Lesson 3: A good response is never proof a mechanism actually fired</div>
+      <p>Text quality alone can't tell you whether retrieval worked or whether the model simply already knew the answer. The only way to know for certain is to check the system's own record of what happened, every time, not just when something feels off.</p>
+    </div>
+    <div class="callout lesson">
+      <div class="callout-label">Lesson 4: Verify a first-time production change two independent ways</div>
+      <p>A hand-driven pass tests judgment and feel. An automated, log-correlated pass tests mechanism and repeatability. Together they're real evidence. Either alone is a guess with good production values.</p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Ada Coach · Engineering Notes: Debugging RAG</p>
+  <p>Mohales Deis</p>
+</footer>
+
+</body>
+</html>
