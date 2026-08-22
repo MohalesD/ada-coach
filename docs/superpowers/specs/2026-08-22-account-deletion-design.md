@@ -117,10 +117,14 @@ supabase/migrations/20260822HHMMSS_account_deletion.sql
 ```
 
 1. **`deleted_users`** — `id uuid pk default gen_random_uuid()`,
-   `original_user_id uuid not null` (no FK), `display_name text`,
+   `original_user_id uuid not null unique` (no FK), `display_name text`,
    `email text not null`, `signed_up_at timestamptz not null`,
    `deleted_at timestamptz not null default now()`.
    RLS enabled, **no policies for `authenticated` or `anon`**. Service role only.
+
+   The `UNIQUE (original_user_id)` constraint is what makes step 4 of §7 a true
+   upsert and the whole flow genuinely retry-safe. Without it a retry after a
+   later-step failure would write a second tombstone.
 
 2. **`user_feedback.deleted_user_id`** — nullable FK → `deleted_users(id)`
    `ON DELETE SET NULL`.
@@ -143,6 +147,25 @@ grants at all. Do not loosen the existing column-level UPDATE grants on
 authenticated user — the desired outcome. Admin reads are unaffected:
 `admin-conversations/index.ts:42` uses `getServiceClient()`, which bypasses RLS.
 
+**Trigger check — verified, no migration change required.** The cascade
+`SET NULL` issues an UPDATE against every retained `sessions` and `assumptions`
+row, so existing triggers were inspected via `pg_get_functiondef`:
+
+- `enforce_session_transition` raises only when
+  `new.status IS DISTINCT FROM old.status AND old.status <> 'in_progress'`. A
+  `SET NULL` on `user_id`/`product_id` leaves `status` untouched, so the guard is
+  false and the trigger no-ops. **Critically**, had it raised, the failing
+  cascade action would have aborted the parent `auth.users` DELETE — deletion
+  would 500 for any user who ever completed a sprint.
+- `log_assumption_status` appends history only when the status actually changes.
+  A `SET NULL` writes no history row.
+- `set_updated_at` on `assumptions` **does** fire, stamping `updated_at = now()`
+  on every retained assumption at deletion time. Cosmetic, but it means
+  `updated_at` on retained rows reflects the deletion, not the last real edit.
+  Accepted; noted so it isn't mistaken for data corruption during research.
+
+Re-run these three checks if any trigger on `sessions` or `assumptions` changes.
+
 ## 7. Edge Function: `delete-account`
 
 One job: retire one account. Ordering is deliberate — the irreversible step is
@@ -155,7 +178,7 @@ POST /functions/v1/delete-account      (no body)
  1. requireUser()                    identity from JWT, never from the client
  2. reject if role = 'owner'         → 403 { error: 'owner_cannot_delete' }
  3. read user_profiles               display_name, email, created_at
- 4. INSERT deleted_users             tombstone
+ 4. UPSERT deleted_users             tombstone, on conflict (original_user_id)
  5. UPDATE user_feedback             deleted_user_id = <tombstone>,
                                      contact_email = NULL
                                      WHERE user_id = <uid>
@@ -175,8 +198,8 @@ never read from the request body.
 | Failure at | Result |
 |---|---|
 | 1–3 | 401/403/500. Nothing changed. |
-| 4–6 | 500. Account still exists and still works. Orphan tombstone possible; retry is safe (idempotent on `original_user_id`). |
-| 7 | 500. Account intact. Tombstone orphan cleaned on retry. |
+| 4–6 | 500. Account still exists and still works. Retry is safe — the upsert in step 4 is idempotent on the `UNIQUE (original_user_id)` constraint, so no duplicate tombstone. |
+| 7 | 500. Account intact. Retry re-upserts the same tombstone row. |
 | 8 | **Logged, swallowed.** Deletion already succeeded; returning 500 would be a lie. |
 
 **CORS:** thread `req` through `corsHeaders`/`jsonResponse` exactly as the other
@@ -207,6 +230,40 @@ the account owner's own address and is not sufficient.
 Deletion email content: confirmation of deletion, the deletion timestamp, and a
 plain statement of what was retained (anonymized transcripts + feedback) and what
 was destroyed.
+
+## 8a. Required fix: admin Feedback tab crashes on retained rows
+
+Not optional, and not deferrable to Spec 2. The first deletion breaks an
+existing screen.
+
+`admin-feedback/index.ts:61-82` resolves display names with a JS-side map rather
+than a SQL join, so a retained row with `user_id = NULL` does **not** vanish from
+the list — the lookup safely yields `null` for both fields. The failure is one
+layer up. `Admin.tsx:2185` renders:
+
+```jsx
+e.user_display_name ?? e.user_email ?? e.user_id.slice(0, 8)
+```
+
+With the profile deleted and `user_id` NULL, both nullish coalesces fall through
+to `null.slice(0, 8)` — a `TypeError` that takes down the whole Feedback tab.
+This also silently defeats verification step 9 and would block Spec 2 entirely.
+
+**Backend** — `admin-feedback` resolves identity from `user_profiles` *or*, when
+`user_id` is NULL, from `deleted_users` via `deleted_user_id`. It populates the
+existing `user_email` / `user_display_name` fields from whichever source exists
+and adds `is_deleted_user: boolean`. Keep the two-query JS-join pattern already
+in the file; do not convert it to a SQL join, which would risk an inner join
+dropping retained rows.
+
+**Frontend** — because the backend now fills those fields, the existing
+coalesce chain works unchanged for deleted users. Still make the final fallback
+null-safe (`e.user_id?.slice(0, 8) ?? '—'`) so a NULL `user_id` can never crash
+the tab again. Render a small "deleted" badge when `is_deleted_user` is true.
+
+Deliberately **not** in scope here: the `line-clamp-3` truncation fix at
+`Admin.tsx:2178-2179`. That is a pre-existing cosmetic bug, not one this spec
+introduces, and it belongs with Spec 2's reply surface on the same screen.
 
 ## 9. Frontend
 
@@ -244,6 +301,12 @@ confirms they fail for valid reasons, and hands off to
 5. Unauthenticated request returns 401.
 6. Email send failure still yields 200 (best-effort contract).
 7. `redactPII` regression: existing suite must still pass untouched.
+8. Retry safety: calling the function twice for the same `original_user_id`
+   produces exactly one `deleted_users` row.
+9. `admin-feedback` returns the retained row with `user_email` and
+   `user_display_name` populated from the tombstone and `is_deleted_user: true`.
+10. The admin Feedback tab renders a retained row without throwing — the
+    regression test for the `null.slice()` crash in §8a.
 
 **E2E (Playwright)**
 
@@ -293,8 +356,9 @@ Mo's account or any owner account.**
 - Step 7: sign-in fails — the account no longer exists.
 - Step 8: the throwaway user's conversation is **still listed**, with its
   messages intact and no name attached.
-- Step 9: the feedback is **still listed** and still attributed to that person's
-  tombstone name/email.
+- Step 9: the Feedback tab **loads without error** (this is the §8a regression),
+  the feedback is **still listed**, still attributed to that person's tombstone
+  name/email, and marked with a "deleted" badge.
 - Step 10: a confirmation email has arrived (only once the sending domain is
   verified).
 - Owner account: the Danger Zone card is not shown at all.
