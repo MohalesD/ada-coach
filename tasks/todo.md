@@ -835,3 +835,11 @@ Marcus / Priya).
 - [ ] Judge's Mode: token-gated scoped read-only reviewer access (Admin Panel + docs) — AFTER RLS audit + DEU-92..95, as proof the security work held
 - [ ] Docs system overhaul: master PRD (docs/PRODUCT.md), backlog.md/todo.md regenerated from Linear via script (kill hand-maintenance), pending DEU-17 decision for PRD scope
 - [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
+
+## PAUSED 2026-08-23, resume next session
+- DEU-96 rename branch (chore/deu-96-migration-rename): renames + CLAUDE.md + spec §6 amendment are COMMITTED as WIP, NOT merged.
+- Schema snapshot step failed: `supabase db dump --schema-only` is not a real flag on installed CLI v2.109.1. Next session: run `supabase db dump --help` fresh and read the actual flag list before retrying, don't trust prior advice on this flag.
+- Still needed to close DEU-96: finish/skip snapshot, then `supabase db push --dry-run` to confirm clean, then merge to main.
+- Account deletion (feat/account-deletion): spec approved, NOT started. Blocked on DEU-96 merge. Test Author has not run. No code exists yet.
+- Security set (fix/security-set-deu-92-95): not started, untouched all day.
+- Golden-path priority for next session: finish DEU-96 merge fast, then go straight to Test Author + account deletion build. Skip everything else until that ships.
