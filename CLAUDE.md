@@ -84,7 +84,22 @@ The sidebar supports search, scenario-based entry points (pre-seeded starter pro
 
 Migrations in `supabase/migrations/` (applied in filename order).
 
-> **Migration workflow caveat (B-011):** `supabase db push` currently errors with "Remote migration versions not found in local migrations directory." Several recent migrations were applied via the Supabase MCP `apply_migration` tool, which registers them with timestamps that don't match the local filenames. Until B-011 is resolved, **apply new migrations via the MCP `apply_migration` tool**, not `supabase db push`. Commit the local `.sql` file alongside as the source of truth. Do not run `supabase migration repair` or `supabase db pull` without a planned cleanup — both touch shared migration history.
+> **Migration workflow (resolved 2026-08-23, DEU-96):** `supabase db push` is the **only**
+> sanctioned path for schema/DDL changes in this project. Write the migration as a local `.sql`
+> file under `supabase/migrations/` — that file is the true push source, not a labeled record —
+> and apply it with `supabase db push`. **MCP `apply_migration` is retired for DDL.** The prior
+> drift (local filenames not matching remote-applied timestamps) was diagnosed 2026-08-23
+> (`docs/audits/2026-08-23-deu96-migration-drift.md`) as a pure version-string mismatch — every
+> migration existed on both sides, none were lost — and resolved by renaming all 36 affected
+> local files to match their remote-registered versions (`chore/deu-96-migration-rename`). A
+> one-time schema baseline lives at `docs/schema-snapshots/2026-08-23-baseline.sql`
+> (`supabase db dump --schema-only`), independent of migration history, as an ongoing sanity
+> check. Do not run `supabase migration repair` or `supabase db pull` without a planned
+> cleanup — both touch shared migration history.
+>
+> **MCP remains fully sanctioned for read-only inspection** — `list_tables`, `list_migrations`,
+> `get_advisors`, `execute_sql` catalog/data queries, and similar. Only DDL application moved to
+> `db push`.
 
 
 
@@ -201,13 +216,12 @@ Key future items that affect architecture decisions today:
   (credits system: `credits_remaining`, `daily_message_limit`, `fn_reset_credits_if_due`).
   True *rate* limiting — throttling requests per second on `/chat` and `admin-*` — was never
   built. Credits bound total daily spend; nothing bounds the rate.
-- **B-011 / DEU-96**: Migration history mismatch blocks `supabase db push`. See the caveat in
-  the Database Schema section above. Use the MCP `apply_migration` tool until resolved.
-
 Shipped (kept here because the IDs still appear in older docs):
 - **B-002 / DEU-6**: Token usage dashboard — ✅ done. `chat` now calls `recordModelUsage()`;
   coaching-chat spend is visible in the admin Spend tab.
 - **B-005 / DEU-9**: Vera → Ada Coach rebrand — ✅ done.
+- **B-011 / DEU-96**: Migration history mismatch — ✅ done 2026-08-23. See the Migration
+  workflow note in the Database Schema section above.
 
 ## Development Principles
 

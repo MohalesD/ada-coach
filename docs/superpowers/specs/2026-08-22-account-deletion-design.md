@@ -108,9 +108,10 @@ Storage. Must be deleted explicitly. (The bucket currently holds 1 object while
 
 ## 6. Schema changes
 
-One migration. Applied via the Supabase MCP `apply_migration` tool per the B-011
-caveat in `CLAUDE.md`, **not** `supabase db push`. The `.sql` file is committed
-alongside as source of truth.
+One migration. **Amended 2026-08-23 (DEU-96 resolved):** applied via `supabase db push` —
+the only sanctioned path for DDL as of the migration workflow regime change in `CLAUDE.md`.
+MCP `apply_migration` is retired for DDL; the local `.sql` file under `supabase/migrations/`
+is the true push source, not a labeled record alongside a separate apply mechanism.
 
 ```
 supabase/migrations/20260822HHMMSS_account_deletion.sql
