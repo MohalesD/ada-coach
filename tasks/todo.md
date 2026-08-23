@@ -793,13 +793,45 @@ Marcus / Priya).
 
 ---
 
-## 🗂 Backlog (from CLAUDE.md — still accurate)
+## 🗂 Backlog — reconciled against Linear 2026-08-23
 
-| ID | Item | Notes |
-|----|------|-------|
-| B-002 | Token usage dashboard | `token_count` on `messages` + new `model_usage` table; needs an admin UI surface |
-| B-003 | Rate limiting per user | Not yet built |
-| B-005 | Rebrand remaining "Vera" references | Grep codebase for stragglers |
-| B-011 | Migration history mismatch | Workaround in use: apply new migrations via Supabase MCP `apply_migration`, commit the local `.sql` alongside. Real fix (`supabase migration repair`) still pending. |
-| NEW | Storage policies for non-owner session uploads | Session file uploads to the `documents` bucket currently require the owner role; extend per-user policies before any second user |
-| NEW | Route `chat` model calls through `model_usage` | Cost middleware covers all new discovery calls; retrofit `chat` for full coverage |
+> ⚠️ This table previously claimed to be "still accurate" and was not. Four of its
+> six rows were stale. **Linear (team Deus Labs, project Ada Coach) is the source of
+> truth for status** — this table is a convenience copy and will drift again. The
+> Docs-system-overhaul item registered above exists to replace it with a generated file.
+
+| ID | Item | Status |
+|----|------|--------|
+| B-002 / DEU-6 | Token usage dashboard | ✅ **Done.** `chat` now calls `recordModelUsage()`; spend visible in the admin Spend tab |
+| B-005 / DEU-9 | Rebrand remaining "Vera" references | ✅ **Done** |
+| — / DEU-6 | Route `chat` model calls through `model_usage` | ✅ **Done** — this was the gap B-002 closed |
+| B-003 / DEU-92 | Rate limiting per user | ⚠️ **Half done.** Usage *caps* shipped (credits system). True *rate* limiting never built. DEU-7 is marked Done and correctly so — do not read it as closing this |
+| B-011 / DEU-96 | Migration history mismatch | 🔲 Open. Workaround in use: apply via Supabase MCP `apply_migration`, commit the local `.sql`. Do not run `migration repair` or `db pull` without a planned cleanup |
+| — | Storage policies for non-owner session uploads | 🔲 Open. Session file uploads to the `documents` bucket still require the owner role. **Blocks Spec 1 testing if a non-owner ever uploads** |
+
+### Security audit — real remaining scope (was "items #3–#10", actually four)
+
+| ID | Item | Status |
+|----|------|--------|
+| DEU-93 | #3 Email enumeration via `email_exists` | 🔲 Open — **needs a UX decision from Mo before any code** |
+| DEU-92 | #4 True per-user rate limiting | 🔲 Open |
+| DEU-94 | #5 `handle_new_user` swallows errors | 🔲 Open |
+| DEU-95 | #10 Role-change audit trail | 🔲 Open (low) |
+| — | #8 Password reset flow | ✅ **Shipped** — doc claimed otherwise for months. Note DEU-24 "Password hardening" is broader and still In Progress |
+
+### Privacy track (three specs, from real user feedback)
+
+| ID | Item | Status |
+|----|------|--------|
+| DEU-89 | Spec 1: Account deletion & data retention | 📄 Spec written + committed, **not built**. `docs/superpowers/specs/2026-08-22-account-deletion-design.md` |
+| DEU-90 | Spec 2: Feedback reply surface + truncation fix | 🔲 Blocked on Spec 1's `_shared/email.ts` |
+| DEU-91 | Spec 3: Privacy Policy & Terms | 🔲 Blocked on Spec 1 landing, so copy describes real behavior |
+
+---
+
+## Registered 2026-08-23 (post-Fable security phase, via advisory session)
+- [ ] Instrumentation: latency + model-routing-rationale capture (schema first, Admin Panel GUI second) — feeds portfolio Admin Panel story
+- [ ] Protected docs page (Lovable pattern): separate RLS level or invite-link access; dependencies, API usage, schema map, security handling; auto-update loop — AFTER security/privacy sprints
+- [ ] Judge's Mode: token-gated scoped read-only reviewer access (Admin Panel + docs) — AFTER RLS audit + DEU-92..95, as proof the security work held
+- [ ] Docs system overhaul: master PRD (docs/PRODUCT.md), backlog.md/todo.md regenerated from Linear via script (kill hand-maintenance), pending DEU-17 decision for PRD scope
+- [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
