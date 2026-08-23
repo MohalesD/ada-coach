@@ -193,10 +193,21 @@ Key constraints to preserve when editing the system prompt:
 
 ## Backlog
 
+Linear (team **Deus Labs**, project **Ada Coach**) is the source of truth for status.
+Reconciled 2026-08-23.
+
 Key future items that affect architecture decisions today:
-- **B-002**: Token usage dashboard — `token_count` column already exists on `messages` (shipped in `core_schema`); needs an admin view to surface it.
-- **B-003**: Rate limiting per user.
-- **B-005**: Rebrand any remaining "Vera" references to "Ada" / "Ada Coach".
+- **B-003 / DEU-92**: Rate limiting per user. **Partially done.** The *usage cap* half shipped
+  (credits system: `credits_remaining`, `daily_message_limit`, `fn_reset_credits_if_due`).
+  True *rate* limiting — throttling requests per second on `/chat` and `admin-*` — was never
+  built. Credits bound total daily spend; nothing bounds the rate.
+- **B-011 / DEU-96**: Migration history mismatch blocks `supabase db push`. See the caveat in
+  the Database Schema section above. Use the MCP `apply_migration` tool until resolved.
+
+Shipped (kept here because the IDs still appear in older docs):
+- **B-002 / DEU-6**: Token usage dashboard — ✅ done. `chat` now calls `recordModelUsage()`;
+  coaching-chat spend is visible in the admin Spend tab.
+- **B-005 / DEU-9**: Vera → Ada Coach rebrand — ✅ done.
 
 ## Development Principles
 

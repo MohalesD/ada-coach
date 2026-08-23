@@ -1,6 +1,17 @@
 # Auth & Authorization Security Audit — 2026-04-18
 
-**Status:** Items #1 and #2 fully deployed and verified (2026-04-25). Items #3–#10 not yet acted on.
+**Status:** Items #1 and #2 fully deployed and verified (2026-04-25). Item #8 shipped since
+(see below). **Reconciled 2026-08-23** — the "Items #3–#10 not yet acted on" claim that stood
+here was stale.
+
+**Real remaining work is four items, not eight:** #3, #4, #5, #10. Each now has a Linear issue.
+#6, #7, #9 remain accepted/cosmetic. #8 is done.
+
+> ⚠️ **Trigger warning (CLAUDE.md standing rule).** `user_profiles` holds 19 rows and at least
+> some are external users, not Mo. The rule requires a full RLS/auth/isolation audit *before*
+> any real external user's data touches the app. That threshold has already been crossed, so
+> this audit is overdue rather than pre-emptive. Sequencing is Mo's call; recording it here so
+> it is not quietly forgotten.
 
 ---
 
@@ -10,14 +21,25 @@
 |---|----------|------|-------------|-------------|-------|
 | 1 | 🔴 Critical | Lock down `user_profiles.role` self-update | `supabase/migrations/20260418150000_lockdown_user_profiles.sql` | `supabase db push` | ✅ Deployed 2026-04-25 |
 | 2 | 🟡 Medium | CORS allowlist (no more `*`) | `supabase/functions/_shared/auth.ts` + all 4 function files threaded `req` | Set `ALLOWED_ORIGINS` secret + redeploy 4 functions | ✅ Deployed 2026-04-25 |
-| 3 | 🟡 Medium | Email enumeration via `email_exists` code | — | — | Not started (UX trade-off pending decision) |
-| 4 | 🟡 Medium | App-level rate limiting on `/chat` and admin endpoints | — | — | Not started (backlog B-003) |
-| 5 | 🟡 Medium | `handle_new_user` swallows exceptions silently | — | — | Not started |
+| 3 | 🟡 Medium | Email enumeration via `email_exists` code | — | — | **Open** — DEU-93 (UX trade-off still undecided) |
+| 4 | 🟡 Medium | App-level rate limiting on `/chat` and admin endpoints | — | — | **Open** — DEU-92. ⚠️ See note below: B-003/DEU-7 is marked Done but shipped *usage caps*, not rate limiting |
+| 5 | 🟡 Medium | `handle_new_user` swallows exceptions silently | — | — | **Open** — DEU-94 |
 | 6 | 🟢 Low | Tokens in localStorage | — | — | Accepted as standard SPA risk |
 | 7 | 🟢 Low | Password min 8, no complexity | — | — | Accepted (NIST 800-63B aligned) |
-| 8 | 🟢 Low | No password reset flow | — | — | Not started |
+| 8 | 🟢 Low | No password reset flow | `src/pages/ResetPassword.tsx` | branch `fix/password-reset-flow`, merged to main | ✅ **Shipped** (verified 2026-08-23: zero unmerged branches) |
 | 9 | 🟢 Low | `user_profiles.email` can drift from `auth.users.email` | — | — | Cosmetic |
-| 10 | 🟢 Low | No audit trail for role changes | — | — | Nice-to-have once #1 is shipped |
+| 10 | 🟢 Low | No audit trail for role changes | — | — | **Open** — DEU-95. Now actionable (gated on #1, which shipped) |
+
+> **Note on #4 — the trap.** DEU-7 ("B-003: Rate Limiting and Usage Caps") is marked `Done`,
+> and correctly so: the Week 4A credits system shipped. But "usage caps" ≠ "rate limiting."
+> A user with a valid session can still hammer `/chat` as fast as they like up to their daily
+> credit ceiling. Do not read DEU-7's `Done` status as closing this row. Tracked separately
+> as DEU-92.
+
+> **Note on #8 — scope.** The password reset *flow* shipped, closing this row. DEU-24
+> ("Password hardening") is broader and remains `In Progress`: HaveIBeenPwned breach checking
+> is still open, and password-change notification email is deferred pending the Resend domain
+> (which Spec 1 / DEU-89 introduces). Don't conflate the two.
 
 ### Deployment record (completed 2026-04-25)
 
@@ -142,11 +164,22 @@ No frontend changes were required for #1 — `Settings.tsx` only edits `display_
 
 ## Remaining items (#3–#10)
 
-Items #3–#10 are not yet acted on. Prioritized:
+Corrected 2026-08-23. Four items remain, not eight.
 
-- **#3 Email enumeration** — UX trade-off decision pending; medium severity.
-- **#4 Rate limiting** — backlog B-003; medium severity, blocks abuse of Anthropic credits.
-- **#5 `handle_new_user` silent errors** — observability gap; investigate before real user launch.
-- **#8 Password reset flow** — required before real users; Supabase `resetPasswordForEmail` is ready to wire up.
-- **#10 Audit trail for role changes** — nice-to-have now that #1 is shipped.
-- **#6, #7, #9** — accepted or cosmetic; revisit if threat model changes.
+- **#3 Email enumeration** (DEU-93) — UX trade-off decision still pending. Decide the posture
+  before writing code. Touches `Login.tsx`, which Spec 3 (DEU-91) also edits — sequence them.
+- **#4 Rate limiting** (DEU-92) — medium severity. See the trap note above: DEU-7's `Done`
+  status does not cover this.
+- **#5 `handle_new_user` silent errors** (DEU-94) — observability gap. The audit said
+  "investigate before real user launch"; external users are already here.
+- **#10 Audit trail for role changes** (DEU-95) — low priority safety net. Mirror the
+  `assumption_status_history` pattern: append-only, trigger-written, no `authenticated` writes.
+
+Closed since the original audit:
+
+- **#8 Password reset flow** — ✅ shipped via `fix/password-reset-flow` (merged). Note that
+  DEU-24 "Password hardening" is a *broader* issue and is still In Progress.
+
+Unchanged:
+
+- **#6, #7, #9** — accepted or cosmetic; revisit if the threat model changes.
