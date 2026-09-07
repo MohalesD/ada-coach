@@ -806,8 +806,8 @@ Marcus / Priya).
 | B-005 / DEU-9 | Rebrand remaining "Vera" references | ✅ **Done** |
 | — / DEU-6 | Route `chat` model calls through `model_usage` | ✅ **Done** — this was the gap B-002 closed |
 | B-003 / DEU-92 | Rate limiting per user | ⚠️ **Half done.** Usage *caps* shipped (credits system). True *rate* limiting never built. DEU-7 is marked Done and correctly so — do not read it as closing this |
-| B-011 / DEU-96 | Migration history mismatch | 🔲 Open. Workaround in use: apply via Supabase MCP `apply_migration`, commit the local `.sql`. Do not run `migration repair` or `db pull` without a planned cleanup |
-| — | Storage policies for non-owner session uploads | 🔲 Open. Session file uploads to the `documents` bucket still require the owner role. **Blocks Spec 1 testing if a non-owner ever uploads** |
+| B-011 / DEU-96 | Migration history mismatch | ✅ **Closed 2026-09-07.** All 48 local filenames verified identical to the live ledger. Regime in `CLAUDE.md`: `db push` from a terminal, or MCP `apply_migration` + rename-to-registered-version in agentic sessions |
+| — | Storage policies for non-owner session uploads | ✅ **Already shipped in Run 3** (`storage_session_uploads` migration). This row was stale; the RLS audit and live `storage.objects` policies confirm any authenticated user can upload to their own folder |
 
 ### Security audit — real remaining scope (was "items #3–#10", actually four)
 
@@ -823,7 +823,7 @@ Marcus / Priya).
 
 | ID | Item | Status |
 |----|------|--------|
-| DEU-89 | Spec 1: Account deletion & data retention | 📄 Spec written + committed, **not built**. `docs/superpowers/specs/2026-08-22-account-deletion-design.md` |
+| DEU-89 | Spec 1: Account deletion & data retention | ✅ **Shipped 2026-09-07.** Migration `20260907040404_account_deletion` applied; `delete-account` + updated `admin-feedback` deployed; Settings danger zone, `/privacy` notice, Login consent + post-deletion notice. Playwright E2E still to run against a disposable user |
 | DEU-90 | Spec 2: Feedback reply surface + truncation fix | 🔲 Blocked on Spec 1's `_shared/email.ts` |
 | DEU-91 | Spec 3: Privacy Policy & Terms | 🔲 Blocked on Spec 1 landing, so copy describes real behavior |
 
@@ -849,7 +849,20 @@ Marcus / Priya).
 - Security set (fix/security-set-deu-92-95): not started, untouched all day.
 - Golden-path priority for next session: finish DEU-96 merge fast, then go straight to Test Author + account deletion build. Skip everything else until that ships.
 
-## UPDATE 2026-09-06 — DEU-96 merged to main, still UNVERIFIED
+## CLOSED 2026-09-07 — DEU-96 verified, DEU-89 shipped (Fable 5.1 orchestrator session)
+
+- [x] Migration filenames verified against the live ledger (48/48 identical, programmatic diff).
+      Done in-session via MCP `list_migrations`; no laptop CLI step required. Mo's ruling:
+      an orchestrator check is the check. No duplicate manual re-run.
+- [x] Schema baseline snapshot: **deliberately skipped**, recorded in `CLAUDE.md`.
+- [x] Spec 1 amendments (b) pagination and (c) test boundary applied; (c) corrected because
+      its premise (owner-only bucket) was false per the RLS audit.
+- [x] DEU-89 built and deployed. See the Privacy track table above.
+- [ ] Playwright E2E for deletion against a disposable user (spec §10). Not yet run.
+- [ ] Resend secrets (`RESEND_API_KEY`, `EMAIL_FROM`) not set; confirmation email silently
+      skipped until they are. Deletion itself is unaffected.
+
+## UPDATE 2026-09-06 — DEU-96 merged to main, still UNVERIFIED (superseded by the section above)
 
 Mo's explicit call, given the 2026-09-07 check-in deadline: merge now rather than block on
 verification, but document the gap honestly rather than claim it's done.

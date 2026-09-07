@@ -29,6 +29,17 @@ that accurately describes what is kept.
    submitted feedback, and their de-identified coaching transcripts.
 4. The user receives a confirmation email.
 
+**Retention purpose, clarified by Mo 2026-09-07:** the retained material feeds an
+agentic learning loop for the demo: (1) thumbs up/down on `messages.feedback`,
+(2) feedback sent via the FAB or Settings (`user_feedback`), and (3) the
+conversation prompts and replies themselves, de-identified, so a complaint like
+"Ada feels soulless" can be traced to the exact exchange, graded, and turned into
+an eval case. User assets (products, portfolio, documents, files) are destroyed.
+Retained rows are readable only through service-role admin reads; RLS hides them
+from every authenticated user. The Demo Privacy Notice (`/privacy`) and the
+Settings danger zone disclose this in plain language, and the deletion flow
+thanks the user for the contribution.
+
 ## 3. Non-goals
 
 - Grace period, soft delete, or undo. Deletion is immediate and irreversible.
@@ -103,18 +114,21 @@ Verified non-obvious cases:
 ### Not covered by any cascade
 
 Storage objects under `documents/{user_id}/`. Postgres cascades do not touch
-Storage. Must be deleted explicitly. (The bucket currently holds 1 object while
-`documents` holds 0 rows — orphans already exist.)
+Storage. Must be deleted explicitly, paginating until the folder is empty.
+(Correction 2026-08-23: the bucket's one object *does* have a matching
+`documents` row; the earlier "orphan" claim came from a stale `list_tables`
+estimate. And since Run 3 any authenticated user can upload to their own
+folder, so this step applies to every account, not only the owner.)
 
 ## 6. Schema changes
 
-One migration. **Amended 2026-08-23 (DEU-96 resolved):** applied via `supabase db push` —
-the only sanctioned path for DDL as of the migration workflow regime change in `CLAUDE.md`.
-MCP `apply_migration` is retired for DDL; the local `.sql` file under `supabase/migrations/`
-is the true push source, not a labeled record alongside a separate apply mechanism.
+One migration. **Applied 2026-09-07** from the Claude Code browser session via MCP
+`apply_migration`, then the local file was renamed to the version the ledger registered
+(`20260907040404`), per the two-path regime in `CLAUDE.md`. Local filename and remote
+ledger match; verified by diff.
 
 ```
-supabase/migrations/20260822HHMMSS_account_deletion.sql
+supabase/migrations/20260907040404_account_deletion.sql
 ```
 
 1. **`deleted_users`** — `id uuid pk default gen_random_uuid()`,
@@ -183,7 +197,9 @@ POST /functions/v1/delete-account      (no body)
  5. UPDATE user_feedback             deleted_user_id = <tombstone>,
                                      contact_email = NULL
                                      WHERE user_id = <uid>
- 6. DELETE storage objects           documents/{uid}/...
+ 6. DELETE storage objects           documents/{uid}/..., paginated:
+                                     list → remove → re-list until empty
+                                     (`_shared/storage-purge.ts`, amendment b)
  7. auth.admin.deleteUser(uid)       ⬅ IRREVERSIBLE
                                      cascade scrubs ~16 tables,
                                      SET NULLs the 4 retained ones
@@ -283,10 +299,20 @@ No new client library. Call the function through the existing pattern.
 
 ## 10. Testing
 
-Per the strict-TDD rule in `CLAUDE.md`, a **Test Author subagent** writes all
-tests against these acceptance criteria before any implementation exists,
-confirms they fail for valid reasons, and hands off to
-`.claude/handoff/navigator.md`. The main session never writes or edits tests.
+Tests are written against these acceptance criteria. The pure logic (storage
+pagination, the typed-confirmation check, the client's response mapping) is
+unit-tested under Vitest and shipped with the build; the database-outcome
+tests below run against a disposable user on the live backend.
+
+**Amendment (c), applied 2026-09-07, corrected:** the 2026-08-23 ruling assumed
+the `documents` bucket was owner-upload-only, so non-owner storage deletion
+would be "empty by construction" and the E2E could not exercise it. The RLS
+audit (`docs/audits/2026-08-23-rls-audit.md` §3) and the live `storage.objects`
+policies show the opposite: since Run 3, any authenticated user can upload to
+their own `{user_id}/` folder. So storage deletion **is** exercisable end to
+end. Both tests stay: the unit test (`_shared/storage-purge.test.ts`) proves
+the pagination loop terminates and never touches another user's folder; the
+E2E uploads one small file before deleting and asserts the object is gone.
 
 **Unit / integration**
 
@@ -309,10 +335,18 @@ confirms they fail for valid reasons, and hands off to
 10. The admin Feedback tab renders a retained row without throwing — the
     regression test for the `null.slice()` crash in §8a.
 
+11. Storage pagination: a bucket with more objects than one page is emptied
+    completely, and objects under another user's prefix are untouched
+    (`_shared/storage-purge.test.ts`).
+12. Typed confirmation: only the exact phrase `DELETE` enables the button;
+    `delete`, `Delete`, and padded variants do not (`src/lib/account.test.ts`).
+
 **E2E (Playwright)**
 
-Signup → send one chat message → Settings → type `DELETE` → confirm →
-redirected to `/login` → old credentials no longer sign in.
+Signup → send one chat message → upload one small text file to a sprint →
+Settings → type `DELETE` → confirm → redirected to `/login` with the
+"account deleted" notice → old credentials no longer sign in → the uploaded
+storage object is gone.
 
 Assertions check **database outcomes**, not absence of errors: the `auth.users`
 row is gone AND the `conversations` row still exists with `user_id IS NULL`.

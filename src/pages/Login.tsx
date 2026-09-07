@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,10 @@ const PASSWORD_MIN = 8;
 export default function Login() {
   const { user, loading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set by Settings after a successful self-serve deletion (Spec 1).
+  const accountDeleted =
+    (location.state as { accountDeleted?: boolean } | null)?.accountDeleted === true;
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -224,6 +228,19 @@ export default function Login() {
           </div>
         </div>
 
+        {accountDeleted && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-[#B8853A]/40 bg-[#B8853A]/10 px-4 py-3 text-sm text-foreground"
+          >
+            <p className="font-medium">Your account has been deleted.</p>
+            <p className="mt-1 text-muted-foreground">
+              Thank you for helping shape Ada. The feedback and ratings you left stay with the
+              demo, with your identity removed, so they keep making it better.
+            </p>
+          </div>
+        )}
+
         {awaitingEmailConfirmation ? (
           <ConfirmEmailPanel
             email={email}
@@ -383,6 +400,16 @@ export default function Login() {
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {submitLabel(mode, isSubmitting)}
                   </Button>
+                )}
+
+                {mode === 'signup' && (
+                  <p className="text-center text-xs text-muted-foreground">
+                    By creating an account you agree to the{' '}
+                    <Link to="/privacy" className="underline">
+                      Demo Privacy Notice &amp; Terms
+                    </Link>
+                    , including what Ada keeps if you later delete your account.
+                  </p>
                 )}
 
                 {mode === 'signin' && (
