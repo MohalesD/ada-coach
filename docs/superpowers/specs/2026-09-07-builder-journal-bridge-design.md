@@ -3,7 +3,16 @@
 **Date:** 2026-09-07
 **Status:** Draft, awaiting Mo's review. Nothing here is built.
 **Author:** Claude Code, from Mo's concept walk-through of 2026-09-01 and read-only traces of both repos on 2026-09-07
-**Related:** Spec 1 (account deletion, DEU-89) is a prerequisite. Spec 3 (Privacy & Terms, DEU-91) is a prerequisite. The sending side and every product decision live in the Builder Journal PRD: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. Read that first; this document only says what Ada builds.
+**Related:** the sending side and every product decision live in the Builder Journal PRD: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. Read that first; this document only says what Ada builds.
+
+**Gate status, checked against `main` on 2026-09-07 (updated from the first draft, which was written before DEU-89 landed):**
+
+| Gate | State | Effect on this spec |
+|---|---|---|
+| **Spec 1 / DEU-89, account deletion** | ✅ **Shipped.** Migration `20260907040404_account_deletion` is on `main` and matches Spec 1 exactly: `deleted_users` tombstone with `UNIQUE (original_user_id)`, `user_feedback.deleted_user_id`, and `ON DELETE SET NULL` on `conversations.user_id`, `user_feedback.user_id`, `sessions.user_id`, `assumptions.user_id`, `sessions.product_id`, `assumptions.product_id`. `delete-account` enforces the owner 403, upserts the tombstone, relinks feedback, purges `documents/{uid}/`, deletes the auth row last, and sends a best-effort email. | **Cleared to build.** The mechanism this spec depends on — `ON DELETE CASCADE` to `auth.users` scrubbing a new table for free — is live and proven by the shipped migration. Both bridge tables inherit it. |
+| **Mo's manual dry run** (throwaway account → feedback → delete → check admin views) and the Playwright E2E | 🔲 In progress | **Gates launch, not build.** It verifies deployed behavior; it cannot change what this spec builds, because the schema it exercises is already merged. Do not set `BRIDGE_SHARED_SECRET` in production until it passes. |
+| **Spec 3 / DEU-91, Privacy & Terms** | 🟡 **Substantially shipped, not closed.** `/privacy` is a live public route carrying a combined **Demo Privacy Notice & Terms** (`src/pages/Privacy.tsx`, exports `PRIVACY_LAST_UPDATED`), linked from Login and the Settings danger zone, with a retention section that already names what deletion keeps and destroys. There is no separate `/terms` route; Terms is a section inside that page. DEU-91 stays open in `tasks/todo.md` for expansion. | **No longer a build gate.** The original gate was "Ada has no policy at all," and that is resolved. What remains is **one paragraph** naming Builder Journal as a source of arrivals and ideas, which ships **with Milestone 1** (§9) rather than before it. Builder Journal links to `/privacy`, not `/terms`. |
+| **DEU-96, migration regime** | ✅ **Closed 2026-09-07.** All 48 local filenames verified identical to the live ledger. | **Path is now known precisely** — see §6, which names it instead of deferring to "whichever path Spec 1 proves out." |
 
 ---
 
@@ -18,7 +27,7 @@ Ada is the receiving side. It has to accept a signed handoff from Builder Journa
 1. A signed server-to-server request from Builder Journal creates (or reuses) an Ada account keyed on the user's verified email, a product, and a sprint whose intake is the idea.
 2. The sprint opens with an assistant message already in it: Ada's first read, produced by the existing coach, on the `discovery_coach` route (Haiku), costing one credit.
 3. The user lands signed in via a one-time magic-link token hash, never via a password or a copied JWT.
-4. Every bridge-created row cascades away under Spec 1's delete, and the arrival is disclosed in the header, in Settings, and in Spec 3's policy.
+4. Every bridge-created row cascades away under the shipped Spec 1 delete, and the arrival is disclosed in the header, in Settings, and in one added paragraph on the existing `/privacy` notice.
 
 ## 3. Non-goals
 
@@ -26,6 +35,7 @@ Ada is the receiving side. It has to accept a signed handoff from Builder Journa
 - A caller-supplied system prompt. The persona and the per-turn context stay in `_shared/coach.ts`. The idea is intake; the welcome is a directive this function adds and does not persist.
 - OAuth between the apps. Verified email is the join key in v1 (Decision D2).
 - Any browser-to-Ada cross-origin call. `ALLOWED_ORIGINS` does not change.
+- A separate `/terms` route. Terms already live as a section of `/privacy`; the bridge adds a paragraph there, it does not create a second page.
 - The return path to Builder Journal (report or verdict flowing back). v2.
 
 ## 4. Decisions
@@ -39,7 +49,7 @@ Ada is the receiving side. It has to accept a signed handoff from Builder Journa
 | D5 | **Identity record always written; mode recorded** | `bridge_identities` maps `bj_user_id → user_id` on every handoff, with `mode` (`permanent` \| `session`) copied from the request. Needed for deletion cleanup, the daily cap and Unlink; the consent prompt itself lives in Builder Journal. |
 | D6 | **First read is `sessions` with `kickoff: true`, not a bridge special** | The "zero-click auto-kickoff" Sprint.tsx already names as a backend item. `sessions` grows an optional `kickoff` flag that runs one `coachTurn` with a non-persisted arrival directive and persists only the assistant reply. `bridge-intake` calls the shared helper; a native sprint can flip the same flag later. |
 | D7 | **One-time sign-in via `generateLink({ type: 'magiclink' })` → `hashed_token` → `verifyOtp` on `/bridge`** | Documented in `CLAUDE.md` (the retired smoke script), implemented nowhere. `/bridge` is a public route that exchanges the hash and navigates to `/sprint/:id`; `ProtectedRoute` is untouched (it drops query strings on redirect, which is why `/bridge` cannot sit behind it). OTP expiry is the project's `otp_expiry` (3600 s); the link is single-use. |
-| D8 | **Everything cascades under Spec 1** | Both new tables carry `user_id → auth.users ON DELETE CASCADE`. Spec 1's detach-and-cascade scrubs them with no change to `delete-account`. A later handoff from the same person creates a fresh account; the tombstone is unaffected. |
+| D8 | **Everything cascades under the shipped Spec 1 delete** | Both new tables carry `user_id → auth.users ON DELETE CASCADE`, so the live `delete-account` scrubs them with **zero changes to that function** — the detach-and-cascade design's whole point, now verifiable against merged code rather than a plan. A later handoff from the same person creates a fresh account; the tombstone is unaffected. Re-check this claim if a future table needs *retaining* rather than destroying: that is the exception the migration handles explicitly. |
 | D9 | **Service-role-only tables** | `bridge_identities` and `bridge_handoffs` get RLS enabled and **no policies** for `authenticated` or `anon`, like `deleted_users`. The sprint page learns "arrived from Builder Journal" from `products.source`, which the user can already read under the own-rows policy. |
 | D10 | **Caps, fail closed** | If `BRIDGE_SHARED_SECRET` is unset the function returns 503 and does nothing. Per `bj_user_id`: 20 handoffs per UTC day (count on `bridge_handoffs`); over that, 429. Timestamp window ±300 s. Credits for the first read come from the account's normal daily allowance (OQ-04 in the PRD: default is the same 10). |
 
@@ -50,13 +60,16 @@ Ada is the receiving side. It has to accept a signed handoff from Builder Journa
 | `bridge_identities` | `user_id` CASCADE | Destroyed | Nothing to retain; the tombstone holds the email. |
 | `bridge_handoffs` | `user_id` CASCADE | Destroyed | `product_id` also cascades from `products`, which Spec 1 destroys. |
 | `products` (new columns) | existing | Destroyed | `source` and `external_ref` go with the row. |
-| `sessions`, `conversations`, `messages` | existing | Retained, de-linked (Spec 1 D3/D5) | The idea text is in the intake message and is retained de-identified, exactly as a native sprint's intake is. **Spec 3 must say so for bridged ideas too.** |
+| `sessions`, `conversations`, `messages` | existing | Retained, de-linked (Spec 1 D3/D5, live in the shipped migration) | The idea text is in the intake message and is retained de-identified, exactly as a native sprint's intake is. **The `/privacy` paragraph added in Milestone 1 must say this covers ideas that arrived from Builder Journal**, since the existing copy describes only ideas typed into Ada. |
 
 Storage: the bridge uploads nothing.
 
 ## 6. Schema changes
 
-One migration, written **after** Spec 1's migration lands and applied by whatever path Spec 1 proves out (`supabase db push`, per the DEU-96 regime, which `tasks/todo.md` still marks unverified).
+One migration, written after the shipped `20260907040404_account_deletion` and applied by the regime DEU-96 closed on 2026-09-07 (`CLAUDE.md`, Migration workflow). Two sanctioned paths; **pick by where the session is running**:
+
+- **Terminal with the Supabase CLI:** write the file, `supabase db push`. The CLI registers the filename's version; nothing else needed.
+- **Agentic or browser session (Claude Code on the web, no CLI)** — the likely case for this build: write the file, apply with MCP `apply_migration`, then read the version it registered via MCP `list_migrations` and **rename the local file to that version in the same commit**. Skipping the rename is precisely what caused the original drift. It is not optional.
 
 ```
 supabase/migrations/<timestamp>_builder_journal_bridge.sql
@@ -125,6 +138,8 @@ Rules: steps 7–12 use `getServiceClient()`. The `url` is returned once and nev
 - **`/bridge`** (public route, not under `ProtectedRoute`): reads `th` and `sprint`; calls `supabase.auth.verifyOtp({ token_hash: th, type: 'magiclink' })`; on success `navigate('/sprint/<sprint>?arrived=bridge', { replace: true })`; on failure shows one card: "This link expired. Go back to Builder Journal and send the idea again." with a link to `/login`. Three lines of loading state (idea received, signed in, opening your sprint) while it works, as in the concept.
 - **`Sprint.tsx`**: when `product.source === 'builder_journal'`, the header sub-line reads "arrived from Builder Journal" and a small pill under the header says "Signed in through Builder Journal · accounts linked / this session only" (mode from a new `?arrived=bridge` read once, then dropped from the URL). Starter chips already hide once an assistant message exists, so the first read replaces them with no code.
 - **`Settings.tsx`**: if the account has a `bridge_identities` row (exposed through a tiny service-role read in an existing settings function, or a `user_metadata.bridge_source` check), show "Created through Builder Journal" with: set a password (existing password form must accept "no current password" for this case), and Unlink. Deletion (Spec 1) unchanged.
+- **`Privacy.tsx` (Must, ships with Milestone 1):** one paragraph under the existing retention section saying that ideas can arrive from AI Builder Journal, that an account may be created that way, that the retained de-identified transcript can include the idea text sent over, and that the account is deletable here like any other. Bump `PRIVACY_LAST_UPDATED`. This is the whole of what DEU-91 owes the bridge.
+- **Setting a password is a real gap, not a formality (OQ-B, now confirmed).** `Settings.tsx` requires a current password (`'Current password is required'`) and `updatePassword(current, new)` re-authenticates with it. A bridge-created user has no password and therefore **cannot use that form**. Two honest options: (a) point them at the existing `/reset-password` email flow, which works today and needs no new code — recommended for v1; (b) branch the form to skip the current-password step when the user has none. Do **not** ship a "set a password" button that silently fails.
 - **Should-Have:** the in-thread "Claim your account" card after the fifth message; direction chips on arrival (Discovery loop, riskiest assumption, market brief at `/product/:id/intel`, portfolio at `/portfolio`).
 
 ## 10. Secrets and config
@@ -140,17 +155,18 @@ Unit (Deno test, in `_shared`): signature verify (good, bad, expired, replayed),
 
 ## 12. Risks
 
-- **Spec 1 not shipped** → bridge accounts would be undeletable. Hard gate; this spec does not start until Spec 1's manual test passes.
-- **Spec 3 not shipped** → Ada has no policy to disclose retention of bridged ideas. Hard gate for launch, not for building.
-- **Migration path unverified (DEU-96)** → the bridge migration follows Spec 1's, whichever path that turns out to be.
+- **~~Spec 1 not shipped~~ → resolved 2026-09-07.** Deletion is on `main` and this spec's tables cascade under it with no change to `delete-account`. The residual risk is that the *deployed* behavior differs from the merged code; Mo's manual dry run covers that, and it gates turning the bridge on, not building it.
+- **~~Spec 3 not shipped~~ → mostly resolved.** `/privacy` exists and covers deletion retention. The residual risk is a disclosure that does not mention arrivals from another app; closed by the paragraph in §9, which is a Must inside Milestone 1.
+- **~~Migration path unverified~~ → resolved.** DEU-96 closed; §6 names both paths. The live risk moved: an agentic session that applies via MCP and **forgets the rename** re-creates the original drift. §6 states it; the reviewer should check for it in the diff.
 - **Email-join surprise (D2)** → disclosed, unlinkable, equivalent to magic link.
 - **Kickoff cost creep** → one Haiku turn per new handoff, capped 20/day/user, idempotent per idea.
 
 ## 13. Open items
 
-- OQ-A: is production `enable_confirmations` on? (Local is off.) Admin-created users are confirmed either way; this only affects the message a bridge user sees if they later try a native signup with the same email.
-- OQ-B: does the existing Settings password form accept a user with no password (`updateUser({ password })` without a current one)? If not, that is the one new auth path in this spec.
-- OQ-C: the delta audit (PRD Milestone 4) runs against this surface with the 2026-08-23 audit's method before `BRIDGE_SHARED_SECRET` is set in production.
+- **OQ-A** — is production `enable_confirmations` on? (Local is off.) Admin-created users are confirmed either way; this only affects the message a bridge user sees if they later try a native signup with the same email. Owner: Mo, from the Supabase dashboard.
+- **OQ-B — answered, and the answer is "no."** The Settings form requires a current password, so a bridge user cannot set one there. §9 records the two options; v1 recommendation is to point them at `/reset-password`. Owner: Mo to pick, at Milestone 1.
+- **OQ-C** — the delta audit (PRD Milestone 4) runs against this surface with the 2026-08-23 audit's method before `BRIDGE_SHARED_SECRET` is set in production. Unchanged.
+- **OQ-D — new.** `RESEND_API_KEY` / `EMAIL_FROM` now exist for the deletion email. Should a bridge arrival send a "your Ada account was created from Builder Journal" email? Default: **no** for v1 — the arrival is visible on screen and the account is reachable by magic link, so an extra email is noise. Owner: Mo. Due: Milestone 3.
 
 ## 14. Verification (how Mo tests it by hand)
 
@@ -166,4 +182,10 @@ Unit (Deno test, in `_shared`): signature verify (good, bad, expired, replayed),
 
 ## 15. How an Ada session should pick this up
 
-Start the session with the `session-start` skill as usual. When it asks what to ship, answer: "Spec 4, the Builder Journal bridge, Milestone 1 only, after confirming Spec 1 is merged and its manual test passed." Read this file and the PRD it points to, then enter Plan Mode and write the plan to `tasks/todo.md` before any code, per `CLAUDE.md`. The hard boundary: do not touch `ALLOWED_ORIGINS`, `requireUser`, the coach persona, or any `authenticated` grant. The one judgment call worth the most care is D2; if the session disagrees with it, it should say so before building, not route around it.
+Start the session with the `session-start` skill as usual. When it asks what to ship, answer: **"Spec 4, the Builder Journal bridge, Milestone 1 only."** The deletion gate is cleared (see the table at the top), so no confirmation step is needed first; the only thing still owed to launch is Mo's dry run and the delta audit, both of which gate switching the bridge on, not writing it.
+
+Read this file and the PRD it points to, then enter Plan Mode and write the plan to `tasks/todo.md` before any code, per `CLAUDE.md`.
+
+Hard boundaries: do not touch `ALLOWED_ORIGINS`, `requireUser`, the coach persona, or any `authenticated` grant; do not modify `delete-account` (this spec deliberately requires no change to it, and needing one means a table was designed wrong). If applying the migration through MCP, rename the local file to the registered version in the same commit (§6).
+
+The one judgment call worth the most care is **D2**, trusting Builder Journal's verified email as the join key. If the session disagrees with it, say so before building rather than routing around it.
