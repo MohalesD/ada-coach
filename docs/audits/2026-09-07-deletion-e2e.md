@@ -1,16 +1,75 @@
 # Spec 1 Account-Deletion E2E — Audit Attempt, 2026-09-07
 
-**Status: NOT EXECUTED.** This audit could not run. Both external accesses the
-task requires are blocked at the environment/infrastructure level, not by
-missing tooling or a fixable configuration choice available from inside this
-session. This report documents exactly what was tried, the evidence for each
-blocker, and what needs to change before the E2E can run.
+**Status: SPEC'D PLAYWRIGHT E2E NOT EXECUTED. DB-level fallback executed and
+PASSED (6/6).** Network access to `ada-coach.vercel.app` and the project's
+`*.supabase.co` host is blocked at the environment/infrastructure level (see
+below) — steps 1–3 of the spec (real signup, chat, and deletion through the
+UI and Edge Functions) could not run in this session under any tooling
+available to it. With Mo's explicit sign-off, a **DB-level fallback** was run
+instead: a disposable identity and matching fixture data were inserted
+directly into Ada Coach's production database (`ada-coach-01`,
+`pdxflmydzmcsynccunhn`), the same retained/destroyed sequence the
+`delete-account` Edge Function performs (tombstone upsert, feedback scrub,
+storage cleanup, then `DELETE FROM auth.users`) was executed via
+`execute_sql`, and every assertion in spec §10 step 4 was checked directly
+against the resulting rows. All test data was cleaned up afterward.
 
-Per the task's own instruction ("report database outcomes, not just absence
-of errors"), no pass/fail claim is made anywhere below that wasn't backed by
-an actual command run and its output. Nothing in this report should be read
-as "the deletion flow works" or "the deletion flow is broken" — no attempt
-reached the point where that could be observed.
+**This fallback does NOT cover:**
+- The `delete-account` Edge Function itself — its JWT/`requireUser()` check,
+  the owner-403 rejection (D6), the service-role wiring, or its error
+  handling.
+- The frontend at all — Settings page, the `DELETE` confirmation input, the
+  post-delete redirect to `/login`, or the "deleted" notice.
+- Whether the old credentials actually fail against Supabase Auth's sign-in
+  endpoint (this session never reached that endpoint).
+- The `admin-feedback` §8a regression fix (retained-row rendering) — that's a
+  frontend/API concern, untestable without network access.
+- Email send-on-deletion (best-effort, D7).
+
+It only verifies that the **schema — the FK/trigger retention mechanics in
+the `account_deletion` migration — behaves as documented** when an
+`auth.users` row is deleted. That was, per the design doc, the highest-risk
+and least-previously-tested part of the spec, so it has real value, but it is
+not a substitute for the Playwright E2E the task asked for. Do not read the
+6/6 below as "the deletion feature works end-to-end" — it isn't that.
+
+## DB-level fallback — pass/fail
+
+Test identity: `0ee41937-609d-433d-85bd-a1526f34ecb5`,
+`e2e-fallback-test-20260907@example.invalid` (synthetic, inserted directly
+via SQL — never a real signup). Fixture: 1 conversation, 2 messages (one
+rated `feedback='negative'`), 1 `user_feedback` row with a `contact_email`,
+1 `storage.objects` row under `documents/<uid>/...`. Deletion sequence run
+via `execute_sql` against project `pdxflmydzmcsynccunhn`: upsert
+`deleted_users` → scrub `user_feedback.contact_email` + set
+`deleted_user_id` → delete the storage object row (required
+`SET LOCAL storage.allow_delete_query = 'true'`; direct deletes are normally
+blocked by `storage.protect_delete()` — confirms the real Edge Function must
+go through the Storage API, not raw SQL, to clear a user's files) → `DELETE
+FROM auth.users`.
+
+| # | Assertion (spec §10) | Result |
+|---|---|---|
+| 1 | `auth.users` row for the test identity is gone | **PASS** — `count(*) = 0` |
+| 2 | `user_profiles` row is gone | **PASS** — `count(*) = 0` (cascade) |
+| 3 | Conversation still exists, `user_id IS NULL` | **PASS** — row present, `user_id: null` |
+| 4 | Messages survive, including the one with `feedback='negative'` | **PASS** — both messages present, assistant message `feedback: "negative"` |
+| 5 | `user_feedback` row survives with `user_id IS NULL`, `contact_email IS NULL`, `deleted_user_id` pointing at a `deleted_users` row whose `email` matches | **PASS** — `user_id: null`, `contact_email: null`, `deleted_user_id` resolved to a `deleted_users` row with `email: "e2e-fallback-test-20260907@example.invalid"` matching the original account |
+| 6 | `storage.objects` has zero rows under the old uid prefix | **PASS** — `count(*) = 0` after cleanup (see note above on `protect_delete`) |
+
+**Bonus finding (not in the original checklist):** `storage.objects` has an
+app-level `protect_delete()` trigger blocking raw `DELETE`s outside a
+`storage.allow_delete_query = true` session setting. This is a real
+constraint on the actual `delete-account` implementation, not just this
+test's plumbing — worth confirming the Edge Function's storage cleanup goes
+through `supabase.storage.from('documents').remove([...])` (the Storage API)
+rather than any raw-SQL path, since the Storage API sets this internally.
+
+## Steps NOT executed (spec §10, steps 1–3)
+
+Unchanged from below: blocked by network policy, confirmed three ways (curl,
+an actual Playwright/Chromium session, and the proxy's own status endpoint).
+See "What was tried" for full detail.
 
 ## What was read first
 
