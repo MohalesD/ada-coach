@@ -836,6 +836,10 @@ Marcus / Priya).
 - [ ] Docs system overhaul: master PRD (docs/PRODUCT.md), backlog.md/todo.md regenerated from Linear via script (kill hand-maintenance), pending DEU-17 decision for PRD scope
 - [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
 
+## Registered 2026-09-07 — Builder Journal → Ada bridge (Spec 4), NOT started
+
+- [ ] **Spec 4: Builder Journal → Ada bridge, receiving side** — `docs/superpowers/specs/2026-09-07-builder-journal-bridge-design.md`. Sending side and product decisions: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. **Gated on DEU-89 shipped + Spec 1 manual test passed, and DEU-91 live before launch.** Builds nothing until then. Scope for Milestone 1: one migration (`bridge_identities`, `bridge_handoffs`, `products.source`/`external_ref`), `bridge-intake` function (HMAC, `verify_jwt = false`), `sessions` gains `kickoff: true` (the zero-click auto-kickoff Sprint.tsx already names), `/bridge` public route, arrival banner, Settings notice. Delta RLS audit of the new surface before the production secret is set.
+
 ## PAUSED 2026-08-23, resume next session
 
 - DEU-96 rename branch (chore/deu-96-migration-rename): renames + CLAUDE.md + spec §6 amendment are COMMITTED as WIP, NOT merged.
