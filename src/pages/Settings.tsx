@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,12 +7,43 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/lib/auth-context';
+import { DELETE_CONFIRM_PHRASE, deleteAccount, isDeleteConfirmed } from '@/lib/account';
 import FeedbackForm from '@/components/FeedbackForm';
 
 const PASSWORD_MIN = 8;
 
 export default function Settings() {
-  const { user, profile, updateProfile, updatePassword } = useAuth();
+  const { user, profile, updateProfile, updatePassword, signOut } = useAuth();
+  const navigate = useNavigate();
+  const isOwner = profile?.role === 'owner';
+
+  // ── Danger zone: account deletion ──
+  const [deleteInput, setDeleteInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteReady = isDeleteConfirmed(deleteInput) && !deleting && !isOwner;
+
+  const handleDeleteAccount = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!deleteReady) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteAccount();
+    if (!result.ok) {
+      setDeleting(false);
+      setDeleteError(
+        result.error === 'owner_cannot_delete'
+          ? 'Owner accounts cannot be deleted from here.'
+          : result.error === 'unauthorized'
+            ? 'Your session has expired. Sign in again and retry.'
+            : 'Deletion did not complete. Nothing was removed; you can try again.',
+      );
+      return;
+    }
+    // The auth user is gone server-side; clear the local session and leave.
+    await signOut();
+    navigate('/login', { replace: true, state: { accountDeleted: true } });
+  };
 
   // ── Profile form ──
   const initialDisplayName = profile?.display_name ?? '';
@@ -252,6 +283,71 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <FeedbackForm surface="settings" />
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6 border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">Delete account</CardTitle>
+            <CardDescription>
+              Immediate and permanent. Here is exactly what happens, so there are no surprises.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2 text-sm">
+              <p className="font-medium text-foreground">Removed for good:</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+                <li>Your login, email, name, and profile</li>
+                <li>Products, portfolio, reports, research, and uploaded files</li>
+              </ul>
+              <p className="pt-1 font-medium text-foreground">Kept, with your identity removed:</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+                <li>Conversation transcripts and the thumbs ratings on them</li>
+                <li>Discovery Sprint sessions and extracted assumptions</li>
+                <li>Feedback you sent, so a bug you reported can still be fixed</li>
+              </ul>
+              <p className="pt-1 text-muted-foreground">
+                Ada is a demo, and that retained material is how it gets better. Full details in
+                the{' '}
+                <Link to="/privacy" className="underline">
+                  Demo Privacy Notice
+                </Link>
+                . You will get one confirmation email and nothing else from us.
+              </p>
+            </div>
+
+            {isOwner ? (
+              <p className="text-sm text-muted-foreground" role="note">
+                Owner accounts cannot be deleted from here. Transfer ownership first.
+              </p>
+            ) : (
+              <form onSubmit={handleDeleteAccount} noValidate className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="deleteConfirm">
+                    Type <span className="font-mono font-semibold">{DELETE_CONFIRM_PHRASE}</span>{' '}
+                    to confirm
+                  </Label>
+                  <Input
+                    id="deleteConfirm"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={deleteInput}
+                    onChange={(e) => setDeleteInput(e.target.value)}
+                    disabled={deleting}
+                    placeholder={DELETE_CONFIRM_PHRASE}
+                  />
+                </div>
+                {deleteError && (
+                  <p className="text-sm text-destructive" role="alert">
+                    {deleteError}
+                  </p>
+                )}
+                <Button type="submit" variant="destructive" disabled={!deleteReady}>
+                  {deleting ? 'Deleting your account...' : 'Delete my account'}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       </div>

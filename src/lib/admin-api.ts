@@ -349,7 +349,10 @@ export async function runRetrievalDebug(
 
 export type FeedbackEntry = {
   id: string;
-  user_id: string;
+  // NULL once the author deletes their account (Spec 1); the row survives,
+  // re-attributed through deleted_user_id.
+  user_id: string | null;
+  deleted_user_id: string | null;
   feedback_type: 'bug' | 'feedback' | 'praise' | 'message_rating';
   rating: 'up' | 'down' | null;
   message_id: string | null;
@@ -359,6 +362,7 @@ export type FeedbackEntry = {
   created_at: string;
   user_email: string | null;
   user_display_name: string | null;
+  is_deleted_user: boolean;
 };
 
 export async function getFeedbackLog(): Promise<FeedbackEntry[]> {
