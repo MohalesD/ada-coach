@@ -2100,6 +2100,44 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
 // Read-only list of the unified user_feedback log (FAB/Settings submissions
 // + message thumb events). Triage actions are a later backlog item.
 
+// Feedback comments run from one line to several paragraphs. The cell shows
+// the first four lines and expands to the full text on demand — no fixed
+// container width, nothing silently cut off. The toggle only appears for
+// comments long enough to actually clamp; the threshold is a character count
+// rather than a measured height so no layout effect is needed.
+const COMMENT_CLAMP_CHARS = 220;
+
+function FeedbackComment({ text }: { text: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!text) return <span className="text-muted-foreground">—</span>;
+
+  const clampable = text.length > COMMENT_CLAMP_CHARS || text.includes('\n');
+
+  return (
+    <div className="min-w-[22rem] max-w-[52rem] space-y-1">
+      <p
+        className={cn(
+          'whitespace-pre-wrap break-words text-sm leading-relaxed',
+          clampable && !expanded && 'line-clamp-4'
+        )}
+      >
+        {text}
+      </p>
+      {clampable && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+          aria-expanded={expanded}
+        >
+          {expanded ? 'Show less' : 'Show full comment'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [entries, setEntries] = useState<FeedbackEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -2174,13 +2212,11 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
           <TableBody>
             {entries.map((e) => (
               <TableRow key={e.id}>
-                <TableCell className="whitespace-nowrap">{typeBadge(e)}</TableCell>
-                <TableCell className="max-w-md">
-                  <span className="line-clamp-3 text-sm">
-                    {e.comment ?? <span className="text-muted-foreground">—</span>}
-                  </span>
+                <TableCell className="whitespace-nowrap align-top">{typeBadge(e)}</TableCell>
+                <TableCell className="align-top">
+                  <FeedbackComment text={e.comment} />
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="align-top text-sm">
                   <span className="whitespace-nowrap">
                     {e.user_display_name ??
                       e.user_email ??
@@ -2197,10 +2233,10 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                <TableCell className="whitespace-nowrap align-top text-sm text-muted-foreground">
                   {e.source_surface}
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                <TableCell className="whitespace-nowrap align-top text-sm text-muted-foreground">
                   {new Date(e.created_at).toLocaleString([], {
                     month: 'short',
                     day: 'numeric',
