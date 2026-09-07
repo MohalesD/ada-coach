@@ -84,26 +84,24 @@ The sidebar supports search, scenario-based entry points (pre-seeded starter pro
 
 Migrations in `supabase/migrations/` (applied in filename order).
 
-> **Migration workflow (resolved 2026-08-23, DEU-96):** `supabase db push` is the **only**
-> sanctioned path for schema/DDL changes in this project. Write the migration as a local `.sql`
-> file under `supabase/migrations/` — that file is the true push source, not a labeled record —
-> and apply it with `supabase db push`. **MCP `apply_migration` is retired for DDL.** The prior
-> drift (local filenames not matching remote-applied timestamps) was diagnosed 2026-08-23
-> (`docs/audits/2026-08-23-deu96-migration-drift.md`) as a pure version-string mismatch — every
-> migration existed on both sides, none were lost — and resolved by renaming all 36 affected
-> local files to match their remote-registered versions (`chore/deu-96-migration-rename`).
-> **DEU-96 is renamed but NOT fully verified as of 2026-09-06**: `supabase db push --dry-run`
-> has never been run against the renamed files to confirm the drift actually resolved, and no
-> one-time schema baseline snapshot exists yet — `supabase db dump --schema-only` was attempted
-> and failed (`--schema-only` is not a valid flag on CLI v2.109.1; read `supabase db dump --help`
-> fresh before retrying). Both are tracked in `tasks/todo.md`. Do not treat this migration
-> workflow as fully validated until the dry-run has actually been run and reported clean. Do not
-> run `supabase migration repair` or `supabase db pull` without a planned cleanup — both touch
-> shared migration history.
+> **Migration workflow (DEU-96 closed 2026-09-07):** the local `.sql` file under
+> `supabase/migrations/` is the source of truth, and its filename version **must equal the
+> version registered in the remote ledger** (`supabase_migrations.schema_migrations`). Two
+> sanctioned ways to apply DDL; pick by where you are working:
 >
-> **MCP remains fully sanctioned for read-only inspection** — `list_tables`, `list_migrations`,
-> `get_advisors`, `execute_sql` catalog/data queries, and similar. Only DDL application moved to
-> `db push`.
+> 1. **Terminal with the Supabase CLI:** write the file, run `supabase db push`. The CLI
+>    registers the filename's version, so nothing else is needed.
+> 2. **Agentic / browser session (Claude Code on the web, no CLI):** write the file, apply it
+>    with MCP `apply_migration` (same SQL, same name), then read the version it registered via
+>    MCP `list_migrations` and **rename the local file to that version in the same commit**.
+>    Skipping the rename is exactly what caused the original drift; it is not optional.
+>
+> Verified 2026-09-07 by diffing all 48 local filenames against the live ledger: identical.
+> MCP remains fully sanctioned for read-only inspection (`list_tables`, `list_migrations`,
+> `get_advisors`, `execute_sql` catalog/data queries). Do not run `supabase migration repair`
+> or `supabase db pull` without a planned cleanup; both rewrite shared migration history.
+> No schema baseline snapshot exists, deliberately: filename parity with the ledger is the check
+> that matters, and a Supabase preview branch covers risky DDL better than a static dump.
 
 
 
@@ -147,6 +145,22 @@ Migrations in `supabase/migrations/` (applied in filename order).
 - `documents.session_id` (nullable FK → sessions, CASCADE) marks **session-scoped documents**: owned per-user (any authenticated role), excluded from `match_document_chunks` (global RAG now filters `session_id IS NULL`), searchable only via `match_session_chunks(p_session_id, …)`. Global rows (`session_id IS NULL`) remain owner-role-only. Note: the storage bucket policies are still owner-only — session *file* uploads work only for the owner until the backlog item lands; pasted-text ingest needs no storage.
 - `app_settings.model_routing` — JSON text mapping call types to models (defaults: classification/summary → `claude-haiku-4-5`, assumption mapping → `claude-sonnet-4-6`). Edit the row to change routing without a redeploy; `_shared/models.ts` refuses any route matching `/fable|mythos/i`. **Fable/Mythos-tier models are build-time only and must never be routed in production.**
 
+**Account deletion — `account_deletion` (Spec 1 / DEU-89, shipped 2026-09-07):**
+- Detach-and-cascade. Every FK to `auth.users` was already `ON DELETE CASCADE`, so deleting
+  the auth row scrubs everything by default. Retention is the explicit exception: `user_id`
+  on `conversations`, `user_feedback`, `sessions`, `assumptions` is now nullable with
+  `ON DELETE SET NULL`, and `sessions.product_id` / `assumptions.product_id` likewise (products
+  are destroyed, sessions/assumptions survive de-linked). `messages` and
+  `assumption_status_history` survive through their parents.
+- `deleted_users` tombstone (original_user_id UNIQUE, display_name, email, signed_up_at,
+  deleted_at). No FK to `auth.users`. RLS on, zero policies for anon/authenticated, service
+  role only. `user_feedback.deleted_user_id` keeps retained feedback attributable to it.
+- Why: the retained transcripts, thumbs ratings, and feedback feed the demo's learning loop.
+  A NULL `user_id` matches no RLS policy, so retained rows are visible only via service-role
+  admin reads. Disclosed at `/privacy` and in the Settings danger zone.
+- When adding a new own-rows table, decide explicitly: cascade (default, for user assets) or
+  detach (only for research material). Mirror this migration for the latter.
+
 **RLS posture:**
 - Authenticated users see only their own conversations/messages (via `user_id = auth.uid()`)
 - Authenticated users can read only the active coaching prompt
@@ -178,12 +192,23 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - **`assumptions`** — `GET ?id=` (one + full status history), `GET ?session_id= | ?product_id=` (list), `PATCH ?id= { confidence?, impact?, status?, is_prioritized? }` with strict validation. History rows come only from the DB trigger.
 - **`assumption-mapping`** — `POST { session_id, intake? }`. Sonnet 4.6 extracts 5–12 scored assumptions from the intake (or the sprint conversation); strict JSON validation; malformed output → raw response logged server-side + 502 `{ error: 'malformed_model_output', retryable: true }`, nothing inserted. Every model call in these functions is recorded in `model_usage` via `_shared/usage.ts`.
 
+- **`delete-account`** — `POST` (no body; identity comes only from the JWT). Owner role → 403
+  `owner_cannot_delete`. Order: upsert `deleted_users` tombstone → relink `user_feedback`
+  (`deleted_user_id`, `contact_email = NULL`) → purge `documents/{uid}/` in Storage,
+  paginated until empty (`_shared/storage-purge.ts`) → `auth.admin.deleteUser` (irreversible,
+  last) → best-effort confirmation email (`_shared/email.ts`, Resend). Returns
+  `{ ok: true, email_sent }`. Any failure before the auth delete leaves the account intact and
+  is safe to retry. `admin-feedback` resolves retained rows through the tombstone and flags
+  `is_deleted_user`.
+
 ### Required Supabase Secrets
 
 - `ANTHROPIC_API_KEY` — used by `chat` (Claude calls)
 - `OPENAI_API_KEY` — used by `ingest` (embeddings)
 - `ALLOWED_ORIGINS` — comma-separated CORS allowlist
 - `SUPABASE_SERVICE_ROLE_KEY` — auto-injected; consumed by `getServiceClient()`
+- `RESEND_API_KEY` + `EMAIL_FROM` — optional; used by `_shared/email.ts` for the deletion
+  confirmation. When unset, the send is skipped and logged; deletion still succeeds.
 
 ## Ada's Coaching Persona (System Prompt)
 
@@ -224,8 +249,10 @@ Shipped (kept here because the IDs still appear in older docs):
 - **B-002 / DEU-6**: Token usage dashboard — ✅ done. `chat` now calls `recordModelUsage()`;
   coaching-chat spend is visible in the admin Spend tab.
 - **B-005 / DEU-9**: Vera → Ada Coach rebrand — ✅ done.
-- **B-011 / DEU-96**: Migration history mismatch — ✅ done 2026-08-23. See the Migration
-  workflow note in the Database Schema section above.
+- **B-011 / DEU-96**: Migration history mismatch — ✅ closed 2026-09-07 (files renamed
+  2026-08-23, verified against the live ledger 2026-09-07). See the Migration workflow note.
+- **DEU-89**: Self-serve account deletion with retention — ✅ shipped 2026-09-07. See
+  "Account deletion" under Database Schema and `delete-account` under Edge Functions.
 
 ## Development Principles
 
@@ -243,6 +270,19 @@ Mark items complete as you go.
 Add a review section to tasks/todo.md when done.
 
 ## Fable 5 sessions
+
+**Advisor mode in Claude Code is Fable 5.1 (set 2026-09-07 by Mo).** Adversarial review, TDD,
+and Fable 5.1 as orchestrator are already in place, and Mo trusts those over the prose in this
+file, `tasks/todo.md`, or any rules file. What that means in practice:
+- A check the orchestrator has already run (a live ledger diff, a constraint query, a passing
+  test) is the check. Do not ask Mo to re-run it by hand from a terminal.
+- Prefer doing the work here, through the connected Supabase, Linear, and Notion tools, over
+  handing Mo laptop commands. He will not unset or reseat CLI tokens between projects.
+- Guardrails written for earlier models (checks on checks, stop-and-confirm on routine steps,
+  reassigning work mid-flight) do not apply. Keep the ones that protect users' data and the
+  irreversible-step-last discipline; drop the ceremony.
+- Numbered steps, no narrative, plain language, no placeholders. Flag real risk once, then
+  proceed.
 
 For any Fable 5 or `/goal`-driven run, load the `fable5-prompting` skill
 first, plus its `references/design-and-voice-philosophy.md` for anything

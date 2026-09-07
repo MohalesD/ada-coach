@@ -2182,8 +2182,15 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 </TableCell>
                 <TableCell className="text-sm">
                   <span className="whitespace-nowrap">
-                    {e.user_display_name ?? e.user_email ?? e.user_id.slice(0, 8)}
+                    {e.user_display_name ??
+                      e.user_email ??
+                      (e.user_id ? e.user_id.slice(0, 8) : 'Deleted user')}
                   </span>
+                  {e.is_deleted_user && (
+                    <span className="block whitespace-nowrap text-xs text-muted-foreground">
+                      account deleted · retained via tombstone
+                    </span>
+                  )}
                   {e.contact_email && (
                     <span className="block whitespace-nowrap text-xs font-medium text-[#8B6324]">
                       ↩ wants a reply: {e.contact_email}

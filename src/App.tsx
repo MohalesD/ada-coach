@@ -17,6 +17,7 @@ import StartRouter from './pages/StartRouter';
 import Portfolio from './pages/Portfolio';
 import PortfolioWorkspace from './pages/PortfolioWorkspace';
 import SharePortfolio from './pages/SharePortfolio';
+import Privacy from './pages/Privacy';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/privacy" element={<Privacy />} />
             {/* Public by design: share links open for logged-out visitors. */}
             <Route path="/share/:token" element={<ShareReport />} />
             <Route path="/portfolio/share/:token" element={<SharePortfolio />} />

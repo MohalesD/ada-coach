@@ -613,3 +613,12 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/discovery-turn/deno.json"
 entrypoint = "./functions/discovery-turn/index.ts"
+
+# Spec 1 (DEU-89): self-serve account deletion. verify_jwt = false mirrors
+# every other browser-facing function (preflight); requireUser gates
+# in-function and identity comes only from the JWT.
+[functions.delete-account]
+enabled = true
+verify_jwt = false
+import_map = "./functions/delete-account/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
