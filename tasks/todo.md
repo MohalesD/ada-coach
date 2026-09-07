@@ -837,9 +837,26 @@ Marcus / Priya).
 - [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
 
 ## PAUSED 2026-08-23, resume next session
+
 - DEU-96 rename branch (chore/deu-96-migration-rename): renames + CLAUDE.md + spec §6 amendment are COMMITTED as WIP, NOT merged.
 - Schema snapshot step failed: `supabase db dump --schema-only` is not a real flag on installed CLI v2.109.1. Next session: run `supabase db dump --help` fresh and read the actual flag list before retrying, don't trust prior advice on this flag.
 - Still needed to close DEU-96: finish/skip snapshot, then `supabase db push --dry-run` to confirm clean, then merge to main.
 - Account deletion (feat/account-deletion): spec approved, NOT started. Blocked on DEU-96 merge. Test Author has not run. No code exists yet.
 - Security set (fix/security-set-deu-92-95): not started, untouched all day.
 - Golden-path priority for next session: finish DEU-96 merge fast, then go straight to Test Author + account deletion build. Skip everything else until that ships.
+
+## UPDATE 2026-09-06 — DEU-96 merged to main, still UNVERIFIED
+
+Mo's explicit call, given the 2026-09-07 check-in deadline: merge now rather than block on
+verification, but document the gap honestly rather than claim it's done.
+
+- [ ] **Run `supabase db push --dry-run` for real, from your own terminal**, and confirm it
+      reports up to date. This has never actually been run against the renamed migration files.
+      If it reports anything other than clean, DEU-96 is NOT actually resolved and the rename
+      may need to be revisited.
+- [ ] **Produce the schema baseline snapshot**, or make an explicit, recorded decision to skip
+      it permanently. Run `supabase db dump --help` fresh first — `--schema-only` is confirmed
+      not valid on CLI v2.109.1.
+- Until both boxes above are checked, treat `CLAUDE.md`'s migration-workflow note as
+  **documented-but-unverified**, not proven. Do not build DEU-89's migration under the
+  assumption that `db push` definitely works cleanly — verify it first.

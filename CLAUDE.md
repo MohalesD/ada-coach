@@ -91,11 +91,15 @@ Migrations in `supabase/migrations/` (applied in filename order).
 > drift (local filenames not matching remote-applied timestamps) was diagnosed 2026-08-23
 > (`docs/audits/2026-08-23-deu96-migration-drift.md`) as a pure version-string mismatch — every
 > migration existed on both sides, none were lost — and resolved by renaming all 36 affected
-> local files to match their remote-registered versions (`chore/deu-96-migration-rename`). A
-> one-time schema baseline lives at `docs/schema-snapshots/2026-08-23-baseline.sql`
-> (`supabase db dump --schema-only`), independent of migration history, as an ongoing sanity
-> check. Do not run `supabase migration repair` or `supabase db pull` without a planned
-> cleanup — both touch shared migration history.
+> local files to match their remote-registered versions (`chore/deu-96-migration-rename`).
+> **DEU-96 is renamed but NOT fully verified as of 2026-09-06**: `supabase db push --dry-run`
+> has never been run against the renamed files to confirm the drift actually resolved, and no
+> one-time schema baseline snapshot exists yet — `supabase db dump --schema-only` was attempted
+> and failed (`--schema-only` is not a valid flag on CLI v2.109.1; read `supabase db dump --help`
+> fresh before retrying). Both are tracked in `tasks/todo.md`. Do not treat this migration
+> workflow as fully validated until the dry-run has actually been run and reported clean. Do not
+> run `supabase migration repair` or `supabase db pull` without a planned cleanup — both touch
+> shared migration history.
 >
 > **MCP remains fully sanctioned for read-only inspection** — `list_tables`, `list_migrations`,
 > `get_advisors`, `execute_sql` catalog/data queries, and similar. Only DDL application moved to
