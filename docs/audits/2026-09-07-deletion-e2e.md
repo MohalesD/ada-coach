@@ -80,6 +80,18 @@ itself is not the gap — the network path to the target host is closed. This
 would block step 1 (create disposable user, chat, feedback, upload) even if
 Blocker 1 were resolved.
 
+**This is not a fixable misconfiguration inside this session — it's a
+policy boundary.** `get_session` confirms this session is already running
+in `env_0199MzeFiQyXdVBgthvmDUk4`, an environment named "Default - trusted
+network access" (not the locked-down "Prototype Sandbox" that also exists
+on this account) — and the target host is still rejected with an explicit
+`403` at the egress proxy. The proxy's own operator documentation
+(`/root/.ccr/README.md`) is unambiguous: a `403`/`407` from the proxy means
+"the destination host is not allowed by your organization's egress policy
+for this session. Do not retry or route around it — report the blocked
+host." Switching environments, using a different HTTP client, or any other
+route-around was deliberately not attempted, per that guidance.
+
 ## Consequence
 
 Steps 1–4 of the task's plan were not attempted:
@@ -102,11 +114,15 @@ deleted, irreversibly or otherwise.
 
 Either of the following, ideally both:
 
-1. **Network egress**: allowlist `ada-coach.vercel.app` (and the preview host,
-   if testing a preview build — remember to also add it to `ALLOWED_ORIGINS`
-   in Supabase secrets per `CLAUDE.md`'s CORS note) in this environment's
-   outbound network policy, or run the E2E from an environment whose policy
-   already permits it.
+1. **Network egress**: this session's org-level egress policy explicitly
+   denies `ada-coach.vercel.app` / `vercel.app` / `supabase.com`, even from
+   the "trusted network access" environment. That's a deliberate boundary,
+   not an oversight — someone with authority over this Claude Code org's
+   network policy needs to either add an explicit allowlist entry for these
+   hosts (and the preview host, if testing a preview build — remember to
+   also add it to `ALLOWED_ORIGINS` in Supabase secrets per `CLAUDE.md`'s
+   CORS note), or this E2E needs to run from a venue the policy doesn't
+   cover at all (e.g. Mo's own machine, outside this hosted environment).
 2. **Supabase MCP scope**: point this session's Supabase MCP connector at Ada
    Coach's actual project (org/project ref TBD — not discoverable from this
    repo since no real credentials are committed, correctly, per
