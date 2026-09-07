@@ -22,6 +22,35 @@ reached the point where that could be observed.
   spec above is the closest source; grepped for "deletion"/"delete-account",
   no matches in `CLAUDE.md`).
 
+## Update — Blocker 1 resolved, Blocker 2 still open
+
+As of a later check in this same session, `mcp__Supabase__list_projects` now
+returns `ada-coach-01` (project ref `pdxflmydzmcsynccunhn`), so Blocker 1
+below is resolved — `execute_sql` against Ada Coach's actual database is now
+possible.
+
+Blocker 2 is not resolved. Re-checked directly:
+
+```
+$ curl -sS -o /dev/null -w "%{http_code}" https://ada-coach.vercel.app/
+403 (connect_rejected)
+$ curl -sS -o /dev/null -w "%{http_code}" https://pdxflmydzmcsynccunhn.supabase.co
+403 (connect_rejected)
+$ curl -sS -o /dev/null -w "%{http_code}" https://db.pdxflmydzmcsynccunhn.supabase.co
+403 (connect_rejected)
+```
+
+This is fatal to steps 1–3 regardless of Blocker 1's fix: the frontend and
+every Edge Function URL for this project live on the same blocked hosts
+(`*.vercel.app`, `*.supabase.co`). The Supabase MCP server reaches the
+database through its own separate, pre-authorized connection — not through
+this session's local network — so it can run `execute_sql` even though this
+session cannot reach the same project over plain HTTPS. There is no way to
+invoke Edge Functions (`chat`, `delete-account`, etc.) or load the app from
+this session while that host-level policy denial stands. Steps 1–3 remain
+**not run**; step 4 remains **not verifiable** because there is nothing yet
+to verify — no disposable user exists to check the retention outcomes of.
+
 ## Blocker 1 — Supabase MCP is scoped to the wrong project
 
 `mcp__Supabase__list_projects` and `list_organizations` return exactly one
