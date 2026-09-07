@@ -10,10 +10,22 @@ export type AssumptionStatus = 'untested' | 'validated' | 'challenged' | 'abando
 
 export type EvidenceStance = 'supports' | 'challenges' | 'neutral';
 
+export type ProductSource = 'ada' | 'builder_journal';
+
+// Where a bridge-created product came from (Spec 4). Service-role write only;
+// readable under the own-rows policy so the sprint page can show the arrival.
+export interface ProductExternalRef {
+  app: string;
+  idea_id: string;
+  url: string | null;
+}
+
 export interface Product {
   id: string;
   name: string;
   description: string | null;
+  source: ProductSource;
+  external_ref: ProductExternalRef | null;
   competitive_gap: CompetitiveGap | null;
   gap_generated_at: string | null;
   intel_status: IntelStatus | null;

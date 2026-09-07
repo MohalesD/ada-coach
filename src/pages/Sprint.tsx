@@ -10,7 +10,7 @@
 // object it affects — nothing updates silently.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, MoreHorizontal, NotebookPen } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -158,9 +158,23 @@ function WorkingNote({ label }: { label: string }) {
   );
 }
 
+// A Builder Journal arrival (Spec 4 §9) announces itself once, on the visit
+// that came through /bridge: read from the URL on mount, then dropped from it
+// so a refresh or a shared link doesn't keep claiming "just signed in".
+type Arrival = { mode: 'permanent' | 'session' };
+
 export default function Sprint() {
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  useEffect(() => {
+    if (searchParams.get('arrived') !== 'bridge') return;
+    const mode = searchParams.get('mode');
+    setArrival({ mode: mode === 'permanent' ? 'permanent' : 'session' });
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const [session, setSession] = useState<Session | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
@@ -566,12 +580,19 @@ export default function Sprint() {
               <h1 className="truncate font-display text-base font-semibold tracking-tight">
                 {product?.name ?? 'Discovery Sprint'}
               </h1>
-              {session.stage && (
+              {(session.stage || product?.source === 'builder_journal') && (
                 <p className="text-[11px] text-muted-foreground">
-                  Ada's read:{' '}
-                  <span className="font-semibold text-accent">
-                    {session.stage === 'fresh_idea' ? 'fresh idea' : 'mid-discovery, stuck'}
-                  </span>
+                  {product?.source === 'builder_journal' && (
+                    <span>arrived from Builder Journal{session.stage ? ' · ' : ''}</span>
+                  )}
+                  {session.stage && (
+                    <>
+                      Ada's read:{' '}
+                      <span className="font-semibold text-accent">
+                        {session.stage === 'fresh_idea' ? 'fresh idea' : 'mid-discovery, stuck'}
+                      </span>
+                    </>
+                  )}
                 </p>
               )}
             </div>
@@ -619,6 +640,29 @@ export default function Sprint() {
             </DropdownMenu>
           </div>
         </div>
+        {arrival && (
+          <div className="mx-auto max-w-3xl px-4 pb-2 sm:px-6">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span
+                role="status"
+                className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-secondary/60 px-2.5 py-0.5 text-[11px] font-medium text-foreground"
+              >
+                Signed in through Builder Journal
+                <span className="text-muted-foreground" aria-hidden>
+                  ·
+                </span>
+                <span className="text-muted-foreground">
+                  {arrival.mode === 'permanent' ? 'accounts linked' : 'this session only'}
+                </span>
+              </span>
+              {messages.some((m) => m.role === 'assistant') && (
+                <span className="text-[11px] text-muted-foreground">
+                  Ada's first read used one of your daily messages.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         <div className="mx-auto max-w-3xl px-4 pb-2.5 sm:px-6">
           <CoveragePath coverage={coverage} currentPhase={currentPhase} />
         </div>

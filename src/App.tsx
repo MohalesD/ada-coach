@@ -18,6 +18,7 @@ import Portfolio from './pages/Portfolio';
 import PortfolioWorkspace from './pages/PortfolioWorkspace';
 import SharePortfolio from './pages/SharePortfolio';
 import Privacy from './pages/Privacy';
+import Bridge from './pages/Bridge';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -29,6 +30,10 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/privacy" element={<Privacy />} />
+            {/* Public by design: exchanges a one-time Builder Journal launch
+                token for a session (Spec 4); ProtectedRoute would drop the
+                query string it needs. */}
+            <Route path="/bridge" element={<Bridge />} />
             {/* Public by design: share links open for logged-out visitors. */}
             <Route path="/share/:token" element={<ShareReport />} />
             <Route path="/portfolio/share/:token" element={<SharePortfolio />} />

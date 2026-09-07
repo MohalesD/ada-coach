@@ -836,6 +836,94 @@ Marcus / Priya).
 - [ ] Docs system overhaul: master PRD (docs/PRODUCT.md), backlog.md/todo.md regenerated from Linear via script (kill hand-maintenance), pending DEU-17 decision for PRD scope
 - [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
 
+## 🔨 In progress 2026-09-07 — Spec 4 Milestone 1: Builder Journal → Ada bridge (receiving side)
+
+Branch `claude/session-start-az1f99`. Source of truth:
+`docs/superpowers/specs/2026-09-07-builder-journal-bridge-design.md` + PRD §8 Milestone 1
+(`davincibuilderjournal001/docs/prds/...validate-with-ada_v1_2026-09-07.md`). Full plan with
+rationale: `/root/.claude/plans/abundant-shimmying-bentley.md` (session-local).
+
+Judgment calls, stated once:
+- D2 stands, plus a guard: a handoff resolving to an `admin`/`owner` profile → 403
+  `privileged_account`. Closes the leaked-secret → owner-takeover case at zero user cost.
+- Credits: new `fn_reset_credits_for_user(uuid)` (service_role-only) holds the reset logic;
+  `fn_reset_credits_if_due()` becomes a wrapper on `auth.uid()`. Exhausted → sprint still
+  created, kickoff skipped (`kickoff: { error: true, reason: 'credits_exhausted' }`).
+- Arrival directive rides in `coachTurn`'s existing system-context directive slot, not a fake
+  trailing user turn. `_shared/coach.ts` untouched.
+- `bridge_handoffs` row inserted early (before any model spend) so replays fail on the unique
+  index first; deleted on failure so the request id is not consumed.
+- Fail closed (503) if `BRIDGE_SHARED_SECRET` **or** `APP_URL` is unset.
+- Manual validation, no Zod (repo convention for Edge Functions).
+- Settings for bridge users: "Email me a link to set a password" → `resetPasswordForEmail`.
+- `unlink` action ships inside `bridge-intake` now; Ada's Settings Unlink control stays M3.
+
+### Schema
+- [x] Migration `builder_journal_bridge`: `bridge_identities`, `bridge_handoffs` (service-role
+      only, cascade off `auth.users`), `products.source` + `products.external_ref` (no new
+      authenticated grant), `fn_reset_credits_for_user` + wrapper rewrite
+- [x] Applied via MCP → `list_migrations` registered `20260907091423` → local file renamed to
+      `20260907091423_builder_journal_bridge.sql` in the same commit (49/49 parity)
+- [x] Live verification via `execute_sql`: both tables RLS on, one `service_role` policy each,
+      only `service_role` table grants; `products` authenticated grants unchanged
+      (`INSERT user_id,name,description` / `UPDATE name,description`, SELECT includes the new
+      columns); `fn_reset_credits_for_user` execute = `postgres` + `service_role` only
+
+### Backend
+- [x] `_shared/bridge-signature.ts` (+ 10 Vitest): HMAC-SHA256 over `ts.request_id.body`, ±300 s
+- [x] `_shared/bridge-payload.ts` (+ 9 Vitest): body validation, UTC-day cap window
+- [x] `_shared/sprint-create.ts`: conversation + session + intake + stage classifier (extracted
+      from `sessions`, behavior unchanged)
+- [x] `_shared/sprint-kickoff.ts`: spend credit → persona → `coachTurn` with arrival directive →
+      persist assistant reply → `model_usage`
+- [x] `sessions` POST: `kickoff?: boolean` → `kickoff: { message_id } | { error: true }`
+- [x] `bridge-intake` function + `deno.json`; `config.toml` `verify_jwt = false` with comment
+- [x] Deployed via MCP: `bridge-intake` v1, `sessions` v7 (both `verify_jwt = false`, bundles
+      carry the current `_shared` closure). No secrets set → bridge answers 503.
+
+### Frontend
+- [x] `/bridge` public route (`src/pages/Bridge.tsx`) → `verifyOtp` → `/sprint/:id?arrived=bridge&mode=`
+- [x] `Product` type: `source`, `external_ref`
+- [x] `Sprint.tsx`: "arrived from Builder Journal" sub-line; this-visit pill; first-read cost line
+- [x] `Settings.tsx`: "Created through Builder Journal" block replacing the password form
+- [x] `Privacy.tsx`: one retention paragraph naming Builder Journal arrivals
+
+### Wrap-up
+- [x] `npm run test` 84/84 (65 → 84), `npm run type-check` clean, `npm run build` clean
+- [x] `CLAUDE.md`: function, schema, secrets entries
+- [x] `graphify update .`; commit; push
+
+### Review (2026-09-07)
+
+Built Milestone 1 end to end and deployed it dark: one migration (two service-role-only
+tables, two service-write-only `products` columns, a service-callable credit reset with the
+authenticated wrapper unchanged), two shared sprint helpers extracted from `sessions` so the
+bridge and the native path are one code path, the `bridge-intake` function (HMAC, fail-closed,
+idempotent per idea, replay-safe before any model spend, full rollback on failure), the
+`kickoff` flag on `sessions`, and the four frontend touches (`/bridge`, arrival banner,
+Settings notice with a working set-a-password path, `/privacy` paragraph). 19 new Vitest cases.
+
+**Not verified here, deliberately handed off:**
+- The fail-closed 503 probe: this container's egress proxy refused the CONNECT to the
+  Supabase functions host (organization policy), so no request reached the deployed
+  function from this session. One-line `curl` in the Verification list.
+- No Deno binary in the container, so `deno check` did not run; the MCP bundle step accepted
+  both functions, and the same modules pass Vitest + `tsc` where they are pure.
+- The end-to-end handoff needs `BRIDGE_SHARED_SECRET` + `APP_URL`, which stay unset until
+  Mo's deletion dry run and the delta audit (Milestone 4) pass. That is the launch gate, not
+  a build gap.
+
+**Flagged, not fixed (out of scope):**
+- `fn_reset_credits_if_due()` shows `anon=X` in its ACL (Supabase's default function grant
+  survived the original `revoke … from public`). Harmless today (returns NULL for a null
+  `auth.uid()`), but it belongs in the DEU-92..95 security set as an explicit
+  `revoke execute … from anon`.
+- OQ-A / OQ-02 (production `enable_confirmations`) is still Mo's to read from the dashboard.
+  Nothing in Milestone 1 depends on it; it only shapes the message a bridge user sees if they
+  later try a native signup with the same email.
+
+---
+
 ## Registered 2026-09-07 — Builder Journal → Ada bridge (Spec 4), NOT started
 
 - [ ] **Spec 4: Builder Journal → Ada bridge, receiving side** — `docs/superpowers/specs/2026-09-07-builder-journal-bridge-design.md`. Sending side and product decisions: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. **Cleared to build as of 2026-09-07:** DEU-89 shipped, so the cascade this spec relies on is live and both bridge tables scrub for free with no change to `delete-account`; `/privacy` exists, so the disclosure is one added paragraph inside Milestone 1 rather than a blocker. Still gating **launch, not build**: Mo's manual deletion dry run, the delta RLS audit of the new surface, and only then `BRIDGE_SHARED_SECRET` in production.

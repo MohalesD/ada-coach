@@ -92,6 +92,14 @@ export default function Privacy() {
                 Deletion is immediate and cannot be undone. You will get one confirmation email,
                 and after that, nothing else from us.
               </p>
+              <p>
+                Ideas can also arrive here from AI Builder Journal, a separate app. When you send
+                an idea from there, Ada may create an account for you, matched to the email you
+                verified in Builder Journal, and the idea text becomes the first message of a
+                Discovery Sprint. Everything above applies to that account exactly as to one you
+                created here: the retained, de-identified transcript can include the idea that was
+                sent over, and you can delete the account from Settings at any time.
+              </p>
             </section>
 
             <section className="space-y-2">

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase';
 import { DELETE_CONFIRM_PHRASE, deleteAccount, isDeleteConfirmed } from '@/lib/account';
 import FeedbackForm from '@/components/FeedbackForm';
 
@@ -16,6 +17,26 @@ export default function Settings() {
   const { user, profile, updateProfile, updatePassword, signOut } = useAuth();
   const navigate = useNavigate();
   const isOwner = profile?.role === 'owner';
+
+  // ── Builder Journal arrivals (Spec 4 §9) ──
+  // An account the bridge created has no password, and the change-password
+  // form below needs the current one, so that form cannot serve it. The
+  // honest path is the existing email reset flow, offered here as a real
+  // button rather than a link to a page that only works from an email.
+  const bridgeCreated = user?.user_metadata?.bridge_source === 'builder_journal';
+  const [passwordLinkState, setPasswordLinkState] = useState<'idle' | 'sending' | 'sent' | 'error'>(
+    'idle'
+  );
+
+  const handleSendPasswordLink = async () => {
+    if (!user?.email || passwordLinkState === 'sending') return;
+    setPasswordLinkState('sending');
+    // Same call and redirect as "Forgot password?" on the sign-in page.
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setPasswordLinkState(error ? 'error' : 'sent');
+  };
 
   // ── Danger zone: account deletion ──
   const [deleteInput, setDeleteInput] = useState('');
@@ -189,6 +210,44 @@ export default function Settings() {
 
             <Separator className="my-6" />
 
+            {bridgeCreated ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">
+                    Created through Builder Journal
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    This account was created when you sent an idea from AI Builder Journal. It is
+                    matched to your email, has no password yet, and you can always get back in
+                    with &ldquo;Email me a sign-in link&rdquo; on the sign-in page.
+                  </p>
+                </div>
+                {passwordLinkState === 'sent' ? (
+                  <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+                    Check your email for a link to set a password.
+                  </p>
+                ) : (
+                  <>
+                    {passwordLinkState === 'error' && (
+                      <p className="text-sm text-destructive" role="alert">
+                        We could not send the link right now. Please try again in a moment.
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      onClick={() => void handleSendPasswordLink()}
+                      disabled={passwordLinkState === 'sending'}
+                      className="self-start bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      {passwordLinkState === 'sending'
+                        ? 'Sending...'
+                        : 'Email me a link to set a password'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
             <div className="mb-3">
               <h2 className="text-base font-semibold text-foreground">Change password</h2>
               <p className="text-sm text-muted-foreground">
@@ -271,6 +330,8 @@ export default function Settings() {
                 {savingPassword ? 'Updating...' : 'Update password'}
               </Button>
             </form>
+              </>
+            )}
           </CardContent>
         </Card>
 

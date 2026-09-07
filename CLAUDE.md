@@ -161,6 +161,21 @@ Migrations in `supabase/migrations/` (applied in filename order).
 - When adding a new own-rows table, decide explicitly: cascade (default, for user assets) or
   detach (only for research material). Mirror this migration for the latter.
 
+**Builder Journal bridge — `builder_journal_bridge` (Spec 4 Milestone 1, 2026-09-07):**
+- `bridge_identities` (`bj_user_id` UNIQUE → `user_id` CASCADE, `mode` permanent|session,
+  `last_used_at`) and `bridge_handoffs` (`request_id` UNIQUE, UNIQUE `(bj_user_id, bj_idea_id)`,
+  `user_id` CASCADE, `product_id` CASCADE, `session_id` SET NULL). Both are **service-role
+  only**: RLS on, zero `anon`/`authenticated` policies, no grants (the `deleted_users` posture).
+  They cascade under the Spec 1 delete with no change to `delete-account`.
+- `products.source` (`'ada'` | `'builder_journal'`, default `'ada'`) and
+  `products.external_ref` jsonb. Service-write-only: the `authenticated` INSERT/UPDATE grants on
+  `products` are explicit column lists that exclude them. Readable under own-rows SELECT; the
+  sprint page uses `source` to show "arrived from Builder Journal".
+- `fn_reset_credits_for_user(p_user_id)` — SECURITY DEFINER, execute granted to `service_role`
+  only, holds the lazy daily reset. `fn_reset_credits_if_due()` is now a wrapper calling it with
+  `auth.uid()`; its grants and behavior are unchanged. The bridge (no JWT) uses the former to
+  spend the first-read credit.
+
 **RLS posture:**
 - Authenticated users see only their own conversations/messages (via `user_id = auth.uid()`)
 - Authenticated users can read only the active coaching prompt
@@ -188,7 +203,7 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - **`admin-users`** — **Owner-only** (admin alone is rejected with 403). `GET` lists `user_profiles` with credit fields (`credits_remaining`, `last_credit_reset`). `POST ?id=<uuid>&action=reset` resets that user's credits to the current `daily_message_limit` and stamps `last_credit_reset`.
 - **`ingest`** — two modes, one pipeline (chunker/embedder shared via `_shared/ingest-core.ts`). `POST { document_id }`: downloads from Storage, extracts text (PDF via `unpdf`, plain text via `Blob.text()`), sentence-aware chunker (~300 words / ~50 overlap), embeds in batches of 96 (`text-embedding-3-small`), replaces prior chunks, transitions `'uploaded' → 'processing' → 'ready'` (`'error'` + rollback on failure; re-ingestable). Global-corpus docs (`session_id IS NULL`) remain **owner-only**; session-scoped docs only require ownership. `POST { session_id, pasted_text, title? }`: session-scoped pasted text (≤ 50k chars) — **`_shared/redact.ts` strips emails and identified names BEFORE anything is stored or embedded** (only redacted text persists; ambiguous tokens returned in `redaction.flagged` for the PM, never silently dropped). Requires `OPENAI_API_KEY` in Supabase Secrets.
 - **`products`** — `GET` / `POST { name, description? }` / `PATCH ?id=` / `DELETE ?id=`. All through the RLS-bound client; delete also removes the product's sprint conversations.
-- **`sessions`** — `POST { product_id, intake? }` creates a session + linked conversation, persists the intake as the first turn, and runs the Haiku stage classifier (`stage`, `stage_confidence`; failure is non-fatal → `classification_error: true`). A second concurrent sprint on the same product returns the existing one with `resumed: true`. `GET ?id= | ?product_id= |` (none). `PATCH ?id= { action: 'complete' | 'abandon', current_step? }` — completion generates the Haiku summary (stored on the session and as a `kind='summary'` message); invalid transitions → 409.
+- **`sessions`** — `POST { product_id, intake?, kickoff? }` creates a session + linked conversation, persists the intake as the first turn, and runs the Haiku stage classifier (`stage`, `stage_confidence`; failure is non-fatal → `classification_error: true`). Creation lives in `_shared/sprint-create.ts`, shared with `bridge-intake`. `kickoff: true` (Spec 4) additionally runs Ada's first read on the intake via `_shared/sprint-kickoff.ts` (one `discovery_coach` Haiku turn, one credit, only the assistant reply persisted; the arrival directive rides in the coach's system-context slot, never as a user turn) and adds `kickoff: { message_id } | { error: true }` to the response, non-fatal. A second concurrent sprint on the same product returns the existing one with `resumed: true`. `GET ?id= | ?product_id= |` (none). `PATCH ?id= { action: 'complete' | 'abandon', current_step? }` — completion generates the Haiku summary (stored on the session and as a `kind='summary'` message); invalid transitions → 409.
 - **`assumptions`** — `GET ?id=` (one + full status history), `GET ?session_id= | ?product_id=` (list), `PATCH ?id= { confidence?, impact?, status?, is_prioritized? }` with strict validation. History rows come only from the DB trigger.
 - **`assumption-mapping`** — `POST { session_id, intake? }`. Sonnet 4.6 extracts 5–12 scored assumptions from the intake (or the sprint conversation); strict JSON validation; malformed output → raw response logged server-side + 502 `{ error: 'malformed_model_output', retryable: true }`, nothing inserted. Every model call in these functions is recorded in `model_usage` via `_shared/usage.ts`.
 
@@ -201,6 +216,29 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
   is safe to retry. `admin-feedback` resolves retained rows through the tombstone and flags
   `is_deleted_user`.
 
+- **`bridge-intake`** — Spec 4, the Builder Journal → Ada bridge (receiving side). **Server-to-server
+  only, no JWT**: `verify_jwt = false` because auth is an HMAC-SHA256 signature
+  (`X-Bridge-Timestamp`, `X-Bridge-Request-Id`, `X-Bridge-Signature` over
+  `timestamp.request_id.raw_body` with `BRIDGE_SHARED_SECRET`, ±300 s window, constant-time
+  compare in `_shared/bridge-signature.ts`); it never calls `requireUser()`. Returns 503
+  `bridge_disabled` until `BRIDGE_SHARED_SECRET` **and** `APP_URL` are set, which is the launch
+  gate (Mo's deletion dry run + delta audit first). `POST { action: 'handoff', bj_user_id, email,
+  display_name?, link_mode, idea: { id, title, brief, … } }`: daily cap 20/UTC-day per
+  `bj_user_id` (429), same idea again → existing sprint (200 `resumed: true`) or 410
+  `sprint_deleted`, find-or-create the Ada user by `bridge_identities` then verified email then
+  `auth.admin.createUser` (confirmed, no password, `user_metadata.bridge_source`), **403
+  `privileged_account` if the email resolves to an admin/owner** (a leaked secret must not mint
+  an owner sign-in), handoff row inserted before any model spend (replay → 409), product with
+  `source = 'builder_journal'`, `createSprint` + `kickoffSprint`, then
+  `auth.admin.generateLink({ type: 'magiclink' })` → `hashed_token` → 201
+  `{ url: APP_URL/bridge?th=…&sprint=…&mode=…, … }`. The URL is never logged. Any failure after
+  the handoff insert rolls back handoff + conversation + product so the request id is not
+  consumed. `POST { action: 'unlink', bj_user_id }` drops the identity row. Body validation in
+  `_shared/bridge-payload.ts` (manual, no Zod). Frontend: `/bridge` (public) exchanges `th` via
+  `verifyOtp` and opens `/sprint/:id?arrived=bridge&mode=…`; the sprint header shows the arrival;
+  Settings offers bridge-created users an email link to set a password (the change-password form
+  needs a current one).
+
 ### Required Supabase Secrets
 
 - `ANTHROPIC_API_KEY` — used by `chat` (Claude calls)
@@ -209,6 +247,9 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - `SUPABASE_SERVICE_ROLE_KEY` — auto-injected; consumed by `getServiceClient()`
 - `RESEND_API_KEY` + `EMAIL_FROM` — optional; used by `_shared/email.ts` for the deletion
   confirmation. When unset, the send is skipped and logged; deletion still succeeds.
+- `BRIDGE_SHARED_SECRET` + `APP_URL` — used by `bridge-intake` (32 random bytes base64, the same
+  value in Builder Journal's secrets; `https://ada-coach.vercel.app`). **Deliberately unset until
+  the launch gate passes**; the function returns 503 without them and writes nothing.
 
 ## Ada's Coaching Persona (System Prompt)
 
