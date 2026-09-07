@@ -22,6 +22,26 @@ reached the point where that could be observed.
   spec above is the closest source; grepped for "deletion"/"delete-account",
   no matches in `CLAUDE.md`).
 
+## Update 2 — confirmed with an actual browser, not just curl
+
+Installed `playwright-core@1.56.1` in scratch and launched the pre-installed
+Chromium (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) through this
+session's sanctioned proxy (`http://127.0.0.1:<port>`, same one `curl` uses
+via `HTTPS_PROXY`). `page.goto('https://ada-coach.vercel.app/')` failed with
+`net::ERR_TUNNEL_CONNECTION_FAILED`. Same failure class as the `curl` 403s
+above — this rules out a curl-specific quirk and confirms the block is a
+proxy-level policy denial that affects every HTTP client in this session
+identically, browser included. No attempt was made to route around the
+proxy (untested and out of scope — routing around an organization's egress
+policy is not something to explore even experimentally).
+
+**Conclusion: this session cannot execute steps 1–3 of the E2E under any
+tooling available to it.** The blocker is infrastructural (session/environment
+network policy), not a gap in approach, tooling, or effort. It requires
+either the egress allowlist being updated for `ada-coach.vercel.app` and
+`pdxflmydzmcsynccunhn.supabase.co`, or running this E2E from an environment
+that isn't subject to this restriction.
+
 ## Update — Blocker 1 resolved, Blocker 2 still open
 
 As of a later check in this same session, `mcp__Supabase__list_projects` now
