@@ -836,6 +836,12 @@ Marcus / Priya).
 - [ ] Docs system overhaul: master PRD (docs/PRODUCT.md), backlog.md/todo.md regenerated from Linear via script (kill hand-maintenance), pending DEU-17 decision for PRD scope
 - [ ] NOTE: ada-coach-backlog-v1.md is stale (>1 month); do not trust until the Linear-export script replaces it
 
+## Registered 2026-09-07 — Builder Journal → Ada bridge (Spec 4), NOT started
+
+- [ ] **Spec 4: Builder Journal → Ada bridge, receiving side** — `docs/superpowers/specs/2026-09-07-builder-journal-bridge-design.md`. Sending side and product decisions: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. **Cleared to build as of 2026-09-07:** DEU-89 shipped, so the cascade this spec relies on is live and both bridge tables scrub for free with no change to `delete-account`; `/privacy` exists, so the disclosure is one added paragraph inside Milestone 1 rather than a blocker. Still gating **launch, not build**: Mo's manual deletion dry run, the delta RLS audit of the new surface, and only then `BRIDGE_SHARED_SECRET` in production.
+  - Milestone 1 scope: one migration (`bridge_identities`, `bridge_handoffs`, `products.source`/`external_ref`) — if applied via MCP, rename the local file to the registered version in the same commit, per the DEU-96 regime; `bridge-intake` function (HMAC, `verify_jwt = false`); `sessions` gains `kickoff: true` (the zero-click auto-kickoff `Sprint.tsx` already names as a backend item); `/bridge` public route; arrival banner; Settings notice; the `/privacy` paragraph.
+  - Confirmed on the way in: a bridge-created user **cannot** set a password in Settings (the form requires a current one). v1 answer is the existing `/reset-password` email flow. See Spec 4 §9.
+
 ## PAUSED 2026-08-23, resume next session
 
 - DEU-96 rename branch (chore/deu-96-migration-rename): renames + CLAUDE.md + spec §6 amendment are COMMITTED as WIP, NOT merged.
