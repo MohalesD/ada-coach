@@ -1,10 +1,15 @@
 // Ada Coach /sessions Edge Function (Run 1)
 // Discovery Sprint session lifecycle:
-//   POST                  { product_id, intake? } -> create session + linked
-//                         conversation; classify PM stage (Haiku) when an
-//                         intake message is provided. If the product already
-//                         has an in_progress session, returns it instead
-//                         (PRD: a second concurrent sprint routes to resume).
+//   POST                  { product_id, intake?, kickoff? } -> create session
+//                         + linked conversation; classify PM stage (Haiku)
+//                         when an intake message is provided. If the product
+//                         already has an in_progress session, returns it
+//                         instead (PRD: a second concurrent sprint routes to
+//                         resume). kickoff: true (Spec 4 §8) additionally runs
+//                         Ada's first read on the intake before returning;
+//                         the response gains kickoff: { message_id } |
+//                         { error: true } (non-fatal, like
+//                         classification_error).
 //   GET ?id= | ?product_id= | (none) -> fetch one / by product / all own.
 //   PATCH ?id=            { action: 'complete' | 'abandon', current_step? }
 //                         -> state transition; completion generates the
@@ -23,14 +28,15 @@ import {
 } from "../_shared/auth.ts";
 import { getModelFor } from "../_shared/models.ts";
 import { recordModelUsage } from "../_shared/usage.ts";
-import { classifyStage } from "../_shared/stage-classifier.ts";
 import { summarizeSession } from "../_shared/session-summary.ts";
+import { createSprint } from "../_shared/sprint-create.ts";
+import { kickoffSprint } from "../_shared/sprint-kickoff.ts";
 
 const INTAKE_MAX = 50_000; // PRD: pasted text fields cap at 50k characters
 const CURRENT_STEP_MAX = 200;
 const TRANSCRIPT_MESSAGE_LIMIT = 40;
 
-type CreateBody = { product_id?: unknown; intake?: unknown };
+type CreateBody = { product_id?: unknown; intake?: unknown; kickoff?: unknown };
 type PatchBody = {
   action?: unknown;
   current_step?: unknown;
@@ -85,6 +91,7 @@ Deno.serve(async (req) => {
         typeof body.product_id === "string" ? body.product_id : "";
       const intake =
         typeof body.intake === "string" ? body.intake.trim() : "";
+      const kickoff = body.kickoff === true;
 
       if (!productId) {
         return jsonResponse({ error: "product_id is required" }, 400, req);
@@ -128,100 +135,41 @@ Deno.serve(async (req) => {
       }
 
       const service = getServiceClient();
+      const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") ?? null;
 
-      // 1. Linked conversation — the sprint reuses the existing
-      //    conversation engine rather than a parallel message store.
-      const { data: conversation, error: convErr } = await service
-        .from("conversations")
-        .insert({
-          title: `${product.name} — Discovery Sprint`,
-          user_id: user.id,
-        })
-        .select("id")
-        .single();
-      if (convErr || !conversation) {
-        console.error("sprint conversation create failed:", convErr);
+      // Conversation → session → intake message → stage classifier, shared
+      // with the Builder Journal bridge (_shared/sprint-create.ts).
+      const created = await createSprint(service, {
+        userId: user.id,
+        product: { id: product.id, name: product.name },
+        intake,
+        anthropicKey,
+      });
+      if (!created.ok) {
         return jsonResponse({ error: "Could not start session." }, 500, req);
       }
 
-      // 2. Session row.
-      const { data: session, error: sessErr } = await service
-        .from("sessions")
-        .insert({
-          user_id: user.id,
-          product_id: productId,
-          conversation_id: conversation.id,
-        })
-        .select("*")
-        .single();
-      if (sessErr || !session) {
-        console.error("session create failed:", sessErr);
-        await service.from("conversations").delete().eq("id", conversation.id);
-        return jsonResponse({ error: "Could not start session." }, 500, req);
-      }
-
-      // 3. Intake message becomes the first turn of the conversation, and
-      //    drives the Haiku stage classifier. Classification failure is
-      //    non-fatal: the session exists; the client may retry the step.
-      let finalSession = session;
-      let classificationError = false;
-      if (intake) {
-        const { error: msgErr } = await service.from("messages").insert({
-          conversation_id: conversation.id,
-          role: "user",
-          content: intake,
+      // Optional zero-click first read. Non-fatal: the sprint stands either
+      // way and the client can fall back to the starter chips.
+      let kickoffResult: { message_id: string } | { error: true } | null = null;
+      if (kickoff && intake) {
+        const k = await kickoffSprint(service, {
+          userId: user.id,
+          sessionId: created.session.id,
+          conversationId: created.conversationId,
+          intake,
+          arrival: "native",
+          anthropicKey,
         });
-        if (msgErr) console.error("intake message insert failed:", msgErr);
-
-        const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-        if (!anthropicKey) {
-          console.error("Missing ANTHROPIC_API_KEY");
-          classificationError = true;
-        } else {
-          try {
-            const model = await getModelFor(service, "stage_classification");
-            const classification = await classifyStage({
-              apiKey: anthropicKey,
-              model,
-              intake,
-            });
-
-            const { data: updated, error: updErr } = await service
-              .from("sessions")
-              .update({
-                stage: classification.stage,
-                stage_confidence: classification.confidence,
-              })
-              .eq("id", session.id)
-              .select("*")
-              .single();
-            if (updErr || !updated) {
-              console.error("stage update failed:", updErr);
-              classificationError = true;
-            } else {
-              finalSession = updated;
-            }
-
-            await recordModelUsage(service, {
-              userId: user.id,
-              sessionId: session.id,
-              callType: "stage_classification",
-              model,
-              inputTokens: classification.inputTokens,
-              outputTokens: classification.outputTokens,
-            });
-          } catch (err) {
-            console.error("stage classification failed:", err);
-            classificationError = true;
-          }
-        }
+        kickoffResult = "error" in k ? { error: true } : { message_id: k.message_id };
       }
 
       return jsonResponse(
         {
-          session: finalSession,
+          session: created.session,
           resumed: false,
-          ...(classificationError ? { classification_error: true } : {}),
+          ...(created.classificationError ? { classification_error: true } : {}),
+          ...(kickoffResult ? { kickoff: kickoffResult } : {}),
         },
         201,
         req,

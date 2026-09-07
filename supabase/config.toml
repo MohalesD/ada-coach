@@ -622,3 +622,13 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/delete-account/deno.json"
 entrypoint = "./functions/delete-account/index.ts"
+
+# Spec 4 (Builder Journal → Ada bridge): server-to-server, authenticated by an
+# HMAC signature with BRIDGE_SHARED_SECRET, NOT by a JWT — there is no JWT to
+# verify. verify_jwt = false for that reason alone; the function never falls
+# through to requireUser() and returns 503 until the secret is configured.
+[functions.bridge-intake]
+enabled = true
+verify_jwt = false
+import_map = "./functions/bridge-intake/deno.json"
+entrypoint = "./functions/bridge-intake/index.ts"
