@@ -958,11 +958,19 @@ owed from Ada's side.
 - OQ-D (send an email on bridge arrival?) is still open, default **no** for v1, owner Mo,
   originally due this milestone — carry it forward, don't silently drop it.
 - **Milestone 4 (delta audit, OQ-C) — read-only half passed, 2026-09-08.** See
-  `docs/audits/2026-09-08-bridge-delta-audit.md` (9/9, independently re-verified against the
-  live DB and source directly from this session, not copied from the Builder Journal session's
-  own pass even though it reached the same result). Still open before `BRIDGE_SHARED_SECRET`
-  goes live: a real two-account probe exercising `handoff`/`unlink` and the magic-link path, not
-  just reading policies.
+  `docs/audits/2026-09-08-bridge-delta-audit.md`, run from the Builder Journal orchestrator
+  session (same Supabase account access as this project) — spot-checked independently from an
+  Ada session too, both agree. Still open before `BRIDGE_SHARED_SECRET` goes live: a real
+  two-account probe exercising `handoff`/`unlink` and the magic-link path, not just reading
+  policies.
+- **Registered, non-blocking:** the audit's finding #5 — `anon` holds full table-level grants
+  (`SELECT`/`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`TRIGGER`/`REFERENCES`) on `products`,
+  `sessions`, `assumptions`, and `model_usage`. Confirmed live via
+  `information_schema.role_table_grants`. Inert today — none of the four carry an RLS policy
+  targeting `anon`, so Postgres denies by default — and pre-dates Spec 4 (the two new bridge
+  tables have zero `anon` grants, cleaner than these). Belongs in the same DEU-92..95 security
+  set as the `fn_reset_credits_if_due` anon-execute flag: a `REVOKE ... FROM anon` pass on all
+  four tables, next security sprint, not now.
 
 ## PAUSED 2026-08-23, resume next session
 

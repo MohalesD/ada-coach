@@ -1,61 +1,109 @@
-# Builder Journal Bridge — Delta Audit (Spec 4, PRD Milestone 4, OQ-C)
+# Builder Journal Bridge — Delta RLS Audit (Spec 4, Milestone 4, read-only half)
 
 **Date:** 2026-09-08
-**Method:** Read-only verification directly against the live database (project
-`ada-coach-01`, `pdxflmydzmcsynccunhn`) plus a direct read of the relevant
-source files, following the 2026-08-23 RLS audit's method (query actual
-policies/constraints/grants, don't trust the schema's own comments).
-**Scope:** the new surface added by Spec 4 Milestone 1 — `bridge_identities`,
-`bridge_handoffs`, `products.source`/`products.external_ref`,
-`bridge-signature.ts`'s HMAC verification, and the `/bridge` → `/sprint/:id`
-isolation path.
+**Method:** `get_advisors(security)`, `information_schema.role_table_grants`,
+`information_schema.column_privileges`, `pg_policies`, and `pg_constraint`
+against `ada-coach-01` (`pdxflmydzmcsynccunhn`), live. Direct reads of
+`_shared/bridge-signature.ts`, `src/pages/Bridge.tsx`, and the `sessions`
+Edge Function's `GET` handler. No policy, grant, or schema change was made.
+No code was edited. Same method as `2026-08-23-rls-audit.md`, scoped to the
+new surface named in the PRD's Milestone 4 (`bridge_identities`,
+`bridge_handoffs`, `bridge-intake`, `/bridge`, the `sessions` change).
+**Run from the Builder Journal orchestrator session**, which has the same
+Supabase account access as this project — Ada's database did not need to
+wait on a session in this repo to be audited.
 
-## Provenance
+**Scope note:** this is the *read-only* half of Milestone 4. The PRD's other
+half — an end-to-end test with two real Builder Journal accounts confirming
+neither reaches the other's sprint, with the bridge secrets live — is not
+covered here and needs `BRIDGE_SHARED_SECRET`/`ADA_BRIDGE_URL` reachable
+somewhere, which is Mo's call per the standing launch gate. Everything below
+is: with the schema and code as merged, is the mechanism sound.
 
-The Builder Journal orchestrator session ran this same check first, independently — it
-turns out to have its own direct Supabase MCP connection to this project (Ada
-doesn't route through Lovable, so its database is reachable straight from that
-session too), so the read-only half of Milestone 4 didn't have to wait on an
-Ada session at all. Everything below was **re-run independently from this
-session** rather than copied from that report, specifically so this file
-reflects primary sources this session actually queried, not a relayed claim.
-Both runs agree.
+---
 
-## Findings
+## 1. RLS and grants on the two new tables
 
-| # | Claim | Verified | Evidence |
-|---|---|---|---|
-| 1 | `bridge_identities` and `bridge_handoffs` have RLS **enabled** | ✅ | `pg_class.relrowsecurity = true` for both |
-| 2 | Each table has exactly **one** policy, scoped to `service_role`, covering `ALL` | ✅ | `pg_policies`: `service_role full access bridge_identities` / `..._bridge_handoffs`, `roles={service_role}`, `cmd=ALL`, `qual=true` — no `anon`/`authenticated` policy exists on either table |
-| 3 | `anon`/`authenticated` hold **zero column-level grants** on either table | ✅ | `information_schema.column_privileges` returns an empty set for both roles on both tables |
-| 4 | `bridge_identities.bj_user_id` is `UNIQUE` (no identity collision across handoffs) | ✅ | `bridge_identities_bj_user_id_key`: `UNIQUE (bj_user_id)` |
-| 5 | `bridge_handoffs` has `UNIQUE(request_id)` (replay protection) | ✅ | `bridge_handoffs_request_id_key`: `UNIQUE (request_id)` |
-| 6 | `bridge_handoffs` has `UNIQUE(bj_user_id, bj_idea_id)` (idempotent re-send) | ✅ | `bridge_handoffs_bj_user_id_bj_idea_id_key`: `UNIQUE (bj_user_id, bj_idea_id)` |
-| 7 | `products.source` / `products.external_ref` are excluded from `authenticated`'s `INSERT`/`UPDATE` column grants (service-write-only) | ✅ | `authenticated` INSERT grant on `products`: `description, name, user_id` only. `authenticated` UPDATE grant: `description, name` only. Both columns are readable (`SELECT` includes them, as documented — the sprint page shows the arrival banner) but not writable by a browser |
-| 8 | HMAC verification: ±300s window, constant-time compare, distinct `malformed`/`expired`/`bad_signature` outcomes | ✅ | Read `supabase/functions/_shared/bridge-signature.ts` directly: `TIMESTAMP_WINDOW_S = 300`; `timingSafeEqual` XORs every byte with no early return, length mismatch included; `verifyBridgeRequest` returns the three distinct reasons in that order (malformed → expired → bad_signature) |
-| 9 | Opening `/bridge?sprint=<id>` cannot leak another user's sprint | ✅ | Read `Bridge.tsx`: it never inspects the `sprint` param beyond a UUID-shape regex before navigating to `/sprint/:id`; the `sessions` GET handler (`sessions/index.ts` L61-65) queries by id through `userClient` (RLS-bound to the caller's JWT), not the service client; `sessions`' own `SELECT` policy is `user_id = auth.uid()`. A guessed or borrowed sprint id resolves to zero rows → 404 `Session not found`, structurally, not by an application-level check that could be forgotten |
+Both `bridge_identities` and `bridge_handoffs` carry **exactly one policy
+each**: `{service_role}`, `ALL`, `qual = true`. Zero policies target `anon`
+or `authenticated` on either table, and `information_schema.role_table_grants`
+confirms **zero grants** to `anon`, `authenticated`, or `PUBLIC` on either —
+not even a residual `SELECT`. This matches the "no anon/authenticated
+policies, no grants" posture CLAUDE.md describes, verified live rather than
+taken on the doc's word.
 
-## What this does and doesn't cover
+## 2. Constraints — identity and idempotency
 
-**Covered:** every claim above is a direct read of live Postgres catalog state
-(`pg_class`, `pg_policies`, `pg_constraint`, `information_schema.column_privileges`)
-or the actual shipped source, not the migration file's own comments or a
-description of intended behavior.
+```
+bridge_identities:  UNIQUE (bj_user_id)
+bridge_handoffs:     UNIQUE (request_id)
+                      UNIQUE (bj_user_id, bj_idea_id)
+                      product_id -> products(id)  ON DELETE CASCADE
+                      session_id -> sessions(id)  ON DELETE SET NULL
+                      user_id    -> auth.users(id) ON DELETE CASCADE
+```
 
-**Not covered, deliberately left for a live run:** a real two-account probe
-(the 2026-08-23 audit's own gold standard — two throwaway users, SQL and the
-live API in both directions) exercising the bridge's actual entry points
-(`bridge-intake` `handoff`/`unlink`, a real magic-link exchange through
-`/bridge`). Findings #1-9 make a live cross-user leak structurally
-implausible (no policy exists that could permit it), but they are not a
-substitute for actually doing it. That live probe is the one remaining item
-before `BRIDGE_SHARED_SECRET` goes live in production — see the gate table in
-`docs/superpowers/specs/2026-09-07-builder-journal-bridge-design.md`.
+`bj_user_id` unique means a Builder Journal user id can never resolve to more
+than one Ada identity — no collision path. `UNIQUE(request_id)` is the replay
+guard the header comment claims; `UNIQUE(bj_user_id, bj_idea_id)` is the
+idempotency guard. Both exist as real constraints, not just as a comment.
 
-## Net effect on Milestone 4 / the launch gate
+## 3. `products.source` / `products.external_ref` — service-write-only, checked
 
-The read-only delta audit passes clean, 9/9. Combined with the dry run
-(`2026-09-07-deletion-e2e.md`) also passing, the remaining launch-gate items
-are: the live two-account isolation probe above, and then flipping
-`BRIDGE_SHARED_SECRET` + `APP_URL` in production. Both are sequencing, not
-build work — nothing found here changes what Milestone 1 shipped.
+`authenticated`'s column grants for `INSERT` on `products` are exactly
+`description, name, user_id`. `source` and `external_ref` are absent from
+that list — confirmed live, not just documented. A browser cannot set either
+column directly.
+
+## 4. Signing and the isolation chain — read directly, not assumed
+
+- `_shared/bridge-signature.ts`: `TIMESTAMP_WINDOW_S = 300`; `timingSafeEqual`
+  XORs over the full length of the longer input with no short-circuit, so a
+  length mismatch still costs a full pass; `verifyBridgeRequest` returns
+  distinct `malformed` / `expired` / `bad_signature` outcomes rather than one
+  generic failure. Sound.
+- `src/pages/Bridge.tsx` only ever calls `navigate('/sprint/:id', ...)` after
+  `verifyOtp` succeeds — it does not itself decide who may see the sprint.
+- The `sessions` Edge Function's `GET` handler (which `Sprint.tsx` calls to
+  load that sprint) reads through the **RLS-bound `userClient`**, not the
+  service client.
+- Live policy check: `sessions` carries `"users read own sessions"` on
+  `{authenticated}` `SELECT` with `qual = (user_id = auth.uid())`.
+
+Chained together: a guessed or borrowed sprint id in the `/bridge` URL cannot
+return another user's session, because the read it triggers is scoped to
+`auth.uid()` at the database, not to whatever id sits in the query string.
+This is the property the two-account live test would confirm empirically;
+this pass confirms the mechanism it would be testing is real.
+
+## 5. One finding — pre-existing, not a bridge defect, not blocking
+
+`anon` holds full table-and-column `INSERT`/`UPDATE`/`SELECT` grants on
+`products`, `sessions`, `assumptions`, and `model_usage`. None of these carry
+an RLS policy targeting `anon`, so with RLS enabled the Postgres default is
+deny and the grants are inert today. This predates Spec 4 — it is not on
+either new bridge table (`bridge_identities`/`bridge_handoffs` have **zero**
+`anon` grants, cleaner than the tables around them) — so it is not something
+Milestone 2 or 3 introduced. Recommend a `REVOKE ... FROM anon` pass on the
+four tables above as its own hygiene item, separate from this spec.
+
+## 6. Advisor lints — unchanged since 2026-08-23, plus one new one
+
+`function_search_path_mutable` (×4) and the `SECURITY DEFINER`
+callable-by-anon/authenticated warnings for `fn_reset_credits_if_due`,
+`handle_new_user`, and `log_assumption_status` are unchanged from the
+2026-08-23 audit and unrelated to the bridge. **New since then:**
+`rls_auto_enable` now shows the same anon/authenticated-executable warning.
+It reads as a platform-level event-trigger safety net (auto-enables RLS on a
+newly created table) rather than a function that touches bridge or user
+data — naming it here because the audit method calls for every flagged
+`SECURITY DEFINER` function to be named, not silently dropped. Worth a
+five-minute look to confirm it is what it appears to be; not urgent, and not
+gating Milestone 4.
+
+## 7. What remains
+
+The live two-account isolation test. Everything above is the mechanism that
+test would exercise, confirmed sound by direct inspection; it is not a
+substitute for running it once the bridge secrets are live. That is the one
+thing left in the entire Validate-with-Ada sprint after this.
