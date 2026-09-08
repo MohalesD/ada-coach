@@ -2222,15 +2222,29 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                       e.user_email ??
                       (e.user_id ? e.user_id.slice(0, 8) : 'Deleted user')}
                   </span>
+                  {/* Account email on its own line so it's reachable even when
+                      a display name is set. For a deleted account this comes
+                      from the tombstone, which is the only reply path left. */}
+                  {e.user_email && e.user_email !== e.user_display_name && (
+                    <a
+                      href={`mailto:${e.user_email}`}
+                      className="block whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      {e.user_email}
+                    </a>
+                  )}
                   {e.is_deleted_user && (
                     <span className="block whitespace-nowrap text-xs text-muted-foreground">
                       account deleted · retained via tombstone
                     </span>
                   )}
                   {e.contact_email && (
-                    <span className="block whitespace-nowrap text-xs font-medium text-[#8B6324]">
+                    <a
+                      href={`mailto:${e.contact_email}?subject=${encodeURIComponent('Re: your Ada Coach feedback')}`}
+                      className="block whitespace-nowrap text-xs font-medium text-[#8B6324] underline-offset-2 hover:underline"
+                    >
                       ↩ wants a reply: {e.contact_email}
-                    </span>
+                    </a>
                   )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap align-top text-sm text-muted-foreground">
