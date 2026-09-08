@@ -1052,3 +1052,81 @@ while running it. Two were fixed in the same pass; the rest are open.
   test sender. It only delivers to the address on Mo's own Resend account.
   Fine for verification; a verified sending domain is needed before real users
   get this email.
+
+---
+
+## Logged 2026-09-08 — decisions and findings from the second dry run
+
+### 🐞 Credits bug — new signups get 10, not the configured limit (diagnosed, fix not yet applied)
+
+**Symptom:** `daily_message_limit` is 20 in Settings → Credits and Limits, but a brand-new
+account starts with 10. Not a cache issue.
+
+**Root cause, three parts, all confirmed live:**
+1. `user_profiles.credits_remaining` carries a hardcoded column `DEFAULT 10`, written by
+   `20260502050044_user_credits.sql` back when the limit actually was 10. Its own comment says
+   "Seeded with default 10 to match the initial daily_message_limit" — the limit moved, the
+   default never did.
+2. `handle_new_user()` inserts only `(id, email, display_name)`. It never reads
+   `app_settings.daily_message_limit`, so every new row takes that stale default.
+3. `last_credit_reset` defaults to `CURRENT_DATE`, so the lazy top-up
+   (`fn_reset_credits_for_user`, which only fires when `last_credit_reset < current_date`)
+   does nothing until the *next* calendar day.
+
+Net effect: every new user gets 10 on day one regardless of the setting, then silently jumps to
+the real limit tomorrow. Evidence: `mdeis@poprouser.com`, created 2026-09-08 00:23,
+`credits_remaining = 9` after one message, `last_credit_reset = 2026-09-08`. Two older accounts
+sit at 15 (the limit when they were last topped up) with `last_credit_reset = 2026-09-07`, so
+their reset will fire correctly on next load. The reset logic is fine; only the starting state
+is wrong.
+
+- [ ] **Fix: default `last_credit_reset` to a past date** so the first `fn_reset_credits_if_due`
+      call (the frontend already makes one on app load, and `chat` makes one per message) tops
+      the account up to the live limit immediately.
+      One line: `alter table user_profiles alter column last_credit_reset set default '2000-01-01';`
+      **Chosen over** having `handle_new_user()` read `app_settings` directly: that trigger
+      swallows all exceptions (DEU-94), so a failed settings read there would silently produce a
+      user with no profile at all. This fix adds no new failure mode, and `credits_remaining`'s
+      default of 10 stays as a harmless floor if the reset ever fails.
+      Held rather than applied mid-test so a signup during the run doesn't change behavior
+      halfway through.
+
+### ✅ Fixed in this pass
+
+- [x] **RAG Debug "or pick a recent message" previews were clamped to one line.** Long messages
+      were unreadable, so you could not tell what you were about to test. Rows now show up to
+      five lines with a "Show full message" expander, wrapping preserved. The expander is a
+      sibling of the pick button rather than nested inside it — a button inside a button is
+      invalid HTML and eats the inner click.
+
+### Decisions taken 2026-09-08
+
+- **Sign-in copy ("Account does not exist") → ICEBOX.** Not building it. The security trade
+  (email enumeration, DEU-93) is not worth it at this stage. Revisit only after DEU-92 rate
+  limiting exists, and only if the friendlier onboarding is worth the documented residual.
+- **Retained reply addresses → keep the current privacy-first behavior.** `delete-account`
+  continues to clear `contact_email`. No code change.
+
+### Open, from the decisions above
+
+- [ ] **Privacy copy: say plainly that deletion ends contact.** Mo's intent: tell people that
+      if they delete, we can't come back and tell them what changed because of their feedback,
+      and point them at a way to keep following along.
+      ⚠️ **Two things to settle before writing this copy:**
+      1. Mo's proposed wording ("we will not have access to your email") is **not accurate as
+         written** — the `deleted_users` tombstone deliberately retains the account email, and
+         `/privacy` already discloses that. Accurate version: *we keep a record with your email
+         for the deletion log, we never use it to contact you, and the reply-to address you
+         attached to feedback is erased.* Say that instead; a privacy notice that overstates
+         protection is worse than one that is plainly true.
+      2. Mo wrote `mohallastays@gmail.com` as the contact address. `/privacy` currently lists
+         `mohalesdeis@gmail.com`. **Which is correct?** Do not guess.
+- [ ] **Update sign-up sheet for the landing page.** So people who want to hear about changes
+      have a path that does not require an account. Later, a surface inside the app too.
+- [ ] **Public "What's new" page, written as a press release rather than a changelog.**
+      Generated from `changelog.md` but rewritten into human, exciting prose — what got better
+      and why it matters, not a list of commits. Needs `changelog.md` to exist first.
+- [ ] **Prototypes section on the public docs page.** Clickable mockups with micro-interactions
+      for features that have not shipped yet, so people can see what is coming. Reference
+      implementation: DaVinci Builder Journal, `docs/prototypes/` — a live HTML page. Depends on
+      the protected/public docs page already registered in this file.
