@@ -930,6 +930,34 @@ Settings notice with a working set-a-password path, `/privacy` paragraph). 19 ne
   - Milestone 1 scope: one migration (`bridge_identities`, `bridge_handoffs`, `products.source`/`external_ref`) — if applied via MCP, rename the local file to the registered version in the same commit, per the DEU-96 regime; `bridge-intake` function (HMAC, `verify_jwt = false`); `sessions` gains `kickoff: true` (the zero-click auto-kickoff `Sprint.tsx` already names as a backend item); `/bridge` public route; arrival banner; Settings notice; the `/privacy` paragraph.
   - Confirmed on the way in: a bridge-created user **cannot** set a password in Settings (the form requires a current one). v1 answer is the existing `/reset-password` email flow. See Spec 4 §9.
 
+## Registered 2026-09-08 — Spec 4 Milestone 3: Ada's own Settings Unlink control
+
+Mo's manual account-deletion dry run (Spec 1 §13) is **complete and passed** — this was the
+last item gating `BRIDGE_SHARED_SECRET` in production. Builder Journal's own Milestone 2 (the
+sending side — `idea_handoffs` migration, `validate-with-ada` function, the dialog, share-menu
+entry, Privacy/Terms copy) is separately merged against Ada's Milestone 1 contract and is
+already correct against what's live: `bridge-intake`'s `POST { action: 'unlink', bj_user_id }`
+branch (same HMAC signature scheme as `handoff`) is built, deployed, and stable — Builder
+Journal's own Milestone 3 (Settings → Integrations card, its own Unlink button, its own
+delete-account change) can be built straight against that contract with no further changes
+owed from Ada's side.
+
+- [ ] **Ada's own Settings Unlink control** (Spec 4 §9's third bullet, deferred at Milestone 1
+      — see the judgment-call note in the 2026-09-07 section above). **Do not implement this as
+      a browser call to `bridge-intake`'s `unlink` action** — that endpoint is HMAC-signed with
+      `BRIDGE_SHARED_SECRET`, which must never reach a browser (D1). The correct shape is a new
+      self-service path: either a small new Edge Function (`requireUser()`, deletes the
+      caller's own `bridge_identities` row via the service client, no shared secret involved)
+      or a new action on an existing owner-agnostic function — not an extension of
+      `bridge-intake`, which is deliberately server-to-server-only. `Settings.tsx`'s existing
+      `bridgeCreated` block (currently: "Created through Builder Journal" + set-a-password link)
+      gains an Unlink button once that endpoint exists.
+  - This is Ada-side symmetry, not a blocker for Builder Journal's Milestone 3 — their Unlink
+    button calls their own backend, which calls Ada's already-built `bridge-intake` unlink
+    action server-to-server, exactly like `handoff` does today.
+- OQ-D (send an email on bridge arrival?) is still open, default **no** for v1, owner Mo,
+  originally due this milestone — carry it forward, don't silently drop it.
+
 ## PAUSED 2026-08-23, resume next session
 
 - DEU-96 rename branch (chore/deu-96-migration-rename): renames + CLAUDE.md + spec §6 amendment are COMMITTED as WIP, NOT merged.
