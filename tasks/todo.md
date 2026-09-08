@@ -1152,3 +1152,95 @@ is wrong.
 - [ ] **Remaining fixed-height textareas** to run the same hook through, if the
       same complaint appears: `Discovery.tsx` and the intel surfaces. Not yet
       audited one by one.
+
+---
+
+## Logged 2026-09-08, second pass — after Mo's live re-test
+
+### ✅ Fixed in this pass
+
+- [x] **Sign-in: prominent "Create an account" nudge on any failed login.**
+      Deliberately narrower than the version discussed and iceboxed earlier
+      today. That version wanted the copy itself to say "account does not
+      exist," which requires knowing whether the email is registered — an
+      email-enumeration oracle, which is why it stayed in the icebox pending
+      DEU-92. **This version reveals nothing.** The error text is unchanged
+      ("Invalid login credentials" — Supabase's own message, same for a wrong
+      password or a nonexistent account). What changed is a "New here? Create
+      an account →" prompt that appears under *any* sign-in failure, with a
+      small two-beat nudge animation (matches the existing prefers-reduced-motion
+      pattern in `index.css`; a static prompt otherwise). No security trade,
+      because the same prompt shows regardless of which failure occurred.
+      This does not touch or resolve the DEU-92/93 icebox item — that one is
+      still about *telling* the user their account doesn't exist, which this
+      does not do.
+
+### 🐞 Resend: root cause found — this is a config gap, not a bug
+
+The 23:48 test never got an email because the secrets weren't set yet (already
+known). The follow-up test at 01:30 **did** have secrets set, called
+`delete-account`, and still didn't send. The function log has the real reason:
+
+```
+resend_403: You can only send testing emails to your own email address
+(mohalesdeis@gmail.com). To send emails to other recipients, please verify
+a domain at resend.com/domains, and change the `from` address to an email
+using this domain.
+```
+
+`EMAIL_FROM` is `Ada Coach <onboarding@resend.dev>` — Resend's shared, unverified
+test sender. Resend hard-restricts that sender to delivering **only to the
+email on the Resend account itself** (`mohalesdeis@gmail.com`). The deleted
+test account was `mdeis@poprouser.com`, a different address, so Resend
+rejected the send at their end. This is not a code defect — `sendEmail()`
+correctly logged the rejection and let deletion proceed (the best-effort
+contract holding exactly as designed) — it is the expected behavior of the
+unverified sender.
+
+- [ ] **To actually receive deletion emails for real test accounts:** verify a
+      sending domain in Resend (`resend.com/domains`; `mail.enterceptmg.com`
+      was the domain floated earlier) and change `EMAIL_FROM` to an address on
+      that domain. Until then, the only address that will ever receive this
+      email is `mohalesdeis@gmail.com` itself — worth remembering when
+      choosing which email to delete-test with.
+
+### Item 3 — "pre-existing tester account, nothing happened": expected, not a bug
+
+Signing in with a pre-existing account's email showed the same generic
+"Invalid login credentials" as any other failed sign-in — no special handling,
+because none was built for the icebox item. That's what "nothing happened"
+was describing. The new Create-account nudge (above) now appears on *every*
+failed sign-in, pre-existing account or not, but it does not and should not
+say anything different for one email versus another.
+
+### New backlog items
+
+- [ ] **Pre-composed reply email from an admin feedback row.** Clicking reply
+      today opens a blank `mailto:` with the subject pre-filled. Wanted: the
+      body pre-populated too — "Hi [First Name], reaching out about your
+      feedback: '[quoted feedback text]'" — with room to write freely below
+      it. Straightforward: build the body string and pass it through the same
+      `mailto:` link via `encodeURIComponent(body)`. No backend change.
+- [ ] **Feedback-loop agent (later, larger).** A standing loop or agent that
+      tracks incoming feedback, groups it (by theme, by feature area, by
+      sentiment), and helps draft responses — the pre-composed reply above is
+      the manual seed of this, not the same thing. Needs its own scoping pass
+      before building; flagged as a distinct, bigger item so it doesn't get
+      built piecemeal inside the reply-link work above.
+- [ ] **Two auth emails Mo wants and Supabase currently sends neither of:**
+      1. A signup confirmation ("you have an account") — note `enable_confirmations
+         = false` in `supabase/config.toml`, so today's signup flow is
+         deliberately confirmation-free (no email required to start using the
+         demo) — that product decision stays; this would be a *notification*,
+         not a *gate*.
+      2. A separate welcome email.
+      **Scoping question before building, not a code question:** do these come
+      from Supabase Auth's own email templates (`supabase/config.toml`
+      `[auth.email.template.*]`, sent by Supabase's mailer) or from our own
+      Resend pipeline (`_shared/email.ts`, sent by our code right after
+      signup)? The two paths have different setup (Supabase SMTP config vs.
+      an Edge Function call from the frontend after `signUp()` succeeds) and
+      different content control. Recommend our own Resend pipeline, since
+      `_shared/email.ts` already exists and gives full control over the
+      "Welcome to Ada" voice — but this is a product call, not purely
+      technical, so flagging rather than building.

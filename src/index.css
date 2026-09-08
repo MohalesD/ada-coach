@@ -161,4 +161,16 @@
   .animate-thumb-pop {
     animation: ada-thumb-pop 260ms ease-out;
   }
+  @keyframes ada-signin-nudge {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(3px);
+    }
+  }
+  .animate-signin-nudge {
+    animation: ada-signin-nudge 1200ms ease-in-out 500ms 2;
+  }
 }
