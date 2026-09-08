@@ -1130,3 +1130,25 @@ is wrong.
       for features that have not shipped yet, so people can see what is coming. Reference
       implementation: DaVinci Builder Journal, `docs/prototypes/` — a live HTML page. Depends on
       the protected/public docs page already registered in this file.
+
+### Update 2026-09-08 — credits fix applied, and one miss corrected
+
+- [x] **Credits fix applied** as migration `20260908005402_credits_first_grant_uses_live_limit`.
+      `last_credit_reset` now defaults to a past date, so the first
+      `fn_reset_credits_if_due` call grants the live `daily_message_limit`.
+      Existing non-owner accounts still stamped with today's date were backdated
+      the same way, so they top up on next load through the real code path
+      rather than a hand-written credit value.
+- [x] **Chat composer now grows with the message.** `Index.tsx` pinned the
+      composer at `rows={1}` with `resize-none`, so a two-paragraph message
+      showed two lines and hid the rest. New `src/hooks/use-autosize-textarea.ts`
+      grows it to fit, up to 12 lines, then scrolls. Also applied to the
+      feedback form textarea (16-line ceiling).
+      **This was a miss on my part**: three separate textareas had the same
+      complaint (admin feedback display, RAG Debug picker, chat composer). The
+      first two were fixed in PRs #13 and #17; the composer — the one actually
+      used every day — was never touched, and I let "the textarea is fixed" read
+      as if it covered all three. Fixed now.
+- [ ] **Remaining fixed-height textareas** to run the same hook through, if the
+      same complaint appears: `Discovery.tsx` and the intel surfaces. Not yet
+      audited one by one.

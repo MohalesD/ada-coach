@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { submitFeedbackEvent, type FeedbackSurface, type FeedbackType } from '@/lib/feedback-api';
 import CharCounter, { isOverLimit } from '@/components/CharCounter';
+import { useAutosizeTextarea } from '@/hooks/use-autosize-textarea';
 
 const COMMENT_MAX = 4000;
 
@@ -52,6 +53,7 @@ export default function FeedbackForm({
   const { user } = useAuth();
   const [type, setType] = useState<FormType>('feedback');
   const [comment, setComment] = useState('');
+  const commentRef = useAutosizeTextarea<HTMLTextAreaElement>(comment, 16);
   const [wantsReply, setWantsReply] = useState(false);
   const [email, setEmail] = useState(user?.email ?? '');
   const [sending, setSending] = useState(false);
@@ -143,6 +145,7 @@ export default function FeedbackForm({
 
       <div className="flex flex-col gap-1.5">
         <Textarea
+          ref={commentRef}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           placeholder={active.placeholder}

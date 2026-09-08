@@ -2265,8 +2265,9 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   </span>
                   {/* Account email on its own line so it's reachable even when
                       a display name is set. For a deleted account this comes
-                      from the tombstone, which is the only reply path left. */}
-                  {e.user_email && e.user_email !== e.user_display_name && (
+                      from the deleted_users tombstone, which is the only reply
+                      path deletion leaves behind — so it must always render. */}
+                  {e.user_email && (
                     <a
                       href={`mailto:${e.user_email}`}
                       className="block whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:underline"
