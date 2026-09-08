@@ -161,6 +161,20 @@ export default function Index() {
   const [conversationMeta, setConversationMeta] = useState<ConversationMeta | null>(null);
   const [credits, setCredits] = useState<CreditsState>({ kind: 'loading' });
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the composer as the PM types, capped so it never swallows the
+  // thread — matches Claude's own composer rather than staying fixed at one
+  // row. Height is recomputed from scrollHeight on every value change; the
+  // 'auto' reset first is required so shrinking (e.g. after send clears the
+  // input) is measured correctly, not just growth.
+  const COMPOSER_MAX_HEIGHT_PX = 200;
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
+  }, [input]);
 
   // Initial credits fetch. Calls fn_reset_credits_if_due (RPC) so a new
   // UTC day's reset fires the moment the app loads, not just when the
@@ -544,6 +558,7 @@ export default function Index() {
             )}
             <div className="flex items-end gap-3">
               <Textarea
+                ref={composerRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -556,7 +571,7 @@ export default function Index() {
                 }
                 rows={1}
                 disabled={isBusy || isOutOfCredits}
-                className="min-h-[44px] resize-none"
+                className="max-h-[200px] min-h-[44px] resize-none overflow-y-auto"
               />
               <Button
                 onClick={() => void send()}

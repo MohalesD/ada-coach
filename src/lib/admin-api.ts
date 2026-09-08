@@ -260,6 +260,8 @@ export type AdminUser = {
   role: 'user' | 'admin' | 'owner';
   credits_remaining: number;
   last_credit_reset: string; // YYYY-MM-DD
+  created_at: string; // signup date (user_profiles.created_at)
+  last_message_at: string | null; // most recent conversation touch, or null if none
 };
 
 export async function listUsers(): Promise<AdminUser[]> {
@@ -281,6 +283,17 @@ export async function resetAllCredits(): Promise<number> {
     params: { action: 'reset_all' },
   });
   return reset_count;
+}
+
+// Permanently retires the account, same retention contract as self-delete
+// (Spec 1 / DEU-89) — conversations/sessions/feedback survive de-linked,
+// everything else is destroyed. Throws on failure (including 403 for an
+// owner target); callers surface the error, they don't retry silently.
+export async function deleteUser(id: string): Promise<void> {
+  await adminFetch<{ ok: true; email_sent: boolean }>('admin-users', {
+    method: 'POST',
+    params: { id, action: 'delete' },
+  });
 }
 
 // ── App settings (owner-only via RLS, queried directly) ──────────

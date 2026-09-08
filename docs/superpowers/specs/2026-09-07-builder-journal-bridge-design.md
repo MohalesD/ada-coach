@@ -1,7 +1,7 @@
 # Spec 4 — Builder Journal → Ada bridge (receiving side)
 
 **Date:** 2026-09-07
-**Status:** Draft, awaiting Mo's review. Nothing here is built.
+**Status:** Milestone 1 (this document's scope) shipped and merged 2026-09-07 — [PR #14](https://github.com/MohalesD/ada-coach/pull/14), `cf2bb1a`, tracked as DEU-114. `bridge-intake` is deployed but dark (`BRIDGE_SHARED_SECRET`/`APP_URL` unset) pending the launch gate in §8/§15. Builder Journal's Milestone 2 (the sending side) is separately merged against this contract. See `tasks/todo.md` for the live checklist; this document is the design record, not the status board — don't re-date this line per commit, update it only when the milestone boundary itself changes.
 **Author:** Claude Code, from Mo's concept walk-through of 2026-09-01 and read-only traces of both repos on 2026-09-07
 **Related:** the sending side and every product decision live in the Builder Journal PRD: `davincibuilderjournal001/docs/prds/claude_prds_idea-inbox_addendum-B_validate-with-ada_v1_2026-09-07.md`. Read that first; this document only says what Ada builds.
 
@@ -163,7 +163,7 @@ Unit (Deno test, in `_shared`): signature verify (good, bad, expired, replayed),
 
 ## 13. Open items
 
-- **OQ-A** — is production `enable_confirmations` on? (Local is off.) Admin-created users are confirmed either way; this only affects the message a bridge user sees if they later try a native signup with the same email. Owner: Mo, from the Supabase dashboard.
+- **OQ-A — answered (Mo, 2026-09-07, from the Supabase dashboard).** `enable_confirmations` is **off** in production, deliberately, for demo mode: new users don't need to confirm their email to sign up. Admin-created bridge users are confirmed either way (`email_confirm: true` in `auth.admin.createUser`), so this doesn't change anything about the bridge path itself; it only means a native signup with an email a bridge already claimed proceeds without a confirmation-email round trip.
 - **OQ-B — answered, and the answer is "no."** The Settings form requires a current password, so a bridge user cannot set one there. §9 records the two options; v1 recommendation is to point them at `/reset-password`. Owner: Mo to pick, at Milestone 1.
 - **OQ-C** — the delta audit (PRD Milestone 4) runs against this surface with the 2026-08-23 audit's method before `BRIDGE_SHARED_SECRET` is set in production. Unchanged.
 - **OQ-D — new.** `RESEND_API_KEY` / `EMAIL_FROM` now exist for the deletion email. Should a bridge arrival send a "your Ada account was created from Builder Journal" email? Default: **no** for v1 — the arrival is visible on screen and the account is reachable by magic link, so an extra email is noise. Owner: Mo. Due: Milestone 3.
