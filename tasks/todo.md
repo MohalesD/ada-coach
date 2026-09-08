@@ -967,3 +967,88 @@ verification, but document the gap honestly rather than claim it's done.
 - Until both boxes above are checked, treat `CLAUDE.md`'s migration-workflow note as
   **documented-but-unverified**, not proven. Do not build DEU-89's migration under the
   assumption that `db push` definitely works cleanly — verify it first.
+
+---
+
+## Logged 2026-09-07 — post-deletion-dry-run findings (Mo, live walkthrough)
+
+The DEU-89 dry run passed 11/11 database assertions (see
+`docs/audits/2026-09-07-deletion-e2e.md`). These are the UX items Mo found
+while running it. Two were fixed in the same pass; the rest are open.
+
+### Fixed in this pass
+
+- [x] **Admin feedback: reply addresses are now clickable.** Both the account
+      email and the opt-in "wants a reply" address render as `mailto:` links,
+      and the account email gets its own line so it's reachable even when a
+      display name is set. For a deleted account that address comes from the
+      tombstone, which is the only reply path that survives deletion.
+- [x] **Feedback form: the 4,000-character limit is now visible.** It used to
+      `slice()` silently at 4,000 — you'd type and the text just stopped, with
+      no counter and no reason. New `src/components/CharCounter.tsx` shows
+      `0 / 4,000` from the first keystroke, turns amber at 90%, turns red and
+      names the overage past the cap. The textarea no longer truncates; typing
+      past the limit is allowed and the send button blocks instead, so no
+      keystrokes are lost.
+
+### Open
+
+- [ ] **Roll `CharCounter` out to every other capped input.** Same rule
+      everywhere: show the limit up front, warn near it, name the overage, never
+      truncate silently. Remaining surfaces, all currently using bare
+      `maxLength` (which blocks typing with no explanation):
+      `Portfolio.tsx:342` and `:349` (500), `Discovery.tsx:300` and `:453`
+      (200), `Discovery.tsx:464` (2,000), `intel/CompetitorGate.tsx:152` (120).
+      Note: any surface whose limit is also a DB `CHECK` must block submit
+      rather than truncate, or the insert 400s.
+- [ ] **"Send me a copy of my feedback" opt-in.** A checkbox on the feedback
+      form that emails the submitter their own submission. Doubles as a
+      standing delivery check on the email pipeline. Depends on `_shared/email.ts`
+      having working Resend secrets. Small, and it makes the feedback loop feel
+      two-way.
+- [ ] **Humanizer pass over all user-facing microcopy.** Em dashes are
+      everywhere. Run the `humanizer` skill across `src/pages/`,
+      `src/components/`, the coaching prompts, and `/privacy`. Cosmetic but it
+      is the whole voice of the product.
+- [ ] **In-app feedback reply surface (Spec 2 / DEU-90).** The `mailto:` link
+      above is the v1. The real thing is composing and sending a reply from the
+      admin panel through Resend, with the thread stored. DEU-90 already scopes
+      this and was blocked on `_shared/email.ts`, which now exists.
+- [ ] **Sign-in error copy: "account does not exist" vs "invalid credentials."**
+      ⚠️ **Do not build this in isolation — it collides with the DEU-93 ruling.**
+      Mo's ask: if the email has no account, say so plainly and push the user
+      toward "Create account" (prominent button, ideally an arrow/animation),
+      rather than the flat "Invalid login credentials."
+      The conflict: distinguishing "no such account" from "wrong password" turns
+      the sign-in form into an email-enumeration oracle — an attacker can probe
+      addresses to learn who has an account. That is exactly what DEU-93 rules
+      against on the reset path.
+      The coherent resolution, consistent with DEU-93's own ruling for signup:
+      ship the friendlier message **gated behind DEU-92's per-user/IP rate
+      limiting**, and record the residual enumeration on the sign-in path as a
+      knowing trade-off in `docs/security-audit-2026-04-18.md` and the privacy
+      copy. DEU-92 is unblocked as of 2026-09-07. Sequence: DEU-92 → this.
+
+### Decision owed by Mo
+
+- [ ] **Should a deleted user's opt-in reply address survive deletion?** Today
+      it does not: `delete-account` sets `contact_email = NULL`, and `/privacy`
+      promises exactly that ("Any reply-to email you attached to feedback" is
+      removed). The tombstone keeps the *account* email, so follow-up is still
+      possible — but if someone deliberately gave a different "reach me here"
+      address, that one is gone.
+      Keeping it is a one-line change, but it is a real shift in privacy
+      posture (retaining a contact address for someone who asked to be
+      forgotten), so it also requires rewriting the privacy notice and the
+      Settings disclosure to match. Not urgent. Mo's call.
+
+### Verified during the run, no action needed
+
+- Resend: the deletion on 2026-09-07 logged
+  `delete-account confirmation email not sent: email_not_configured` and still
+  returned 200. The secrets were added minutes *after* that run, so the skip was
+  correct behavior, not a bug. The next deletion will exercise the real send.
+- `EMAIL_FROM` is currently `Ada Coach <onboarding@resend.dev>`, Resend's shared
+  test sender. It only delivers to the address on Mo's own Resend account.
+  Fine for verification; a verified sending domain is needed before real users
+  get this email.
