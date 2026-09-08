@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { submitFeedbackEvent, type FeedbackSurface, type FeedbackType } from '@/lib/feedback-api';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
+import { useAutosizeTextarea } from '@/hooks/use-autosize-textarea';
 
 const COMMENT_MAX = 4000;
 
@@ -51,6 +53,7 @@ export default function FeedbackForm({
   const { user } = useAuth();
   const [type, setType] = useState<FormType>('feedback');
   const [comment, setComment] = useState('');
+  const commentRef = useAutosizeTextarea<HTMLTextAreaElement>(comment, 16);
   const [wantsReply, setWantsReply] = useState(false);
   const [email, setEmail] = useState(user?.email ?? '');
   const [sending, setSending] = useState(false);
@@ -59,7 +62,8 @@ export default function FeedbackForm({
   const [sentWithReply, setSentWithReply] = useState(false);
 
   const active = TYPES.find((t) => t.value === type) ?? TYPES[1];
-  const canSend = comment.trim().length > 0 && !sending;
+  const overLimit = isOverLimit(comment, COMMENT_MAX);
+  const canSend = comment.trim().length > 0 && !overLimit && !sending;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -139,14 +143,28 @@ export default function FeedbackForm({
         })}
       </div>
 
-      <Textarea
-        value={comment}
-        onChange={(e) => setComment(e.target.value.slice(0, COMMENT_MAX))}
-        placeholder={active.placeholder}
-        rows={4}
-        aria-label="Your feedback"
-        disabled={sending}
-      />
+      <div className="flex flex-col gap-1.5">
+        <Textarea
+          ref={commentRef}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder={active.placeholder}
+          rows={4}
+          aria-label="Your feedback"
+          aria-invalid={overLimit}
+          disabled={sending}
+        />
+        <div className="flex items-start justify-between gap-3">
+          {overLimit ? (
+            <p className="text-xs text-destructive" role="alert">
+              Trim it to send — nothing you typed is lost.
+            </p>
+          ) : (
+            <span />
+          )}
+          <CharCounter value={comment} max={COMMENT_MAX} className="shrink-0" />
+        </div>
+      </div>
 
       <div className="flex flex-col gap-2">
         <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
