@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -24,6 +25,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +43,7 @@ import {
   activatePrompt,
   createPrompt,
   deletePrompt,
+  deleteUser,
   getConversation,
   getDailyMessageLimit,
   getFeedbackLog,
@@ -1603,15 +1616,33 @@ function formatDate(iso: string): string {
 // Users tab (owner-only)
 // ──────────────────────────────────────────────────────────────────
 
+type UsersSortKey =
+  | 'email'
+  | 'display_name'
+  | 'role'
+  | 'credits_remaining'
+  | 'created_at'
+  | 'last_message_at';
+type DeleteFailure = { email: string; error: string };
+
 function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   // Two-step inline confirm for the bulk reset — first click arms it,
-  // second click fires, and it disarms itself after a beat.
+  // second click fires, and it disarms itself after a beat. Reserved for the
+  // reversible, self-correcting reset action; deleting a real account uses
+  // the heavier AlertDialog confirm below instead.
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
+
+  const [sortKey, setSortKey] = useState<UsersSortKey>('email');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -1632,6 +1663,17 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Selection can point at rows that just vanished (deleted, or a refresh
+  // dropped them) — drop anything no longer in the list rather than let a
+  // stale id silently no-op a future bulk action.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const validIds = new Set(users.map((u) => u.id));
+      const next = new Set([...prev].filter((id) => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [users]);
 
   const handleReset = async (id: string) => {
     setResettingId(id);
@@ -1673,6 +1715,109 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
     }
   };
 
+  const sortedUsers = [...users].sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    if (av === bv) return 0;
+    // Nulls (no last message yet) always sort last, independent of direction.
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    const cmp =
+      typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const handleSort = (key: UsersSortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const SortHeader = ({ label, sortKeyName }: { label: string; sortKeyName: UsersSortKey }) => (
+    <button
+      type="button"
+      onClick={() => handleSort(sortKeyName)}
+      className="inline-flex items-center gap-1 hover:text-foreground"
+    >
+      {label}
+      {sortKey === sortKeyName ? (
+        sortDir === 'asc' ? (
+          <ArrowUp className="h-3 w-3" />
+        ) : (
+          <ArrowDown className="h-3 w-3" />
+        )
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-40" />
+      )}
+    </button>
+  );
+
+  const deletableUsers = sortedUsers.filter((u) => u.role !== 'owner');
+  const allSelected = selectedIds.size > 0 && deletableUsers.every((u) => selectedIds.has(u.id));
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(deletableUsers.map((u) => u.id)));
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Shared by the single-row and bulk delete confirms: same retention
+  // contract either way (_shared/account-deletion-core.ts), same
+  // partial-failure reporting so a batch never silently drops a row.
+  const performDelete = async (targets: AdminUser[]) => {
+    setIsDeleting(true);
+    const failures: DeleteFailure[] = [];
+    for (const u of targets) {
+      try {
+        await deleteUser(u.id);
+      } catch (err) {
+        if ((err as Error).name === 'UnauthorizedError') {
+          onUnauthorized();
+          return;
+        }
+        failures.push({ email: u.email, error: (err as Error).message });
+      }
+    }
+    setIsDeleting(false);
+    const succeeded = targets.length - failures.length;
+    if (failures.length === 0) {
+      toast.success(`Deleted ${succeeded} user${succeeded === 1 ? '' : 's'}`);
+    } else {
+      toast.error(
+        `${succeeded} of ${targets.length} deleted; failed: ${failures
+          .map((f) => `${f.email} (${f.error})`)
+          .join(', ')}`
+      );
+    }
+    setSelectedIds(new Set());
+    await refresh();
+  };
+
+  const handleConfirmSingleDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    await performDelete([target]);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setBulkConfirmOpen(false);
+    const targets = sortedUsers.filter((u) => selectedIds.has(u.id));
+    await performDelete(targets);
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
@@ -1683,6 +1828,16 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkConfirmOpen(true)}
+              disabled={isDeleting}
+            >
+              Delete {selectedIds.size} selected
+            </Button>
+          )}
           <Button
             variant={confirmingAll ? 'destructive' : 'outline'}
             size="sm"
@@ -1709,24 +1864,53 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead className="w-32">Display name</TableHead>
-              <TableHead className="w-24">Role</TableHead>
-              <TableHead className="w-24 text-right">Credits</TableHead>
-              <TableHead className="w-32">Last reset</TableHead>
-              <TableHead className="w-24 text-right">Actions</TableHead>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                  onCheckedChange={toggleSelectAll}
+                  disabled={deletableUsers.length === 0}
+                  aria-label="Select all deletable users"
+                />
+              </TableHead>
+              <TableHead>
+                <SortHeader label="Email" sortKeyName="email" />
+              </TableHead>
+              <TableHead className="w-32">
+                <SortHeader label="Display name" sortKeyName="display_name" />
+              </TableHead>
+              <TableHead className="w-24">
+                <SortHeader label="Role" sortKeyName="role" />
+              </TableHead>
+              <TableHead className="w-24 text-right">
+                <SortHeader label="Credits" sortKeyName="credits_remaining" />
+              </TableHead>
+              <TableHead className="w-28">
+                <SortHeader label="Signed up" sortKeyName="created_at" />
+              </TableHead>
+              <TableHead className="w-32">
+                <SortHeader label="Last message" sortKeyName="last_message_at" />
+              </TableHead>
+              <TableHead className="w-40 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length === 0 && !isLoading && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                   No users found.
                 </TableCell>
               </TableRow>
             )}
-            {users.map((u) => (
+            {sortedUsers.map((u) => (
               <TableRow key={u.id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.has(u.id)}
+                    onCheckedChange={() => toggleSelect(u.id)}
+                    disabled={u.role === 'owner'}
+                    aria-label={`Select ${u.email}`}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{u.email}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {u.display_name ?? '—'}
@@ -1736,23 +1920,90 @@ function UsersTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                 </TableCell>
                 <TableCell className="text-right font-mono">{u.credits_remaining}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {u.last_credit_reset}
+                  {formatDate(u.created_at)}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {u.last_message_at ? formatDate(u.last_message_at) : '—'}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={resettingId === u.id}
-                    onClick={() => void handleReset(u.id)}
-                  >
-                    {resettingId === u.id ? 'Resetting...' : 'Reset'}
-                  </Button>
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resettingId === u.id}
+                      onClick={() => void handleReset(u.id)}
+                    >
+                      {resettingId === u.id ? 'Resetting...' : 'Reset'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={u.role === 'owner' || isDeleting}
+                      onClick={() => setDeleteTarget(u)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </CardContent>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.email}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes their login, profile, products, and files. Their conversation
+              transcripts and feedback are retained de-identified, the same retention Ada applies
+              when a user deletes their own account. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void handleConfirmSingleDelete()}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} users?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently removes their logins, profiles, products, and files. Conversation
+              transcripts and feedback are retained de-identified for each, same as a self-deleted
+              account. This cannot be undone.
+              {selectedIds.size > 0 && (
+                <span className="mt-2 block text-xs">
+                  {sortedUsers
+                    .filter((u) => selectedIds.has(u.id))
+                    .slice(0, 5)
+                    .map((u) => u.email)
+                    .join(', ')}
+                  {selectedIds.size > 5 ? `, and ${selectedIds.size - 5} more` : ''}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void handleConfirmBulkDelete()}
+            >
+              Delete {selectedIds.size} users
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

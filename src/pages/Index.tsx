@@ -560,7 +560,7 @@ export default function Index() {
                 }
                 rows={1}
                 disabled={isBusy || isOutOfCredits}
-                className="min-h-[44px] resize-none"
+                className="max-h-[200px] min-h-[44px] resize-none overflow-y-auto"
               />
               <Button
                 onClick={() => void send()}
