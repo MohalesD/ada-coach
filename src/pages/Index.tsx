@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useAutosizeTextarea } from '@/hooks/use-autosize-textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -153,6 +154,8 @@ export default function Index() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  // The composer grows with the message instead of pinning to one line.
+  const composerRef = useAutosizeTextarea<HTMLTextAreaElement>(input);
   const [isLoading, setIsLoading] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -544,6 +547,7 @@ export default function Index() {
             )}
             <div className="flex items-end gap-3">
               <Textarea
+                ref={composerRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}

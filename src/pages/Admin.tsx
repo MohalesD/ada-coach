@@ -1520,14 +1520,11 @@ function RagDebugTab({ onUnauthorized }: { onUnauthorized: () => void }) {
               </p>
               <div className="flex flex-col gap-1.5">
                 {recentMessages.slice(0, 8).map((m) => (
-                  <button
+                  <RecentMessagePick
                     key={m.id}
-                    type="button"
-                    onClick={() => setTestMessage(m.content)}
-                    className="line-clamp-1 rounded-md border border-border bg-background/40 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    {m.content}
-                  </button>
+                    content={m.content}
+                    onPick={() => setTestMessage(m.content)}
+                  />
                 ))}
               </div>
             </div>
@@ -2096,6 +2093,50 @@ function SpendTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   );
 }
 
+// One row in the RAG Debug "or pick a recent message" list.
+// Clicking the text loads it into the test box; long messages show their
+// first five lines with a separate expander, so the preview is readable
+// without a one-line truncation hiding what you are about to test.
+//
+// The expander is a SIBLING of the pick button, not nested inside it —
+// a button inside a button is invalid HTML and swallows the inner click.
+const RECENT_CLAMP_CHARS = 260;
+
+function RecentMessagePick({ content, onPick }: { content: string; onPick: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const clampable = content.length > RECENT_CLAMP_CHARS || content.split('\n').length > 5;
+
+  return (
+    <div className="rounded-md border border-border bg-background/40 transition-colors hover:border-accent/50">
+      <button
+        type="button"
+        onClick={onPick}
+        title="Load this message into the test box"
+        className="block w-full px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground"
+      >
+        <span
+          className={cn(
+            'block whitespace-pre-wrap break-words',
+            clampable && !expanded && 'line-clamp-5',
+          )}
+        >
+          {content}
+        </span>
+      </button>
+      {clampable && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="px-3 pb-2 text-[11px] font-medium text-accent underline-offset-2 hover:underline"
+        >
+          {expanded ? 'Show less' : 'Show full message'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Feedback tab ─────────────────────────────────────────────────────────────
 // Read-only list of the unified user_feedback log (FAB/Settings submissions
 // + message thumb events). Triage actions are a later backlog item.
@@ -2224,8 +2265,9 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   </span>
                   {/* Account email on its own line so it's reachable even when
                       a display name is set. For a deleted account this comes
-                      from the tombstone, which is the only reply path left. */}
-                  {e.user_email && e.user_email !== e.user_display_name && (
+                      from the deleted_users tombstone, which is the only reply
+                      path deletion leaves behind — so it must always render. */}
+                  {e.user_email && (
                     <a
                       href={`mailto:${e.user_email}`}
                       className="block whitespace-nowrap text-xs text-muted-foreground underline-offset-2 hover:underline"
