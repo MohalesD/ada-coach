@@ -374,9 +374,24 @@ export default function Login() {
                 )}
 
                 {formError && (
-                  <p className="text-sm text-destructive" role="alert">
-                    {formError}
-                  </p>
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                    <p className="text-sm text-destructive" role="alert">
+                      {formError}
+                    </p>
+                    {mode === 'signin' && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span>New here?</span>
+                        <button
+                          type="button"
+                          onClick={() => setMode('signup')}
+                          className="inline-flex animate-signin-nudge items-center gap-1 font-semibold text-accent underline-offset-4 hover:underline"
+                        >
+                          Create an account
+                          <span aria-hidden>&rarr;</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {mode === 'forgot' && resetSent && (
