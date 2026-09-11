@@ -1,0 +1,300 @@
+<title>The 53-Second Hang</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Karla:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  /* Ada Coach's own identity: warm amber, cream, espresso. Deliberately not
+     Builder Journal's palette — these are two products, and the docs should
+     look like it. Light is Ada's default, so it is the bare :root. */
+  :root {
+    --ground:    #FAF7F0;
+    --surface:   #F5F0E3;
+    --sunk:      #EFE8D6;
+    --ink:       #2C2214;
+    --muted:     #6B5B47;
+    --ochre:     #8B6324;
+    --amber:     #B8853A;
+    --line:      #DCD0B8;
+    --line-soft: #E8DFCB;
+    --ok:        #4A7031;
+    --bad:       #A93226;
+    --warn:      #A34E0D;
+    --serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --sans: "Karla", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #1B1610;
+      --surface:   #241D15;
+      --sunk:      #1F1912;
+      --ink:       #EFE4D2;
+      --muted:     #A9977C;
+      --ochre:     #D4A45E;
+      --amber:     #D4A45E;
+      --line:      #3A3025;
+      --line-soft: #2E261C;
+      --ok:        #8FB870;
+      --bad:       #D98A7E;
+      --warn:      #E0A05A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:    #1B1610;
+    --surface:   #241D15;
+    --sunk:      #1F1912;
+    --ink:       #EFE4D2;
+    --muted:     #A9977C;
+    --ochre:     #D4A45E;
+    --amber:     #D4A45E;
+    --line:      #3A3025;
+    --line-soft: #2E261C;
+    --ok:        #8FB870;
+    --bad:       #D98A7E;
+    --warn:      #E0A05A;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-inline: 24px;
+    padding-block: 56px 96px;
+  }
+
+  .eyebrow {
+    font-size: .6875rem; font-weight: 700; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--amber); margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2.4rem, 8vw, 4rem);
+    line-height: 1.0;
+    letter-spacing: -.02em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.25rem;
+    line-height: 1.45;
+    color: var(--muted);
+    margin: 0 0 32px;
+    text-wrap: pretty;
+  }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 28px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding-block: 14px; margin-bottom: 8px;
+    font-size: .8125rem; color: var(--muted);
+  }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.6rem;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+    margin: 56px 0 4px;
+    text-wrap: balance;
+  }
+  h2 .n {
+    display: block; font-family: var(--sans);
+    font-size: .6875rem; font-weight: 700; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--amber); margin-bottom: 10px;
+  }
+  h3 {
+    font-size: .8125rem; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ochre); margin: 34px 0 10px;
+  }
+  p { margin: 0 0 17px; }
+  ul { padding-left: 20px; margin: 0 0 17px; }
+  li { margin-bottom: 8px; }
+  strong { font-weight: 700; }
+  code {
+    font-family: var(--mono); font-size: .8125em;
+    background: var(--sunk); padding: 2px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: .75rem; line-height: 1.7;
+    background: var(--sunk); border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--amber);
+    border-radius: 0 8px 8px 0; padding: 16px 18px;
+    overflow-x: auto; margin: 0 0 20px;
+  }
+  pre b { color: var(--bad); font-weight: 700; }
+
+  .pull {
+    font-family: var(--serif);
+    font-size: 1.5rem; line-height: 1.3; font-weight: 400;
+    color: var(--ink);
+    border-top: 2px solid var(--amber);
+    border-bottom: 1px solid var(--line);
+    padding-block: 22px; margin: 32px 0;
+    text-wrap: pretty;
+  }
+
+  .scroller { overflow-x: auto; margin: 0 0 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: .875rem; min-width: 440px; }
+  th, td { text-align: left; padding: 11px 16px 11px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th { font-size: .6875rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom-color: var(--line); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; font-family: var(--mono); font-size: .8125rem; }
+  .yes { color: var(--ok); font-weight: 700; }
+  .no { color: var(--bad); font-weight: 700; }
+
+  /* ── The timeline: the document's thesis in one picture ───────────── */
+  .timeline {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 22px;
+    margin: 8px 0 24px;
+  }
+  .tl-head {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .tl-title { font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .tl-scale { font-family: var(--mono); font-size: .6875rem; color: var(--muted); }
+  .tl-row { display: grid; grid-template-columns: 132px minmax(0,1fr); gap: 14px; align-items: center; margin-bottom: 14px; }
+  .tl-row:last-of-type { margin-bottom: 0; }
+  .tl-label { font-size: .8125rem; line-height: 1.35; color: var(--muted); }
+  .tl-label b { display: block; color: var(--ink); font-weight: 700; font-size: .875rem; }
+  .tl-track { position: relative; height: 26px; display: flex; align-items: center; }
+  .tl-bar {
+    height: 22px; border-radius: 4px; display: flex; align-items: center;
+    padding: 0 9px; font-family: var(--mono); font-size: .6875rem;
+    font-weight: 700; white-space: nowrap; color: #FFF8EA;
+  }
+  .tl-bar.fail { background: var(--bad); }
+  .tl-bar.pass { background: var(--ok); }
+  .tl-note { font-size: .75rem; color: var(--muted); margin: 18px 0 0; line-height: 1.6; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 64px; padding-top: 22px;
+    font-size: .8125rem; color: var(--muted);
+  }
+  footer a { color: var(--ochre); }
+
+  @media (max-width: 620px) {
+    .tl-row { grid-template-columns: minmax(0,1fr); gap: 6px; }
+    .tl-label { display: flex; gap: 8px; align-items: baseline; }
+    .tl-label b { display: inline; }
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Ada Coach &middot; Build record</p>
+  <h1>The 53-Second Hang</h1>
+  <p class="standfirst">One request to Anthropic that never came back, and the two lines of policy that were missing.</p>
+  <div class="meta">
+    <span><b>11 September 2026</b></span>
+    <span>Component <b>_shared/anthropic.ts</b></span>
+    <span>Found by <b>the first live bridge run</b></span>
+    <span>Author <b>Mohales Deis</b></span>
+  </div>
+
+  <h2><span class="n">What happened</span>A first read that never arrived</h2>
+  <p>A product manager sent an idea from Builder Journal to Ada. The bridge did its job: it created the account link, the product, the sprint and the conversation, then called Anthropic to generate Ada's opening read so it would be waiting when they got there.</p>
+  <p>That call never came back.</p>
+  <pre>04:19:03  stage_classification recorded, sprint created
+04:19:56  <b>kickoff coach turn failed: Error: Anthropic API 500</b>
+          at callClaude (_shared/anthropic.ts:24:11)
+          at async kickoffSprint (_shared/sprint-kickoff.ts:74:13)
+04:19:56  bridge-intake kickoff skipped: model_failed
+04:19:57  POST | 201 | /functions/v1/bridge-intake</pre>
+  <p><strong>Fifty-three seconds inside a single <code>fetch</code></strong>, and then a <code>500</code> carrying <code>{"type":"timeout_error","message":"Request timeout"}</code>.</p>
+  <p>Ada's design held, and that is worth saying plainly because everything after this is a criticism. <code>kickoffSprint</code> never throws; it returns <code>{ error: true, reason }</code> so the sprint survives a failed read. The bridge returned <code>201</code>, the PM landed in a real sprint with their idea and the starter questions, and nothing was corrupted or lost.</p>
+  <p>Then it happened again, on their first message in that sprint. They saw "Ada is taking a moment. Your message is in the thread, try again." They refreshed, which did nothing, because the message had already been saved and the failure was on the reply. They pasted it again.</p>
+
+  <h2><span class="n">The evidence</span>Three attempts, drawn to scale</h2>
+  <div class="timeline">
+    <div class="tl-head">
+      <span class="tl-title">One user, one idea, four minutes</span>
+      <span class="tl-scale">bars to scale &middot; 0 to 63s</span>
+    </div>
+    <div class="tl-row">
+      <span class="tl-label"><b>Attempt 1</b>automatic, on arrival</span>
+      <span class="tl-track"><span class="tl-bar fail" style="width:84%">53s &middot; 500 timeout_error</span></span>
+    </div>
+    <div class="tl-row">
+      <span class="tl-label"><b>Attempt 2</b>starter question</span>
+      <span class="tl-track"><span class="tl-bar fail" style="width:100%">63s &middot; 500 timeout_error</span></span>
+    </div>
+    <div class="tl-row">
+      <span class="tl-label"><b>Attempt 3</b>same text, pasted again</span>
+      <span class="tl-track"><span class="tl-bar pass" style="width:9.5%">6s</span></span>
+    </div>
+    <p class="tl-note">Nothing about the request changed between attempt 2 and attempt 3. Same model, same prompt, same account. The fault was transient, upstream, and it cleared on its own.</p>
+  </div>
+
+  <p class="pull">A transient fault that clears on retry is the most forgiving kind of failure a system can have. Ada turned it into a two-minute ordeal for a first-time user, because the user <em>was</em> the retry mechanism.</p>
+
+  <h2><span class="n">Root cause</span>Two things that were not in the code</h2>
+  <ul>
+    <li><strong>No timeout.</strong> <code>fetch</code> was called with no <code>signal</code>, so nothing bounded a single attempt. Anthropic's own server-side timeout is what eventually ended it, at 53 seconds.</li>
+    <li><strong>No retry.</strong> One failure was the final answer. The user retried by hand, twice.</li>
+  </ul>
+  <p>The second is the one that matters for a coaching product. Ada's whole premise is that she has already read your idea by the time you arrive. When the read fails she has not lost a feature, she has broken the promise the arrival was built on. Making that promise depend on a single un-retried network call was the actual defect.</p>
+
+  <h2><span class="n">The fix</span>A bound, and one second chance</h2>
+  <pre>signal: AbortSignal.timeout(timeoutMs)   // default 20_000</pre>
+  <p><strong>Why 20 seconds.</strong> A normal Haiku coaching turn on a sprint intake measures 5 to 7 seconds in this codebase, so 20 sits comfortably above the real p99 and will not cut off a slow-but-healthy call. It is also far enough under the edge gateway's own idle limit that a failed attempt leaves budget to try again, which a 50-second timeout would not. The number is a compromise between two ceilings, not a round guess.</p>
+
+  <h3>Which faults get a second chance</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th style="width:22%">Status</th><th style="width:14%">Retry</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="num">null</td><td class="yes">yes</td><td>No response at all: our own abort, or a dead socket. <strong>This is the 53-second hang.</strong></td></tr>
+        <tr><td class="num">408</td><td class="yes">yes</td><td>Request timeout, theirs this time.</td></tr>
+        <tr><td class="num">429</td><td class="yes">yes</td><td>Rate limited. A moment is exactly what it needs.</td></tr>
+        <tr><td class="num">5xx</td><td class="yes">yes</td><td>The server having a bad moment, including the <code>500 timeout_error</code> that started this.</td></tr>
+        <tr><td class="num">400 / 401 / 403 / 404</td><td class="no">no</td><td>A statement about the request itself: malformed body, bad key, blocked model. Fails identically the second time; retrying only doubles the wait before the caller finds out.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What one retry actually costs</h3>
+  <p>Do the arithmetic rather than trusting the intuition. Two attempts that both time out cost <code>20 + 0.6 + 20 = 40.6s</code> and still end in a failure. That beats 53 seconds, but only a little, and latency is not where the win is.</p>
+  <p>The win is that the realistic case stops being a failure at all. One upstream blip followed by a healthy call now ends in a <strong>first read at about 26 seconds</strong> instead of no first read. Trading a 53-second failure for a 26-second success is the entire return on this change.</p>
+  <p>A third attempt would push the worst case past a minute, which is worse than where we started, and if two attempts 600ms apart have both failed the fault is usually not the kind a third will clear.</p>
+
+  <h3>What deliberately did not change</h3>
+  <ul>
+    <li><strong>The error shape.</strong> A final failure still throws <code>Anthropic API 500: …</code>, so every existing catch site behaves exactly as before, including the non-fatal kickoff path that reads it. The fix changes how often failure happens and how long it takes to arrive, not what it looks like.</li>
+    <li><strong><code>callClaudeWithWebSearch</code> is untouched.</strong> Grounded research calls legitimately run 60 to 120 seconds and carry their own continuation budget. A 20-second bound there would break working behaviour.</li>
+  </ul>
+
+  <h2><span class="n">One more case</span>An empty reply is a failure too</h2>
+  <p>A <code>200</code> whose content array is empty is an HTTP success with nothing in it, usually a truncation or a content filter. The old code already threw on it; it is now marked retryable, because it is the same class of problem as a dropped socket. The request was fine, the response was not, and asking again often works.</p>
+
+  <h2><span class="n">Verification</span>What was proven, and what was not</h2>
+  <p>Twelve tests in <code>_shared/anthropic.test.ts</code>, <strong>ten confirmed to fail against the previous version</strong>: the abort signal reaches <code>fetch</code>, the budget sits between 10 and 60 seconds, a <code>500 timeout_error</code> followed by a success recovers in two calls, an aborted attempt is retried, a <code>400</code> is not retried and fails in one call, an empty reply is retried, the final error still matches <code>/^Anthropic API 500:/</code>, and <code>maxAttempts: 1</code> turns the retry off. Type-check clean, full suite passing, build clean.</p>
+  <p><strong>Not verified:</strong> the fix against a real upstream outage. That fault lasted about two minutes and cannot be summoned on demand. The tests prove the policy; only the next outage proves the outcome.</p>
+
+  <h2><span class="n">Scope</span>What this does not fix</h2>
+  <p>Retries reduce how often the first read fails. They cannot make it never fail. Two things stay true, and both are handled on the Builder Journal side rather than here:</p>
+  <ul>
+    <li>The tab that waits for the handoff now escalates its copy at 14 and 40 seconds instead of promising "about ten seconds" indefinitely.</li>
+    <li>Builder Journal now surfaces <code>kickoff: { error: true }</code> instead of discarding it, so a PM who arrives without a first read is told so rather than left to wonder.</li>
+  </ul>
+  <p>Those are documented in <strong>The Last Mile of a Cross-Product Bridge</strong>. That document and this one are two halves of the same incident: one app made the failure less likely, the other made it legible.</p>
+
+  <footer>
+    <p>A build record for Ada Coach. Every timing on this page comes from the production edge logs or the <code>model_usage</code> table; anything not verified is marked as such in the section it appears in.</p>
+  </footer>
+</div>
