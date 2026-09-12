@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    name: Typecheck, lint, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Redundant with Build (which runs `tsc && vite build`), kept because it
+      # fails in seconds with a clear message instead of inside a long build.
+      - name: Typecheck
+        run: npm run type-check
+
+      # Advisory until the lint backlog is cleared (38 errors as of
+      # 2026-09-12, mostly no-non-null-assertion and no-explicit-any). A
+      # blocking Lint step would fail every run, and Build and Test would
+      # never execute. Remove continue-on-error once the backlog is clean.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
