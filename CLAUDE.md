@@ -14,7 +14,8 @@ npm run build      # Type-check + production build
 npm run lint       # ESLint
 npm run lint:fix   # ESLint with auto-fix
 npm run type-check # TypeScript check only (no emit)
-npm run test       # Vitest
+npm run test       # Vitest, single run (exits on its own — this is what CI runs)
+npm run test:watch # Vitest, watch mode
 npm run format     # Prettier (src/**)
 ```
 
