@@ -217,6 +217,14 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
   is safe to retry. `admin-feedback` resolves retained rows through the tombstone and flags
   `is_deleted_user`.
 
+- **`send-welcome-email`** — `POST` (no body; identity from the JWT). Best-effort, fire-and-forget:
+  called once by the frontend right after a successful `signUp()`, never awaited by anything the
+  user is blocked on. Sends one combined signup-confirmation-and-welcome email via
+  `_shared/email.ts`; two near-identical emails seconds apart was rejected as worse UX than one.
+  Always returns `200 { ok: true, email_sent }`, even on internal failure, since a failed send
+  must never read as a failed signup. Does not touch `enable_confirmations` in
+  `supabase/config.toml` — signup remains confirmation-free; this is a notification, not a gate.
+
 - **`bridge-intake`** — Spec 4, the Builder Journal → Ada bridge (receiving side). **Server-to-server
   only, no JWT**: `verify_jwt = false` because auth is an HMAC-SHA256 signature
   (`X-Bridge-Timestamp`, `X-Bridge-Request-Id`, `X-Bridge-Signature` over
