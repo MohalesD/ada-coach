@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DemoBadge from '@/components/DemoBadge';
 
-export const PRIVACY_LAST_UPDATED = 'September 7, 2026';
+export const PRIVACY_LAST_UPDATED = 'September 12, 2026';
 
 export default function Privacy() {
   return (
@@ -38,8 +38,8 @@ export default function Privacy() {
               <h2 className="text-base font-semibold">What Ada is right now</h2>
               <p>
                 Ada Coach is an early demo built by one person as a portfolio project. It is not a
-                commercial service. Using it means you are helping test and improve an AI coach,
-                and this notice describes the trade you are making in plain terms.
+                commercial service. Using it means you are helping test and improve an AI coach, and
+                this notice describes the trade you are making in plain terms.
               </p>
             </section>
 
@@ -57,11 +57,11 @@ export default function Privacy() {
             <section className="space-y-2">
               <h2 className="text-base font-semibold">Why we keep some of it after you leave</h2>
               <p>
-                The point of a demo is to learn from it. When you rate a reply as soulless, or
-                tell us Ada asked a leading question, the only way to fix that is to look at the
-                exact exchange, grade it, and test the next version against it. So when you
-                delete your account, we keep the material that teaches us something, and we
-                remove everything that identifies you.
+                The point of a demo is to learn from it. When you rate a reply as soulless, or tell
+                us Ada asked a leading question, the only way to fix that is to look at the exact
+                exchange, grade it, and test the next version against it. So when you delete your
+                account, we keep the material that teaches us something, and we remove everything
+                that identifies you.
               </p>
             </section>
 
@@ -81,20 +81,33 @@ export default function Privacy() {
                   Conversation transcripts and the ratings on them. The link to your account is
                   severed; they are no longer tied to your name or email.
                 </li>
-                <li>Discovery Sprint sessions and the assumptions Ada extracted, de-linked the same way.</li>
                 <li>
-                  Feedback you sent through the feedback button or Settings. This stays linked
-                  to a record holding only your name, email, signup date, and deletion date, so
-                  we can still follow up on a bug you reported.
+                  Discovery Sprint sessions and the assumptions Ada extracted, de-linked the same
+                  way.
+                </li>
+                <li>
+                  Feedback you sent through the feedback button or Settings. This stays linked to a
+                  record holding only your name, email, signup date, and deletion date, so we can
+                  still follow up on a bug you reported.
                 </li>
               </ul>
               <p>
-                Deletion is immediate and cannot be undone. You will get one confirmation email,
-                and after that, nothing else from us.
+                Deletion is immediate and cannot be undone. You will get one confirmation email, and
+                after that, nothing else from us.
               </p>
               <p>
-                Ideas can also arrive here from AI Builder Journal, a separate app. When you send
-                an idea from there, Ada may create an account for you, matched to the email you
+                That cuts both ways, so it is worth saying plainly: because your reply-to address is
+                erased, we lose any way to reach you. If something you reported gets fixed, or your
+                feedback changes how Ada coaches, we will not be able to come back and tell you. If
+                you would like to hear about what changed, email{' '}
+                <a className="underline" href="mailto:mohalesdeis@gmail.com">
+                  mohalesdeis@gmail.com
+                </a>{' '}
+                before you delete, and that thread stays outside the app.
+              </p>
+              <p>
+                Ideas can also arrive here from AI Builder Journal, a separate app. When you send an
+                idea from there, Ada may create an account for you, matched to the email you
                 verified in Builder Journal, and the idea text becomes the first message of a
                 Discovery Sprint. Everything above applies to that account exactly as to one you
                 created here: the retained, de-identified transcript can include the idea that was

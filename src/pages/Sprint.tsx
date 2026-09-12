@@ -99,7 +99,7 @@ const STARTER_PROMPTS = [
 function errorCopy(err: unknown, fallback: string): string {
   if (err instanceof DiscoveryApiError) {
     if (err.code === 'malformed_model_output') {
-      return "Ada's answer came back scrambled. Nothing was saved — try again.";
+      return "Ada's answer came back scrambled. Nothing was saved, so try again.";
     }
     if (err.detail) return err.detail;
   }
@@ -315,7 +315,7 @@ export default function Sprint() {
       if (res.session_updated_at) setSessionVersion(res.session_updated_at);
     } catch (err) {
       toast.error(
-        errorCopy(err, 'Ada is taking a moment. Your message is in the thread — try again.')
+        errorCopy(err, 'Ada is taking a moment. Your message is in the thread, so try again.')
       );
     } finally {
       setTurnBusy(false);
@@ -373,7 +373,7 @@ export default function Sprint() {
       if (err instanceof DiscoveryApiError && err.code === 'stale_session') {
         setStale(true);
       } else {
-        toast.error(errorCopy(err, "That didn't go through. Nothing changed — try again."));
+        toast.error(errorCopy(err, "That didn't go through. Nothing changed, so try again."));
       }
     } finally {
       setDispatch(null);
@@ -398,9 +398,9 @@ export default function Sprint() {
       (r) => {
         if (decision === 'dismiss') {
           if (action === 'define_success_metric') {
-            toast.info('Okay — skipping the success metric. Revisit it anytime from the library.');
+            toast.info('Okay, skipping the success metric. Revisit it anytime from the library.');
           } else if (action === 'prepare_interviews') {
-            toast.info('Okay — skipping interviews for now.');
+            toast.info('Okay, skipping interviews for now.');
           }
           return;
         }
@@ -437,7 +437,7 @@ export default function Sprint() {
     } else if (fw.slot === 'interview') {
       void runDispatch(
         'library',
-        'Ada is writing your interview guide — usually 20–30 seconds…',
+        'Ada is writing your interview guide, usually 20–30 seconds…',
         () =>
           initiateDiscoveryAction(
             session.id,
@@ -452,7 +452,7 @@ export default function Sprint() {
   const handleAskForMetric = () => {
     setLibraryOpen(false);
     void handleTurn(
-      "I'd like to define what success looks like — can we set a North Star metric now?"
+      "I'd like to define what success looks like. Can we set a North Star metric now?"
     );
   };
 
@@ -543,7 +543,7 @@ export default function Sprint() {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-background px-6">
         <p className="max-w-sm text-center text-sm text-muted-foreground">
-          Couldn't open this sprint. It may have been removed, or the connection dropped — your work
+          Couldn't open this sprint. It may have been removed, or the connection dropped. Your work
           is stored server-side either way.
         </p>
         <Button variant="outline" onClick={() => navigate('/discovery')}>
@@ -611,7 +611,7 @@ export default function Sprint() {
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[240px]">
-                The frameworks Ada coaches with — Mom Test, RICE, MoSCoW, North Star. Browse what
+                The frameworks Ada coaches with: Mom Test, RICE, MoSCoW, North Star. Browse what
                 each is for, or switch lenses mid-sprint.
               </TooltipContent>
             </Tooltip>
@@ -627,7 +627,7 @@ export default function Sprint() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onSelect={() => navigate('/discovery')}>
-                  Save & exit — resume later
+                  Save & exit, resume later
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -683,7 +683,7 @@ export default function Sprint() {
           {!stale && !turnBusy && messages.length === 1 && messages[0].role === 'user' && (
             <div className="mr-auto max-w-[92%] space-y-2.5">
               <p className="text-sm text-muted-foreground">
-                Pick a first move to get Ada's read — or just start typing below.
+                Pick a first move to get Ada's read, or just start typing below.
               </p>
               <div className="flex flex-wrap gap-2">
                 {STARTER_PROMPTS.map((prompt, i) => (
@@ -722,7 +722,7 @@ export default function Sprint() {
                 This sprint moved ahead in another tab
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-foreground/80">
-                Everything saved there is safe. Refresh to pick up from the newest state — nothing
+                Everything saved there is safe. Refresh to pick up from the newest state. Nothing
                 from this tab will overwrite it.
               </p>
               <Button className="mt-3" onClick={() => window.location.reload()}>
@@ -762,7 +762,7 @@ export default function Sprint() {
               {assumptionsOpen && (
                 <div className="mt-2 space-y-2.5">
                   <p className="text-xs text-muted-foreground">
-                    Tap a score to correct it — you know things Ada doesn't. Prioritized assumptions
+                    Tap a score to correct it; you know things Ada doesn't. Prioritized assumptions
                     are what the wrap-up is measured against.
                   </p>
                   {assumptions.map((a, i) => (
@@ -832,7 +832,7 @@ export default function Sprint() {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[240px]">
-              Paste interview notes or research — Ada grounds this sprint's coaching in what you
+              Paste interview notes or research. Ada grounds this sprint's coaching in what you
               drop here.
             </TooltipContent>
           </Tooltip>
@@ -841,7 +841,7 @@ export default function Sprint() {
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleChatKey}
-            placeholder="Talk discovery with Ada — she's tracking the whole sprint…"
+            placeholder="Talk discovery with Ada. She's tracking the whole sprint…"
             rows={1}
             disabled={inputLocked}
             className="min-h-[44px] resize-none"
@@ -878,7 +878,7 @@ export default function Sprint() {
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">Abandon this sprint?</AlertDialogTitle>
             <AlertDialogDescription>
-              The thread, assumptions, and evidence stay saved, but the sprint closes for good — no
+              The thread, assumptions, and evidence stay saved, but the sprint closes for good, with no
               resuming. If you just need a break, use "Save & exit" instead.
             </AlertDialogDescription>
           </AlertDialogHeader>

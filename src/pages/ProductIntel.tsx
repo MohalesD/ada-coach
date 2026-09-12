@@ -43,7 +43,7 @@ import type {
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof DiscoveryApiError) {
     if (err.code === 'malformed_model_output') {
-      return "Ada's research came back garbled — nothing was saved. It usually works on a second try.";
+      return "Ada's research came back garbled, so nothing was saved. It usually works on a second try.";
     }
     if (err.code === 'too_many_competitors' && err.detail) return err.detail;
     if (err.detail) return err.detail;
@@ -125,7 +125,7 @@ export default function ProductIntel() {
       const status = await pollIntelStatus(productId, run.started_at);
       if (status.state === 'error') {
         setMarketError(
-          status.message ?? "The market research didn't finish. Nothing was saved — try again."
+          status.message ?? "The market research didn't finish. Nothing was saved, so try again."
         );
         return;
       }
@@ -134,7 +134,7 @@ export default function ProductIntel() {
       setMarketEvidence(b ? await listMarketEvidence(b.id) : []);
     } catch (err) {
       setMarketError(
-        errorMessage(err, "The market research didn't finish. Nothing was saved — try again.")
+        errorMessage(err, "The market research didn't finish. Nothing was saved, so try again.")
       );
     } finally {
       setGenerating(false);
@@ -159,7 +159,7 @@ export default function ProductIntel() {
       if (status.unmapped) {
         setUnmappedNote(
           status.note ??
-            'This space looks unmapped from here — the searches turned up no clear competitors. Add the ones you know about; Ada will never invent one.'
+            'This space looks unmapped from here. The searches turned up no clear competitors. Add the ones you know about; Ada will never invent one.'
         );
       }
       setGateOpen(true);
@@ -179,7 +179,7 @@ export default function ProductIntel() {
       setGateOpen(false);
     } catch (err) {
       setIdentifyError(
-        errorMessage(err, "Couldn't save the list. Your selections are still here — try again.")
+        errorMessage(err, "Couldn't save the list. Your selections are still here, so try again.")
       );
     } finally {
       setConfirming(false);
@@ -201,7 +201,7 @@ export default function ProductIntel() {
           new Map(prev).set(
             competitorId,
             status.message ??
-              "This competitor's research didn't finish. Nothing was saved — retry when ready."
+              "This competitor's research didn't finish. Nothing was saved, so retry when ready."
           )
         );
         return;
@@ -217,7 +217,7 @@ export default function ProductIntel() {
           competitorId,
           errorMessage(
             err,
-            "This competitor's research didn't finish. Nothing was saved — retry when ready."
+            "This competitor's research didn't finish. Nothing was saved, so retry when ready."
           )
         )
       );
@@ -282,7 +282,7 @@ export default function ProductIntel() {
         {!loading && loadError && (
           <div className="mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-center">
             <p className="text-sm text-destructive">
-              Couldn't load this page. Your work is safe — this is just a connection hiccup.
+              Couldn't load this page. Your work is safe; this is just a connection hiccup.
             </p>
             <Button
               variant="outline"
@@ -370,7 +370,7 @@ export default function ProductIntel() {
                 )}
 
                 {identifying && (
-                  <WorkingNote label="Ada is searching for competitors — this takes a minute or two." />
+                  <WorkingNote label="Ada is searching for competitors. This takes a minute or two." />
                 )}
 
                 {identifyError && !identifying && !confirming && (
@@ -427,7 +427,7 @@ export default function ProductIntel() {
 
             <p className="px-1 text-xs leading-relaxed text-muted-foreground">
               Market and competitor research is AI-gathered from live web sources and dated at the
-              moment it was found — a snapshot to verify, not settled fact. Read the sources before
+              moment it was found: a snapshot to verify, not settled fact. Read the sources before
               you rely on them in a deck.
             </p>
           </>

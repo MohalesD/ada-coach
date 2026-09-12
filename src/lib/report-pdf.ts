@@ -144,7 +144,7 @@ export async function exportReportPdf(
   // Risk map image
   const png = await svgToPngDataUrl(riskMapSvgId).catch(() => null);
   if (png) {
-    w.heading('Risk map — confidence by impact');
+    w.heading('Risk map: confidence by impact');
     const imgW = CONTENT_W;
     const imgH = (png.height / png.width) * imgW;
     w.ensure(imgH + 8);
@@ -250,7 +250,7 @@ export async function exportReportPdf(
       w.body(gapAnalysis.summary, { size: 9.5 });
       w.gap(3);
       for (const g of gapAnalysis.gaps) {
-        w.body(`• ${g.gap} — ${g.rationale}`, { size: 9 });
+        w.body(`• ${g.gap}: ${g.rationale}`, { size: 9 });
         w.gap(2);
       }
       if (gapAnalysis.threats.length > 0) {
@@ -259,7 +259,7 @@ export async function exportReportPdf(
         for (const t of gapAnalysis.threats) {
           const nums = t.related_assumption_ids.map(numberOf).filter((n) => n > 0);
           w.body(
-            `• ${t.threat}${t.competitor ? ` — ${t.competitor}` : ''}${nums.length > 0 ? ` (pressures assumption${nums.length === 1 ? '' : 's'} ${nums.join(', ')})` : ''}`,
+            `• ${t.threat}${t.competitor ? ` · ${t.competitor}` : ''}${nums.length > 0 ? ` (pressures assumption${nums.length === 1 ? '' : 's'} ${nums.join(', ')})` : ''}`,
             { size: 9 }
           );
           w.gap(2);
@@ -273,7 +273,7 @@ export async function exportReportPdf(
     w.heading('Blind spots');
     snapshot.blind_spots.forEach((b, i) => {
       w.body(
-        `${i + 1}. ${b.statement} ${b.evidence_backed ? '[evidence-backed]' : '[socratic — reasoning only]'}`,
+        `${i + 1}. ${b.statement} ${b.evidence_backed ? '[evidence-backed]' : '[socratic, reasoning only]'}`,
         { style: 'bold' }
       );
       if (b.socratic_question) {

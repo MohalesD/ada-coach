@@ -68,7 +68,7 @@ export default function CompetitorProfileCard({
       {profiling && (
         <div className="mt-3">
           <WorkingNote
-            label={`Ada is researching ${competitor.name} — positioning, pricing, features, recent moves…`}
+            label={`Ada is researching ${competitor.name}: positioning, pricing, features, recent moves…`}
           />
         </div>
       )}
@@ -170,7 +170,7 @@ export default function CompetitorProfileCard({
               </ul>
             ) : (
               <p className="text-xs text-muted-foreground">
-                No sources survived verification for this profile — treat it as thin.
+                No sources survived verification for this profile. Treat it as thin.
               </p>
             ))}
         </div>

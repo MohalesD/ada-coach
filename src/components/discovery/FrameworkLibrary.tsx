@@ -71,7 +71,7 @@ function FrameworkRow({
               Ask Ada to define success
             </Button>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Ada offers candidates grounded in your validated assumptions — she'll tell you if it's
+              Ada offers candidates grounded in your validated assumptions. She'll tell you if it's
               too early for that.
             </p>
           </div>
@@ -116,7 +116,7 @@ export default function FrameworkLibrary({
         <DialogHeader>
           <DialogTitle className="font-display">Framework library</DialogTitle>
           <DialogDescription>
-            The techniques Ada coaches with. Pick one whenever you want — she suggests, you decide.
+            The techniques Ada coaches with. Pick one whenever you want; she suggests, you decide.
           </DialogDescription>
         </DialogHeader>
 

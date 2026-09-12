@@ -70,7 +70,7 @@ export default function FeedbackForm({
     if (!canSend) return;
     const replyTo = wantsReply ? email.trim() : '';
     if (wantsReply && !/^\S+@\S+\.\S+$/.test(replyTo)) {
-      setError("That email doesn't look complete — fix it, or untick the reply box.");
+      setError("That email doesn't look complete. Fix it, or untick the reply box.");
       return;
     }
     setSending(true);
@@ -83,7 +83,7 @@ export default function FeedbackForm({
     });
     setSending(false);
     if (result.error) {
-      setError("That didn't send. Your note is still here — try again in a moment.");
+      setError("That didn't send. Your note is still here, so try again in a moment.");
       return;
     }
     setSentWithReply(!!replyTo);
@@ -94,10 +94,10 @@ export default function FeedbackForm({
   if (sent) {
     return (
       <div className="rounded-xl border border-accent/30 bg-secondary/40 px-4 py-5 text-center">
-        <p className="text-sm font-semibold text-foreground">Got it — thank you.</p>
+        <p className="text-sm font-semibold text-foreground">Got it. Thank you.</p>
         <p className="mt-1 text-sm text-muted-foreground">
           {sentWithReply
-            ? 'Notes like this decide what Ada learns next — and if a reply makes sense, it goes to the address you left.'
+            ? 'Notes like this decide what Ada learns next, and if a reply makes sense, it goes to the address you left.'
             : 'Notes like this decide what Ada learns next.'}
         </p>
         <Button
@@ -157,7 +157,7 @@ export default function FeedbackForm({
         <div className="flex items-start justify-between gap-3">
           {overLimit ? (
             <p className="text-xs text-destructive" role="alert">
-              Trim it to send — nothing you typed is lost.
+              Trim it to send. Nothing you typed is lost.
             </p>
           ) : (
             <span />

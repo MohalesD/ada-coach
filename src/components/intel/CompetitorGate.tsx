@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { perCompetitorSearches, SEARCH_FEE_USD } from '@/components/intel/chips';
+import CharCounter from '@/components/CharCounter';
 import type { Competitor } from '@/types/discovery';
 
 export default function CompetitorGate({
@@ -73,7 +74,7 @@ export default function CompetitorGate({
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
         {unmappedNote ??
-          'Check the competitors Ada should profile in depth. Remove the wrong ones, add any she missed — deep research spends your search budget, so curate first.'}
+          'Check the competitors Ada should profile in depth. Remove the wrong ones, add any she missed. Deep research spends your search budget, so curate first.'}
       </p>
 
       {visible.length > 0 && (
@@ -138,20 +139,23 @@ export default function CompetitorGate({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              addDraft();
-            }
-          }}
-          placeholder="Add a competitor you know about"
-          aria-label="Add a competitor by name"
-          maxLength={120}
-          className="h-9 max-w-xs"
-        />
+        <div className="max-w-xs flex-1 space-y-1">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addDraft();
+              }
+            }}
+            placeholder="Add a competitor you know about"
+            aria-label="Add a competitor by name"
+            maxLength={120}
+            className="h-9"
+          />
+          <CharCounter value={draft} max={120} />
+        </div>
         <Button
           size="sm"
           variant="outline"
@@ -179,7 +183,7 @@ export default function CompetitorGate({
         <p className="text-xs text-muted-foreground">
           {overBudget ? (
             <span className="font-medium text-destructive">
-              The search budget ({budget}) covers at most {budget} competitors per run — uncheck{' '}
+              The search budget ({budget}) covers at most {budget} competitors per run. Uncheck{' '}
               {selectedCount - (budget ?? 0)}.
             </span>
           ) : selectedCount > 0 && budget !== null ? (
@@ -188,7 +192,7 @@ export default function CompetitorGate({
               competitor{selectedCount === 1 ? '' : 's'} uses up to{' '}
               <span className="font-semibold text-foreground">{totalSearches}</span> web searches
               (~$
-              {(totalSearches * SEARCH_FEE_USD).toFixed(2)} in search fees, plus model tokens) —{' '}
+              {(totalSearches * SEARCH_FEE_USD).toFixed(2)} in search fees, plus model tokens), or{' '}
               {perCompetitor} per competitor.
             </>
           ) : (

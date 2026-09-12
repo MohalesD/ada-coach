@@ -59,7 +59,7 @@ export function SavedChip({ iso }: { iso: string }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success"
-      title="Saved to your account the moment Ada finished — stored in the database, not this browser tab, so it survives a reload, a lost connection, or switching devices."
+      title="Saved to your account the moment Ada finished. It's stored in the database, not this browser tab, so it survives a reload, a lost connection, or switching devices."
     >
       <ShieldCheck size={11} aria-hidden />
       Saved {formatRetrieved(iso)}

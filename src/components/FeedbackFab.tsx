@@ -87,7 +87,7 @@ export default function FeedbackFab({ raised = false }: { raised?: boolean }) {
           <DialogHeader>
             <DialogTitle className="font-display">Tell me how it's going</DialogTitle>
             <DialogDescription>
-              A bug, an idea, or a win — it all gets read, and it all shapes what Ada becomes.
+              A bug, an idea, or a win: it all gets read, and it all shapes what Ada becomes.
             </DialogDescription>
           </DialogHeader>
           <FeedbackForm surface="fab" />
