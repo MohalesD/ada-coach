@@ -39,6 +39,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { buildReplyMailto } from '@/lib/feedback-reply';
 import {
   activatePrompt,
   createPrompt,
@@ -1466,7 +1467,7 @@ function RagDebugTab({ onUnauthorized }: { onUnauthorized: () => void }) {
           <CardTitle>RAG Debug</CardTitle>
           <CardDescription>
             Run a test message through live retrieval and see which document chunks come back, with
-            their cosine similarity scores. Read-only — this does not affect production chat.
+            their cosine similarity scores. Read-only, so this does not affect production chat.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -2368,7 +2369,7 @@ function RecentMessagePick({ content, onPick }: { content: string; onPick: () =>
         <span
           className={cn(
             'block whitespace-pre-wrap break-words',
-            clampable && !expanded && 'line-clamp-5',
+            clampable && !expanded && 'line-clamp-5'
           )}
         >
           {content}
@@ -2467,8 +2468,8 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Everything users have sent through the feedback button, Settings, and message thumbs —
-        newest first, latest 200.
+        Everything users have sent through the feedback button, Settings, and message thumbs.
+        Newest first, latest 200.
       </p>
 
       {isLoading && (
@@ -2533,7 +2534,7 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                   )}
                   {e.contact_email && (
                     <a
-                      href={`mailto:${e.contact_email}?subject=${encodeURIComponent('Re: your Ada Coach feedback')}`}
+                      href={buildReplyMailto(e.contact_email, e.user_display_name, e.comment)}
                       className="block whitespace-nowrap text-xs font-medium text-[#8B6324] underline-offset-2 hover:underline"
                     >
                       ↩ wants a reply: {e.contact_email}

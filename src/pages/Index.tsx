@@ -131,7 +131,7 @@ const SCENARIOS: Scenario[] = [
     icon: <SignpostIcon />,
     title: 'New here? Find your track',
     subtitle:
-      'Two quick questions route you to discovery coaching or portfolio building. Aspiring PMs welcome — skip anytime.',
+      'Two quick questions route you to discovery coaching or portfolio building. Aspiring PMs welcome, and you can skip anytime.',
     // Routed to /start — the Run 4 intake router owns this flow.
     openingMessage: '',
     featured: true,
@@ -141,7 +141,7 @@ const SCENARIOS: Scenario[] = [
     icon: <ExploreIcon />,
     title: 'Free exploration',
     subtitle: 'Start a conversation without a specific goal',
-    openingMessage: "Let's just explore — I don't have a specific goal in mind yet.",
+    openingMessage: "Let's just explore. I don't have a specific goal in mind yet.",
     deemphasized: true,
   },
 ];
@@ -440,8 +440,8 @@ export default function Index() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-[230px]">
-                  Discovery Sprints — pick one product idea and Ada pressure-tests it end to end:
-                  assumptions, evidence, priorities, a report.
+                  Discovery Sprints: pick one product idea and Ada pressure-tests it end to end.
+                  Assumptions, evidence, priorities, a report.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>

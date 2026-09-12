@@ -26,6 +26,7 @@ import {
 } from '@/lib/portfolio-api';
 import { exportPortfolioPdf } from '@/lib/portfolio-pdf';
 import { InlineError, WorkingNote } from '@/components/portfolio/notes';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import { ARTIFACT_TYPE_LABELS } from '@/types/portfolio';
 import type { PortfolioProfile, PortfolioProject } from '@/types/portfolio';
 
@@ -92,8 +93,10 @@ export default function PortfolioWorkspace() {
   const draftReady = project?.artifact_content.draft_ready === true;
   const plan = project?.effort_estimate ?? null;
 
+  const chatOverLimit = isOverLimit(chatInput, MESSAGE_MAX);
+
   const handleChat = async () => {
-    if (!project || chatBusy) return;
+    if (!project || chatBusy || chatOverLimit) return;
     const text = chatInput.trim();
     if (!text) return;
     const optimistic: ThreadMessage = {
@@ -124,7 +127,7 @@ export default function PortfolioWorkspace() {
       toast.error(
         err instanceof DiscoveryApiError && err.detail
           ? err.detail
-          : 'Ada is taking a moment. Your message is in the thread — try again.'
+          : 'Ada is taking a moment. Your message is in the thread, so try again.'
       );
     } finally {
       setChatBusy(false);
@@ -149,10 +152,10 @@ export default function PortfolioWorkspace() {
     } catch (err) {
       setPlanError(
         err instanceof DiscoveryApiError && err.code === 'malformed_model_output'
-          ? 'The plan came back scrambled. Nothing was saved — try again.'
+          ? 'The plan came back scrambled. Nothing was saved, so try again.'
           : err instanceof DiscoveryApiError && err.detail
             ? err.detail
-            : "The plan didn't come together. Nothing was lost — try again."
+            : "The plan didn't come together. Nothing was lost, so try again."
       );
     } finally {
       setPlanBusy(false);
@@ -197,7 +200,7 @@ export default function PortfolioWorkspace() {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-background px-6">
         <p className="max-w-sm text-center text-sm text-muted-foreground">
-          Couldn't open this workspace. It may have been removed, or the connection dropped — your
+          Couldn't open this workspace. It may have been removed, or the connection dropped. Your
           work is stored server-side either way.
         </p>
         <Button variant="outline" asChild>
@@ -265,7 +268,7 @@ export default function PortfolioWorkspace() {
                       ? ARTIFACT_TYPE_LABELS[project.artifact_type].toLowerCase()
                       : 'artifact'}
                     , one section at a time. Start by telling her what you already believe about
-                    this project — she'll pressure-test it.
+                    this project. She'll pressure-test it.
                   </p>
                 </div>
               )}
@@ -277,20 +280,36 @@ export default function PortfolioWorkspace() {
             </div>
           </main>
           <footer className="border-t border-border bg-background">
-            <div className="flex items-end gap-3 px-4 py-3 sm:px-6">
-              <Textarea
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value.slice(0, MESSAGE_MAX))}
-                onKeyDown={handleChatKey}
-                placeholder="Answer Ada, or push back — the artifact gets better either way…"
-                rows={1}
-                disabled={chatBusy}
-                className="min-h-[44px] resize-none"
-                aria-label="Message Ada"
-              />
-              <Button onClick={() => void handleChat()} disabled={!chatInput.trim() || chatBusy}>
-                Send
-              </Button>
+            <div className="px-4 py-3 sm:px-6">
+              <div className="flex items-end gap-3">
+                <Textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={handleChatKey}
+                  placeholder="Answer Ada, or push back. The artifact gets better either way…"
+                  rows={1}
+                  disabled={chatBusy}
+                  className="min-h-[44px] resize-none"
+                  aria-label="Message Ada"
+                  aria-invalid={chatOverLimit}
+                />
+                <Button
+                  onClick={() => void handleChat()}
+                  disabled={!chatInput.trim() || chatBusy || chatOverLimit}
+                >
+                  Send
+                </Button>
+              </div>
+              <div className="mt-1.5 flex items-start justify-between gap-3">
+                {chatOverLimit ? (
+                  <p className="text-xs text-destructive" role="alert">
+                    Trim it to send. Nothing you typed is lost.
+                  </p>
+                ) : (
+                  <span />
+                )}
+                <CharCounter value={chatInput} max={MESSAGE_MAX} className="shrink-0" />
+              </div>
             </div>
           </footer>
         </div>
@@ -346,7 +365,7 @@ export default function PortfolioWorkspace() {
             {sections.length === 0 && (
               <div className="rounded-xl border border-dashed border-accent/40 bg-background/40 px-4 py-6 text-center">
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Nothing drafted yet. As the coaching lands, Ada writes each section here — you'll
+                  Nothing drafted yet. As the coaching lands, Ada writes each section here, and you'll
                   see the artifact take shape while you talk.
                 </p>
               </div>
@@ -383,7 +402,7 @@ export default function PortfolioWorkspace() {
                 <ul className="mt-2.5 space-y-1.5">
                   {plan.tools.map((t) => (
                     <li key={t.name} className="text-xs leading-relaxed text-foreground/85">
-                      <span className="font-semibold">{t.name}</span> — {t.purpose}
+                      <span className="font-semibold">{t.name}</span>: {t.purpose}
                       {t.cost_note && (
                         <span className="text-muted-foreground"> ({t.cost_note})</span>
                       )}
@@ -399,7 +418,7 @@ export default function PortfolioWorkspace() {
                     <InlineError message={planError} onRetry={() => void handlePlan()} />
                   )}
                   {planBusy ? (
-                    <WorkingNote label="Ada is sizing the work honestly — 15–30 seconds…" />
+                    <WorkingNote label="Ada is sizing the work honestly, 15–30 seconds…" />
                   ) : (
                     <Button
                       className="w-full"
@@ -407,7 +426,7 @@ export default function PortfolioWorkspace() {
                       onClick={() => void handlePlan()}
                     >
                       {draftReady
-                        ? "Draft's ready — get my tools & effort plan"
+                        ? "Draft's ready. Get my tools & effort plan"
                         : 'Get my tools & effort plan'}
                     </Button>
                   )}

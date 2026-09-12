@@ -164,7 +164,7 @@ export default function ResetPassword() {
         setFormError(
           error.code === 'same_password'
             ? 'Choose a password different from your current one.'
-            : 'We could not update your password. The reset link may have expired — request a new one and try again.'
+            : 'We could not update your password. The reset link may have expired, so request a new one and try again.'
         );
         return;
       }

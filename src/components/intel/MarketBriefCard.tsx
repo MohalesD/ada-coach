@@ -76,7 +76,7 @@ export default function MarketBriefCard({
         {!brief && !generating && !error && (
           <div className="py-6 text-center">
             <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
-              A market brief sizes this product's opportunity with sourced evidence — size signals,
+              A market brief sizes this product's opportunity with sourced evidence: size signals,
               trends, demand, adjacent players. Every claim links to where Ada found it.
             </p>
             {costNote && (
@@ -93,7 +93,7 @@ export default function MarketBriefCard({
 
         {generating && (
           <WorkingNote
-            label={`Ada is researching the market — up to ${budget ?? '…'} web searches. This can take a few minutes; the brief lands here when it's done.`}
+            label={`Ada is researching the market, up to ${budget ?? '…'} web searches. This can take a few minutes; the brief lands here when it's done.`}
           />
         )}
 
@@ -106,13 +106,13 @@ export default function MarketBriefCard({
             {/* Honesty banners — labeled states, never silently absorbed */}
             {brief.summary.search_unavailable && (
               <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
-                Limited — web search returned nothing usable for this run. Ada reports only what she
+                Limited: web search returned nothing usable for this run. Ada reports only what she
                 could verify; nothing here is invented to fill the gap.
               </p>
             )}
             {brief.partial && !brief.summary.search_unavailable && (
               <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
-                Partial — this run reached its search budget
+                Partial: this run reached its search budget
                 {typeof brief.search_count === 'number' ? ` (${brief.search_count} searches)` : ''}.
                 Refresh the brief to keep researching.
               </p>
@@ -147,7 +147,7 @@ export default function MarketBriefCard({
               </button>
               {evidence.length === 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  No sources survived verification — treat this brief as a starting hypothesis, not
+                  No sources survived verification. Treat this brief as a starting hypothesis, not
                   evidence.
                 </p>
               )}

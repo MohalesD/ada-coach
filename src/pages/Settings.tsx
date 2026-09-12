@@ -339,7 +339,7 @@ export default function Settings() {
           <CardHeader>
             <CardTitle>Send feedback</CardTitle>
             <CardDescription>
-              A bug, an idea, or a win — it all gets read, and it all shapes what Ada becomes.
+              A bug, an idea, or a win: it all gets read, and it all shapes what Ada becomes.
             </CardDescription>
           </CardHeader>
           <CardContent>

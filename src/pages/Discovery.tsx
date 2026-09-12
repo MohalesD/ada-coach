@@ -43,6 +43,7 @@ import {
 } from '@/lib/discovery-api';
 import { GOAL_LABELS } from '@/components/discovery/CoveragePath';
 import FeedbackFab from '@/components/FeedbackFab';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Product, Session } from '@/types/discovery';
 
@@ -63,6 +64,7 @@ export default function Discovery() {
   const [intakeFor, setIntakeFor] = useState<Product | null>(null);
   const [intake, setIntake] = useState('');
   const [starting, setStarting] = useState(false);
+  const intakeOverLimit = isOverLimit(intake, INTAKE_MAX);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
@@ -153,12 +155,12 @@ export default function Discovery() {
   const handleStart = async () => {
     if (!intakeFor) return;
     const text = intake.trim();
-    if (!text) return;
+    if (!text || intakeOverLimit) return;
     setStarting(true);
     try {
       const { session, resumed } = await startSession(intakeFor.id, text);
       if (resumed) {
-        toast.info('This product already has an open sprint — picking it back up.');
+        toast.info('This product already has an open sprint, so picking it back up.');
       }
       navigate(`/sprint/${session.id}`);
     } catch {
@@ -201,7 +203,7 @@ export default function Discovery() {
         {!loading && loadError && (
           <div className="mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-center">
             <p className="text-sm text-destructive">
-              Couldn't load your products. Your work is safe — this is just a connection hiccup.
+              Couldn't load your products. Your work is safe; this is just a connection hiccup.
             </p>
             <Button
               variant="outline"
@@ -261,7 +263,7 @@ export default function Discovery() {
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               A product is the idea you're pressure-testing. Every Discovery Sprint, assumption, and
-              report hangs off it — and Ada remembers what you learned between sprints.
+              report hangs off it, and Ada remembers what you learned between sprints.
             </p>
             <Button className="mt-5 gap-1.5" onClick={() => setNewOpen(true)}>
               <Plus size={15} aria-hidden />
@@ -284,23 +286,26 @@ export default function Discovery() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     {renamingId === p.id ? (
-                      <Input
-                        ref={renameInputRef}
-                        value={renamingValue}
-                        onChange={(e) => setRenamingValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            void commitRename();
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            cancelRename();
-                          }
-                        }}
-                        maxLength={200}
-                        aria-label="Product name"
-                        className="h-8 font-display text-lg font-semibold tracking-tight"
-                      />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Input
+                          ref={renameInputRef}
+                          value={renamingValue}
+                          onChange={(e) => setRenamingValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void commitRename();
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              cancelRename();
+                            }
+                          }}
+                          maxLength={200}
+                          aria-label="Product name"
+                          className="h-8 font-display text-lg font-semibold tracking-tight"
+                        />
+                        <CharCounter value={renamingValue} max={200} />
+                      </div>
                     ) : (
                       <h3
                         className="font-display text-lg font-semibold tracking-tight text-foreground"
@@ -424,7 +429,7 @@ export default function Discovery() {
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-[240px]">
-                        A live market scan and competitor profiles for this product — so the
+                        A live market scan and competitor profiles for this product, so the
                         coaching is grounded in what's actually out there.
                       </TooltipContent>
                     </Tooltip>
@@ -446,24 +451,30 @@ export default function Discovery() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Product name"
-              maxLength={200}
-              aria-label="Product name"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleCreate();
-              }}
-            />
-            <Textarea
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="One or two sentences on what it is (optional)"
-              rows={3}
-              maxLength={2000}
-              aria-label="Product description"
-            />
+            <div className="space-y-1">
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Product name"
+                maxLength={200}
+                aria-label="Product name"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleCreate();
+                }}
+              />
+              <CharCounter value={newName} max={200} className="text-right" />
+            </div>
+            <div className="space-y-1">
+              <Textarea
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="One or two sentences on what it is (optional)"
+                rows={3}
+                maxLength={2000}
+                aria-label="Product description"
+              />
+              <CharCounter value={newDescription} max={2000} className="text-right" />
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={() => void handleCreate()} disabled={!newName.trim() || creating}>
@@ -483,27 +494,38 @@ export default function Discovery() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display">
-              Start a Discovery Sprint — {intakeFor?.name}
+              Start a Discovery Sprint: {intakeFor?.name}
             </DialogTitle>
             <DialogDescription>
               What's the idea, or where are you stuck? Ada reads this to meet you where you actually
-              are — fresh idea and mid-discovery get coached differently.
+              are. A fresh idea and mid-discovery get coached differently.
             </DialogDescription>
           </DialogHeader>
           <div>
             <Textarea
               value={intake}
-              onChange={(e) => setIntake(e.target.value.slice(0, INTAKE_MAX))}
+              onChange={(e) => setIntake(e.target.value)}
               placeholder="e.g. I think early-stage PMs would pay for an AI coach that pressure-tests their ideas, but after three interviews I'm not sure the pain is real…"
               rows={6}
               aria-label="Sprint intake"
+              aria-invalid={intakeOverLimit}
             />
-            <p className="mt-1 text-right text-[11px] text-muted-foreground">
-              {intake.length.toLocaleString()} / {INTAKE_MAX.toLocaleString()}
-            </p>
+            <div className="mt-1 flex items-start justify-between gap-3">
+              {intakeOverLimit ? (
+                <p className="text-xs text-destructive" role="alert">
+                  Trim it to start. Nothing you typed is lost.
+                </p>
+              ) : (
+                <span />
+              )}
+              <CharCounter value={intake} max={INTAKE_MAX} className="shrink-0" />
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => void handleStart()} disabled={!intake.trim() || starting}>
+            <Button
+              onClick={() => void handleStart()}
+              disabled={!intake.trim() || starting || intakeOverLimit}
+            >
               {starting ? 'Ada is reading…' : 'Begin the sprint'}
             </Button>
           </DialogFooter>

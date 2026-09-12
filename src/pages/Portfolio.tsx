@@ -24,6 +24,7 @@ import {
   uploadResumeFile,
 } from '@/lib/portfolio-api';
 import { InlineError, WorkingNote } from '@/components/portfolio/notes';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import { ARTIFACT_TYPE_LABELS } from '@/types/portfolio';
 import type { ArtifactType, PortfolioProfile, PortfolioProject } from '@/types/portfolio';
 
@@ -33,17 +34,17 @@ const ARTIFACT_CHOICES: { type: ArtifactType; detail: string }[] = [
   {
     type: 'prd',
     detail:
-      'The classic. Problem, users, requirements, AI-native features — the deepest proof you can think like a PM.',
+      'The classic. Problem, users, requirements, AI-native features. The deepest proof you can think like a PM.',
   },
   {
     type: 'brief',
     detail:
-      'Tighter and faster. Context, problem, opportunity, direction — good when your story matters more than specs.',
+      'Tighter and faster. Context, problem, opportunity, direction. Good when your story matters more than specs.',
   },
   {
     type: 'prototype_spec',
     detail:
-      'Show, don’t tell. Flows, screens, AI interaction patterns — strongest for design-leaning roles.',
+      'Show, don’t tell. Flows, screens, AI interaction patterns. Strongest for design-leaning roles.',
   },
 ];
 
@@ -71,6 +72,10 @@ export default function Portfolio() {
   const [flagged, setFlagged] = useState<string[]>([]);
   const [extractionNote, setExtractionNote] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const resumeOverLimit = isOverLimit(resumeText, TEXT_MAX);
+  const backgroundOverLimit = isOverLimit(background, TEXT_MAX);
+  const intakeOverLimit = resumeOverLimit || backgroundOverLimit;
 
   // Ideas
   const [ideasBusy, setIdeasBusy] = useState(false);
@@ -121,7 +126,7 @@ export default function Portfolio() {
   };
 
   const handleSaveProfile = async () => {
-    if (!profile) return;
+    if (!profile || intakeOverLimit) return;
     setSaveBusy(true);
     setSaveError(null);
     try {
@@ -148,7 +153,7 @@ export default function Portfolio() {
       setSaveError(
         err instanceof Error && err.message
           ? err.message
-          : "Couldn't save your details. Everything you typed is still here — try again."
+          : "Couldn't save your details. Everything you typed is still here, so try again."
       );
     } finally {
       setSaveBusy(false);
@@ -170,8 +175,8 @@ export default function Portfolio() {
     } catch (err) {
       setIdeasError(
         err instanceof Error && err.message === 'malformed_model_output'
-          ? "Ada's ideas came back scrambled. Nothing was saved — try again."
-          : "Idea generation didn't finish. Nothing was lost — try again."
+          ? "Ada's ideas came back scrambled. Nothing was saved, so try again."
+          : "Idea generation didn't finish. Nothing was lost, so try again."
       );
     } finally {
       setIdeasBusy(false);
@@ -215,7 +220,7 @@ export default function Portfolio() {
         {!loading && loadError && (
           <div className="mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-center">
             <p className="text-sm text-destructive">
-              Couldn't load your portfolio. Your work is safe — this is just a connection hiccup.
+              Couldn't load your portfolio. Your work is safe; this is just a connection hiccup.
             </p>
             <Button
               variant="outline"
@@ -240,7 +245,7 @@ export default function Portfolio() {
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Ada reads your actual background, proposes portfolio projects with a real AI angle,
-              then coaches you through one artifact — a PRD, brief, or prototype spec — until it's
+              then coaches you through one artifact (a PRD, brief, or prototype spec) until it's
               interview-ready.
             </p>
             <Button
@@ -290,16 +295,29 @@ export default function Portfolio() {
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               Paste your resume or upload it, then say where you're aiming. Names and emails are
-              stripped before anything is stored — Ada keeps a digest, never the raw file.
+              stripped before anything is stored. Ada keeps a digest, never the raw file.
             </p>
             <div className="mt-4 space-y-3">
-              <Textarea
-                value={resumeText}
-                onChange={(e) => setResumeText(e.target.value.slice(0, TEXT_MAX))}
-                rows={5}
-                placeholder="Paste your resume text here…"
-                aria-label="Paste resume text"
-              />
+              <div className="space-y-1.5">
+                <Textarea
+                  value={resumeText}
+                  onChange={(e) => setResumeText(e.target.value)}
+                  rows={5}
+                  placeholder="Paste your resume text here…"
+                  aria-label="Paste resume text"
+                  aria-invalid={resumeOverLimit}
+                />
+                <div className="flex items-start justify-between gap-3">
+                  {resumeOverLimit ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      Trim it to save. Nothing you pasted is lost.
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <CharCounter value={resumeText} max={TEXT_MAX} className="shrink-0" />
+                </div>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={fileRef}
@@ -328,28 +346,47 @@ export default function Portfolio() {
                   </button>
                 )}
               </div>
-              <Textarea
-                value={background}
-                onChange={(e) => setBackground(e.target.value.slice(0, TEXT_MAX))}
-                rows={3}
-                placeholder="Beyond the resume: what are you good at, what's blocked you, how much time can you give this?"
-                aria-label="Background"
-              />
+              <div className="space-y-1.5">
+                <Textarea
+                  value={background}
+                  onChange={(e) => setBackground(e.target.value)}
+                  rows={3}
+                  placeholder="Beyond the resume: what are you good at, what's blocked you, how much time can you give this?"
+                  aria-label="Background"
+                  aria-invalid={backgroundOverLimit}
+                />
+                <div className="flex items-start justify-between gap-3">
+                  {backgroundOverLimit ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      Trim it to save. Nothing you typed is lost.
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <CharCounter value={background} max={TEXT_MAX} className="shrink-0" />
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  value={targetCompanies}
-                  onChange={(e) => setTargetCompanies(e.target.value)}
-                  maxLength={500}
-                  placeholder="Target companies (e.g. AI-first B2B startups)"
-                  aria-label="Target company types"
-                />
-                <Input
-                  value={targetArchetype}
-                  onChange={(e) => setTargetArchetype(e.target.value)}
-                  maxLength={500}
-                  placeholder="Target PM archetype (e.g. AI PM, platform PM)"
-                  aria-label="Target PM archetype"
-                />
+                <div className="space-y-1">
+                  <Input
+                    value={targetCompanies}
+                    onChange={(e) => setTargetCompanies(e.target.value)}
+                    maxLength={500}
+                    placeholder="Target companies (e.g. AI-first B2B startups)"
+                    aria-label="Target company types"
+                  />
+                  <CharCounter value={targetCompanies} max={500} className="text-right" />
+                </div>
+                <div className="space-y-1">
+                  <Input
+                    value={targetArchetype}
+                    onChange={(e) => setTargetArchetype(e.target.value)}
+                    maxLength={500}
+                    placeholder="Target PM archetype (e.g. AI PM, platform PM)"
+                    aria-label="Target PM archetype"
+                  />
+                  <CharCounter value={targetArchetype} max={500} className="text-right" />
+                </div>
               </div>
               {saveError && (
                 <InlineError message={saveError} onRetry={() => void handleSaveProfile()} />
@@ -361,7 +398,9 @@ export default function Portfolio() {
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button
                     onClick={() => void handleSaveProfile()}
-                    disabled={!resumeText.trim() && !resumeFile && !background.trim()}
+                    disabled={
+                      (!resumeText.trim() && !resumeFile && !background.trim()) || intakeOverLimit
+                    }
                   >
                     Save my background
                   </Button>
@@ -385,13 +424,13 @@ export default function Portfolio() {
               : 'No personal details needed redacting.'}
             {extractionNote && (
               <span className="mt-1 block text-warning">
-                Ada stored your redacted text as-is (the structured digest didn't come together) —
-                coaching still works from it.
+                Ada stored your redacted text as-is (the structured digest didn't come together).
+                Coaching still works from it.
               </span>
             )}
             {flagged.length > 0 && (
               <span className="mt-1 block text-warning">
-                Couldn't confidently redact: <strong>{flagged.join(', ')}</strong> — kept in the
+                Couldn't confidently redact: <strong>{flagged.join(', ')}</strong>, kept in the
                 text; update your details if any of these is a person.
               </span>
             )}
@@ -461,7 +500,7 @@ export default function Portfolio() {
                   Get project ideas matched to you
                 </h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  3–5 portfolio projects you could actually execute and defend — each with a
+                  3–5 portfolio projects you could actually execute and defend, each with a
                   specific AI-native angle, because that's the portfolio that gets AI PM interviews.
                 </p>
                 <div className="mt-4 space-y-3">
@@ -469,7 +508,7 @@ export default function Portfolio() {
                     <InlineError message={ideasError} onRetry={() => void handleIdeas()} />
                   )}
                   {ideasBusy ? (
-                    <WorkingNote label="Ada is matching ideas to your background — usually 15–30 seconds…" />
+                    <WorkingNote label="Ada is matching ideas to your background, usually 15–30 seconds…" />
                   ) : (
                     <Button onClick={() => void handleIdeas()}>Generate my project ideas</Button>
                   )}

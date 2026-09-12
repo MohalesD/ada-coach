@@ -384,7 +384,7 @@ export async function pollIntelStatus(
         state: 'error',
         started_at: sinceIso,
         message:
-          'This is taking longer than it should. Ada may still finish — reload the page in a minute, or run it again.',
+          'This is taking longer than it should. Ada may still finish, so reload the page in a minute, or run it again.',
       };
     }
   }

@@ -25,17 +25,17 @@ const ACTION_COPY: Partial<
   map_assumptions: {
     title: 'Map your assumptions',
     confirm: 'Map them',
-    busy: 'Ada is mapping your assumptions — usually 10–20 seconds…',
+    busy: 'Ada is mapping your assumptions, usually 10–20 seconds…',
   },
   ground_assumption: {
     title: 'Check this against the market',
     confirm: 'Run the market check',
-    busy: 'Searching the market — 30–60 seconds…',
+    busy: 'Searching the market, 30–60 seconds…',
   },
   run_blind_spots: {
     title: 'Surface your blind spots',
     confirm: 'Run the analysis',
-    busy: 'Ada is cross-examining your thinking — usually 15–30 seconds…',
+    busy: 'Ada is cross-examining your thinking, usually 15–30 seconds…',
   },
   propose_prioritization: {
     title: 'Choose your prioritization lens',
@@ -45,7 +45,7 @@ const ACTION_COPY: Partial<
   prepare_interviews: {
     title: 'Prepare your interviews',
     confirm: 'Write the guide',
-    busy: 'Ada is writing your guide — usually 20–30 seconds…',
+    busy: 'Ada is writing your guide, usually 20–30 seconds…',
     decline: 'Skip interviews',
   },
   define_success_metric: {
@@ -210,7 +210,7 @@ function FrameworkOptions({
           key={fw.id}
           selected={value === fw.id}
           onSelect={() => onChange(fw.id)}
-          ariaLabel={`${fw.name}${fw.id === suggested ? ' — Ada suggests this' : ''}`}
+          ariaLabel={`${fw.name}${fw.id === suggested ? ' (Ada suggests this)' : ''}`}
         >
           <div className="flex items-start gap-2.5">
             <SelectDot selected={value === fw.id} />
@@ -399,7 +399,7 @@ export default function ProposalCard({
             <MetricOptions candidates={candidates} value={metricIdx} onChange={setMetricIdx} />
           ) : (
             <p className="text-sm text-muted-foreground">
-              Ada couldn't shape candidates this time — keep talking and she'll offer them again.
+              Ada couldn't shape candidates this time. Keep talking and she'll offer them again.
             </p>
           ))}
 

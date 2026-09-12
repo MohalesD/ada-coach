@@ -17,7 +17,7 @@ export default function DemoBadge() {
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-[240px]">
-        Ada is an early build, moving fast. Explore freely — rough edges are expected, and the
+        Ada is an early build, moving fast. Explore freely. Rough edges are expected, and the
         feedback button feeds directly into what gets built next.
       </TooltipContent>
     </Tooltip>
