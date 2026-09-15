@@ -201,7 +201,7 @@ export default function RiskMap({
           fontWeight={600}
           fill={ESPRESSO}
         >
-          Confidence — how strong your evidence is →
+          Confidence: how strong your evidence is →
         </text>
         <text
           x={18}

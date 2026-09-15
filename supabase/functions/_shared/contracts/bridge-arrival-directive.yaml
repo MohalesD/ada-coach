@@ -1,0 +1,187 @@
+# Prompt contract: Ada Coach bridge arrival directive
+#
+# WHAT THIS IS
+#   A system prompt is production behavior stored as prose. It has no type system and
+#   no stack trace, and it degrades the way documentation degrades: by well-intentioned
+#   trimming. This file is the machine-readable record of what that particular prompt
+#   must keep saying, and why each clause is there.
+#
+# WHAT IT IS NOT
+#   It does not evaluate model output. Passing this contract proves the model was still
+#   ASKED to introduce herself; it does not prove she did. Output evaluation is a
+#   separate and larger problem.
+#
+# HOW IT IS ENFORCED TODAY
+#   Two ways, both running in this repository:
+#     1. `node supabase/functions/_shared/contracts/validate-contract.mjs` executes this
+#        YAML against the real source file, as a required step in .github/workflows/ci.yml.
+#        A non-zero exit fails the build.
+#     2. The `assertions` below are mirrored one-for-one by a Vitest suite at
+#        supabase/functions/_shared/sprint-kickoff.test.ts.
+#   The YAML is the specification; the test file is the running implementation. If you
+#   change one, change the other.
+
+apiVersion: prompt-contract/v1
+kind: PromptContract
+
+metadata:
+  id: ada.kickoff.arrival-directive
+  name: Sprint kickoff arrival directives
+  owner: Mohales Deis
+  created: 2026-09-11
+  repository: MohalesD/ada-coach
+  source_file: supabase/functions/_shared/sprint-kickoff.ts
+  test_file: supabase/functions/_shared/sprint-kickoff.test.ts
+  exported_symbol: DIRECTIVES
+  pull_request: 20
+
+subject:
+  description: >-
+    One directive per arrival path, injected into the coach's system-context slot
+    ("background for you; never read it aloud") on the very first turn of a Discovery
+    Sprint, before the user has typed anything. It is never persisted as a user turn.
+  variants:
+    - key: builder_journal
+      description: The user arrived over the cross-product bridge and has never met Ada.
+    - key: native
+      description: The user started the sprint from inside Ada and needs no introduction.
+
+incident:
+  summary: >-
+    On the first live bridge handoff, Ada opened with a substantive critique and never
+    introduced herself. To a user arriving from another product, that reads as a stranger
+    in a new tab handing back an opinion.
+  observed_output: >-
+    "I read your idea: a recipe-capture tool that grabs structured data from web URLs and
+    organizes them locally. Clean to describe, technically straightforward. ..."
+  user_report: "the initial message is pretty cold. Ada needs to be more warm and introduce herself"
+  root_cause: >-
+    The directive ended with "Keep the persona's length rule." The persona's rule is
+    "2-4 sentences plus one question", written for a session already underway. Applied to
+    the first message it acts as a budget, and the model spent the whole budget on the
+    critique. The introduction was not forgotten; the space for it was already allocated.
+  lesson: >-
+    A prompt constraint that is correct in steady state can be wrong at a boundary. First
+    messages, empty states and error states usually need an explicit exception.
+
+follow_up_incident:
+  summary: >-
+    The fix above restored the introduction but left the greeting itself implicit. The
+    directive said to open with "your name", which a model can satisfy by opening
+    "I'm Ada, and I coach discovery." That still starts mid-thought to someone who has
+    never met her: it names her without greeting the person.
+  user_report: "A PM arriving from another product still gets a reply that starts mid-thought."
+  root_cause: >-
+    "Open with a short warm line: your name, ..." specifies the content of the opening
+    but not that it begins as speech does. Naming yourself is not the same act as
+    greeting someone, and only the first was asked for.
+  lesson: >-
+    When a prompt lists what an opening should contain, it can still omit how the opening
+    should begin. Social openings are the case where the ritual half carries the warmth.
+  assertion: A7
+
+# Each assertion is one testable invariant. `on` selects the variant; `must_match` and
+# `must_not_match` are case-insensitive regular expressions applied to the directive
+# string. `failed_before_fix` records whether the assertion actually caught the bug,
+# which is the difference between a test and a decoration.
+assertions:
+
+  - id: A1
+    name: introduces herself
+    on: builder_journal
+    rationale: The user has never met Ada. This reply is her introduction as much as her first read.
+    must_match:
+      - introduction
+      - your name
+      - not met you
+    failed_before_fix: true
+
+  - id: A2
+    name: places where the user came from
+    on: builder_journal
+    rationale: >-
+      Naming the origin product turns an unexplained new tab into a continuation of
+      something the user just did.
+    must_match:
+      - Builder Journal
+      - already read what they brought over
+    failed_before_fix: true
+
+  - id: A3
+    name: grants room past the persona length rule
+    on: builder_journal
+    rationale: >-
+      The load-bearing half of the fix. The absence matters as much as the presence: while
+      the old clause is still in the directive, the introduction gets squeezed back out.
+    must_match:
+      - "more room than the persona's usual length"
+    must_not_match:
+      - "keep the persona's length rule"
+    failed_before_fix: true
+
+  - id: A4
+    name: coaches rather than cheerleads
+    on: builder_journal
+    rationale: >-
+      Warmth must not be bought with softness. The persona's whole value is that she
+      pressure-tests instead of validating.
+    must_match:
+      - pressure-test
+      - no praise for the idea itself
+      - what worries you most
+      - one question
+    failed_before_fix: true
+
+  - id: A5
+    name: keeps the machinery invisible
+    on: all          # iterate every variant, so a future third arrival path inherits this
+    rationale: >-
+      The user should meet a coach, not a pipeline. Written as a loop deliberately.
+    must_match:
+      - Do not mention that you were instructed to do this
+    additional:
+      - on: builder_journal
+        must_match:
+          - never describe this message as automatic or generated
+    failed_before_fix: true
+
+  - id: A6
+    name: leaves the native arrival alone
+    on: native
+    rationale: >-
+      Scope discipline, expressed as a test. A user already inside Ada does not need an
+      introduction. This assertion fails if someone applies the warmth fix everywhere.
+    must_not_match:
+      - introduction
+      - greeting
+    must_match:
+      - "Keep the persona's length rule"
+    failed_before_fix: false   # correct: it describes behavior that never changed
+
+  - id: A7
+    name: opens with a spoken greeting before the name
+    on: builder_journal
+    rationale: >-
+      A1 gets Ada to name herself; it does not get her to say hello. "Open with your name"
+      is satisfiable by "I'm Ada, and I coach discovery", which still begins mid-thought
+      to a stranger. This pins the greeting as its own required act, with an example of
+      the register rather than a fixed string to recite.
+    must_match:
+      - greeting
+      - "Hi, I'm Ada"
+    failed_before_fix: true
+
+deployment:
+  note: >-
+    Ada Coach has no CI/CD for Edge Functions. A merged change to the directive is not
+    live until the function is redeployed. CI enforces the contract against the source;
+    it does not deploy it.
+  command: supabase functions deploy bridge-intake
+  also_imports_this_file:
+    - sessions        # only ever uses the `native` variant, so redeploy is cosmetic here
+
+limitations:
+  - Regex assertions on a prompt string cannot detect a rewrite that keeps the keywords and loses the meaning.
+  - This contract says nothing about what the model actually produced. Pair it with a live handoff check after every deploy.
+  - The wording targets one specific persona prompt. If the persona's length rule changes, A3 needs rewriting, not just re-running.
+  - A7 pins one example greeting. A rewrite offering a different example would fail the assertion even if it were equally warm; that is the cost of pinning register with a literal.

@@ -44,9 +44,13 @@ function accountDeletedEmail(displayName: string | null) {
       <p>Hi ${escapeHtml(name)},</p>
       <p>Your Ada Coach account and the data tied to your identity have been deleted.
       This is the only email you'll receive about it.</p>
-      <p>As described in the Demo Privacy Notice, de-identified coaching transcripts,
-      message ratings, and feedback you chose to send are kept to improve Ada.
+      <p>Your login, your products, and anything you uploaded, portfolio content,
+      documents, resume or identifying details, are gone. As described in the
+      Demo Privacy Notice, de-identified coaching transcripts, message ratings,
+      and feedback you chose to send are kept to improve Ada.
       None of it is linked to your name or login any more.</p>
+      <p>That's the only use it's put to. It isn't sold, shared, or used to build
+      anything other than Ada's own coaching.</p>
       <p>Thank you for helping shape Ada. Every piece of feedback made it better.</p>
     `,
   };

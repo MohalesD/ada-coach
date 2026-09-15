@@ -142,6 +142,9 @@ export default function Login() {
           return;
         }
         toast.success(`Welcome to Ada Coach, ${displayName.trim()}!`);
+        // Best-effort and fire-and-forget: a failed send here should never
+        // block or delay getting into the app.
+        void supabase.functions.invoke('send-welcome-email').catch(() => {});
         navigate('/', { replace: true });
         return;
       }
@@ -235,8 +238,8 @@ export default function Login() {
           >
             <p className="font-medium">Your account has been deleted.</p>
             <p className="mt-1 text-muted-foreground">
-              Thank you for helping shape Ada. The feedback and ratings you left stay with the
-              demo, with your identity removed, so they keep making it better.
+              Thank you for helping shape Ada. The feedback and ratings you left stay with the demo,
+              with your identity removed, so they keep making it better.
             </p>
           </div>
         )}
@@ -384,7 +387,7 @@ export default function Login() {
                         <button
                           type="button"
                           onClick={() => setMode('signup')}
-                          className="inline-flex animate-signin-nudge items-center gap-1 font-semibold text-accent underline-offset-4 hover:underline"
+                          className="animate-signin-nudge inline-flex items-center gap-1 font-semibold text-accent underline-offset-4 hover:underline"
                         >
                           Create an account
                           <span aria-hidden>&rarr;</span>

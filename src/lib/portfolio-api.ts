@@ -92,7 +92,7 @@ export async function uploadResumeFile(userId: string, file: File): Promise<stri
     throw new DiscoveryApiError({
       status: 500,
       code: 'upload_failed',
-      detail: "The resume didn't upload. Your file is untouched — try again.",
+      detail: "The resume didn't upload. Your file is untouched, so try again.",
       retryable: true,
     });
   }

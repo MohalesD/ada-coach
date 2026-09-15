@@ -41,3 +41,11 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # Executes the prompt contract against the real directive source. A
+      # system prompt is production behavior stored as prose: no type system,
+      # no stack trace, and it degrades by well-intentioned trimming. This is
+      # the step that makes the YAML a specification rather than a document.
+      # No continue-on-error: a non-zero exit fails the job.
+      - name: Prompt contract
+        run: npm run contract:kickoff

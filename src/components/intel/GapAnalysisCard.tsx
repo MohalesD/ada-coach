@@ -51,13 +51,13 @@ export default function GapAnalysisCard({
           <div className="py-4 text-center">
             <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
               {ready
-                ? 'Ada maps the openings — where the researched competitors leave the market unserved, and which of your assumptions their moves pressure.'
+                ? 'Ada maps the openings: where the researched competitors leave the market unserved, and which of your assumptions their moves pressure.'
                 : 'Research at least one competitor above, then Ada can map the gaps.'}
             </p>
             {ready && (
               <>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  No web searches — Ada reasons over the sourced profiles above.
+                  No web searches. Ada reasons over the sourced profiles above.
                 </p>
                 <Button className="mt-4 gap-1.5" onClick={onAnalyze}>
                   <Crosshair size={15} aria-hidden />
@@ -115,7 +115,7 @@ export default function GapAnalysisCard({
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {t.competitor ? `From ${t.competitor}` : 'Landscape-level'}
                           {t.related_assumption_ids.length > 0 &&
-                            ` · pressures ${t.related_assumption_ids.length} of your assumption${t.related_assumption_ids.length === 1 ? '' : 's'} — see the risk map in your report`}
+                            ` · pressures ${t.related_assumption_ids.length} of your assumption${t.related_assumption_ids.length === 1 ? '' : 's'}; see the risk map in your report`}
                         </p>
                       </div>
                     </li>

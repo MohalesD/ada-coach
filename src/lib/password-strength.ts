@@ -89,7 +89,7 @@ export function scorePasswordStrength(value: string): PasswordStrength {
       : score === 2
         ? 'Try adding a symbol or making it longer for a stronger password.'
         : score === 3
-          ? 'Solid — a bit more length would make this even stronger.'
+          ? 'Solid. A bit more length would make this even stronger.'
           : 'Great password.';
 
   return { score, label: LABELS[score], tip };

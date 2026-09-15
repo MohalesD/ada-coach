@@ -6,7 +6,11 @@
 //        submitter's email/display name. Rows whose author deleted their
 //        account (Spec 1) are resolved through the deleted_users tombstone
 //        instead and flagged is_deleted_user so the UI can label them.
-//        Read-only by design — triage actions are a later backlog item.
+//        Rows also carry replied_at/reply_body so the Feedback tab can show
+//        which ones have been answered.
+//
+// Read-only. Sending a reply is admin-feedback-reply's job; this function
+// only reports what that one has already done.
 
 import "@supabase/functions-js/edge-runtime.d.ts";
 import {
@@ -29,6 +33,8 @@ type FeedbackRow = {
   comment: string | null;
   contact_email: string | null;
   created_at: string;
+  replied_at: string | null;
+  reply_body: string | null;
 };
 
 type ProfileRow = { id: string; email: string | null; display_name: string | null };
@@ -52,7 +58,7 @@ Deno.serve(async (req) => {
     const { data: rows, error: rowsErr } = await service
       .from("user_feedback")
       .select(
-        "id, user_id, deleted_user_id, feedback_type, rating, message_id, source_surface, comment, contact_email, created_at",
+        "id, user_id, deleted_user_id, feedback_type, rating, message_id, source_surface, comment, contact_email, created_at, replied_at, reply_body",
       )
       .order("created_at", { ascending: false })
       .limit(FETCH_LIMIT);

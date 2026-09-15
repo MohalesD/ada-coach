@@ -117,7 +117,7 @@ export function exportPortfolioPdf(artifact: {
     });
     w.gap(4);
     for (const tool of plan.tools) {
-      w.body(`• ${tool.name} — ${tool.purpose}${tool.cost_note ? ` (${tool.cost_note})` : ''}`, {
+      w.body(`• ${tool.name}: ${tool.purpose}${tool.cost_note ? ` (${tool.cost_note})` : ''}`, {
         size: 9,
       });
     }

@@ -1266,12 +1266,33 @@ correctly logged the rejection and let deletion proceed (the best-effort
 contract holding exactly as designed) — it is the expected behavior of the
 unverified sender.
 
-- [ ] **To actually receive deletion emails for real test accounts:** verify a
+- [x] **To actually receive deletion emails for real test accounts:** verify a
       sending domain in Resend (`resend.com/domains`; `mail.enterceptmg.com`
       was the domain floated earlier) and change `EMAIL_FROM` to an address on
       that domain. Until then, the only address that will ever receive this
       email is `mohalesdeis@gmail.com` itself — worth remembering when
       choosing which email to delete-test with.
+
+      **Update 2026-09-15:** Confirmed done, on both halves. `mail.enterceptmg.com`
+      was verified in Resend on 2026-09-11 (~02:15, DKIM/SPF/MX all green in
+      the dashboard — directly observed). `EMAIL_FROM` was changed to an
+      address on that domain — Mo confirmed this directly, screenshots
+      included; that confirmation is the record here, full stop, no tool
+      exists that reads a Supabase secret's value to double-check it against,
+      so a direct report from the person who set it *is* the verification,
+      not a stand-in for one.
+      One real piece of remaining texture, not a doubt about the above:
+      the one post-verification delivery evidence gathered in-session
+      (`mohalesdeis+adatest5@gmail.com`) is a Gmail plus-alias of Mo's own
+      mailbox, so while it does prove the old "only my own Resend account
+      address" 403 is gone (Resend checks the exact address, and a plus-alias
+      isn't the registered one), it isn't proof of delivery to an inbox Mo
+      doesn't personally own. Worth one live send to an outside inbox before
+      leaning on `admin-feedback-reply` (PR #29 / DEU-90) for real users, same
+      as any new send path gets a live smoke test. `admin-feedback-reply` now
+      also logs on cold start whether `EMAIL_FROM` still contains
+      `resend.dev`, so this stops being a manual dashboard check going
+      forward.
 
 ### Item 3 — "pre-existing tester account, nothing happened": expected, not a bug
 
@@ -1313,3 +1334,167 @@ say anything different for one email versus another.
       `_shared/email.ts` already exists and gives full control over the
       "Welcome to Ada" voice — but this is a product call, not purely
       technical, so flagging rather than building.
+
+---
+
+## Logged 2026-09-12 — not built, do not build yet
+
+- [ ] **Host "The 53-Second Hang" at a public URL on Ada Coach.** The write-up
+      exists at `docs/portfolio/the-53-second-hang/` (`README.md`, `index.html`,
+      `.docx`) and currently has no public address, so Builder Journal's
+      `/docs/evals` page lists it as the one item a reader cannot open.
+      **Done when:** `index.html` is served at a stable Ada URL, AND Builder
+      Journal's evals manifest points at it. The second half is Builder
+      Journal's side of the fence — it needs a handoff note to that repo/team,
+      not a commit from here.
+      **Optional, decide later:** cross-link it from The Last Mile write-up,
+      which lives in the Builder Journal repo.
+      **Reminder:** surface this to Mo at least 24 hours before the capstone
+      presentation so he can confirm it's live before then.
+
+---
+
+## Plan: DEU-90 — In-app admin feedback reply (2026-09-15)
+
+**For a separate build session.** This is the full original DEU-90 scope, Path
+B of two options discussed with Mo (the alternative was descoping the ticket
+down to just tracking columns and keeping the mailto-only flow permanently —
+Mo chose to build it properly instead).
+
+**What's already done, do not redo:** the comment-truncation fix (DEU-117)
+and the pre-composed `mailto:` quote-and-subject convenience
+(`src/lib/feedback-reply.ts`, DEU-125). Both stay as they are. This plan adds
+a real in-app send path alongside them, it does not replace them — keeping
+the mailto link as a fallback ("or reply via your own email client") is a
+reasonable call for the build session to make, not mandated either way.
+
+**What's still open, the actual scope of this plan:**
+1. In-app reply composer in the admin Feedback tab, enabled only when
+   `contact_email` is present.
+2. An Edge Function that sends the reply via the existing Resend pipeline.
+3. Schema tracking so a replied row is visibly marked and the UI can't
+   double-send.
+
+### Verified against the live repo before writing this plan
+
+- `user_feedback` (`supabase/migrations/20260711013606_user_feedback.sql`)
+  has no `replied_at` or `reply_body` columns yet. `contact_email` and
+  `deleted_user_id` already exist (added in later migrations) and are
+  already selected by `admin-feedback`.
+- `supabase/functions/admin-feedback/index.ts` is GET-only today, and its own
+  header comment says so explicitly: *"Read-only by design — triage actions
+  are a later backlog item."* This plan is that later backlog item.
+- `_shared/email.ts` (`sendEmail`) is the existing, working, verified Resend
+  pipeline (domain confirmed, live-tested this session) — reuse it, don't
+  build a second one.
+
+### Steps
+
+- [x] **1. Migration.** New file under `supabase/migrations/`, additive only:
+      `alter table user_feedback add column replied_at timestamptz, add
+      column reply_body text;` Nullable, no RLS change needed — clients have
+      no UPDATE grant on `user_feedback` today and this plan doesn't add one
+      (the write happens service-role-side, inside the new Edge Function).
+      Apply via whichever of CLAUDE.md's two sanctioned migration paths
+      matches the build session's environment (`supabase db push` from a
+      terminal, or MCP `apply_migration` + rename-to-registered-version if
+      running agentically) — check which applies before choosing.
+
+- [x] **2. New Edge Function `admin-feedback-reply`.** Mirrors
+      `admin-feedback`'s auth (`requireAdmin`, admin/owner). `POST
+      { feedback_id, reply_body }`:
+      - 404 if the row doesn't exist; 400 if it has no `contact_email`; 409
+        if `replied_at` is already set (no accidental double-send through
+        this path — if resending is ever wanted, that's a deliberate future
+        change, not a silent default here).
+      - Send via `sendEmail({ to: contact_email, subject: "Re: your Ada
+        Coach feedback", html: <reply_body, escaped> })` from `_shared/email.ts`.
+        Handle `{ ok: false, error }` as a real error response, not a
+        silent 200 — this is an admin-initiated send, unlike the
+        best-effort deletion/welcome emails, so the admin needs to know if
+        it failed.
+      - On success: `update user_feedback set replied_at = now(), reply_body
+        = :body where id = :feedback_id`, return the updated row.
+
+- [x] **3. Frontend.** In `Admin.tsx`'s feedback table:
+      - Row has `contact_email` and no `replied_at` → inline composer
+        (textarea + Send), same `CharCounter` pattern as everywhere else in
+        the app (pick a cap, e.g. 4000, matching the feedback form's own).
+      - Row has `replied_at` set → replace the composer with a "Replied
+        [date]" state, `reply_body` visible on demand (mirror
+        `FeedbackComment`'s clamp-and-expand pattern rather than inventing a
+        new one).
+      - New wrapper in `src/lib/admin-api.ts`: `replyToFeedback(feedbackId,
+        body)`.
+
+- [x] **4. Tests.** Vitest coverage for whatever pure logic gets extracted
+      (e.g. the reply-email content builder, if one exists server-side —
+      mirror `feedback-reply.ts` / `feedback-reply.test.ts`'s pattern, this
+      time on the Edge Function side). Full `npm run type-check`, `npm run
+      build`, `npm test` clean before opening the PR.
+
+- [x] **5. Docs.** Add `admin-feedback-reply` to CLAUDE.md's Edge Functions
+      section, and update `admin-feedback`'s own entry to note the schema
+      addition, matching how every other function in that file is documented.
+
+- [ ] **6. PR, deploy, close the loop.** PR Format per CLAUDE.md (What / Why
+      / How to test). After merge, deploy `admin-feedback-reply` (and
+      `admin-feedback` if its bundle changed) and confirm by reading the
+      deployed bundle back, not just trusting the deploy call's own success
+      response — same pattern used for `delete-account` and `admin-users`
+      earlier this project. Then update DEU-90 in Linear to `Done` with a
+      short note, same style as this session's other closures.
+
+### Review section
+
+Shipped 2026-09-15 on `modeis/gifted-bardeen-xl9dqb`. Steps 1-5 done; step 6's
+deploy and Linear close are gated on Mo's review, per the repo's standing rule
+that nothing merges or deploys without a check-in.
+
+**What landed:** migration `20260915080206_user_feedback_reply_tracking`
+(applied via MCP, local filename renamed to the registered version per
+CLAUDE.md path 2 — no Supabase CLI in the agentic environment);
+`_shared/feedback-reply-email.ts` + 20 Vitest cases; `admin-feedback-reply`
+Edge Function; `admin-feedback` GET extended; `replyToFeedback()` in
+`admin-api.ts`; `FeedbackReply` composer in `Admin.tsx`.
+
+**Seven gaps found when the plan was checked against the live repo, and how
+each was resolved:**
+
+1. **The plan forgot `admin-feedback`'s GET has to change too.** Step 3's
+   replied-state UI needs `replied_at`/`reply_body` in the payload, but the
+   function's `.select()` is a hardcoded column list and step 5 only mentioned
+   updating its *docs*. Added both columns to the select and the row type.
+2. **The specified 409 was a check, not a lock.** Read-then-send-then-write
+   lets two callers both pass the "already replied?" test and both send —
+   the exact double-send the column exists to prevent. Replaced with an
+   atomic conditional claim (`update ... where replied_at is null`) before
+   the send, rolled back to NULL if the send fails.
+3. **"Escaped" alone would have shipped run-on emails.** Escaping without
+   newline handling renders a multi-paragraph reply as one blob. Added
+   paragraph/`<br>` conversion in `paragraphs()`.
+4. **No DB length cap on `reply_body`** in the plan's DDL, despite the
+   `user_feedback_contact_email` migration having added exactly that for
+   `comment` and calling it the closure of an accepted-risk item. Added the
+   matching 4,000-char CHECK plus server-side validation, which the plan also
+   omitted.
+5. **`reply_body` is readable by the feedback's author** via PostgREST, since
+   the SELECT grant is table-wide rather than column-scoped. Accepted
+   deliberately (it's their own reply) rather than by accident; documented in
+   both the migration and CLAUDE.md. Mo confirmed.
+6. **Deleted-user rows are excluded for free** — `delete-account` nulls
+   `contact_email` on retained rows, so the "composer only when
+   `contact_email` is present" gate already prevents emailing a tombstoned
+   address. No extra guard; noted so it doesn't read as an oversight later.
+7. **Email shape was underspecified.** The plan said send `reply_body`
+   escaped, but the mailto path pre-fills a greeting and quote, so keeping
+   both would have doubled the quote. Mo chose Option A: composer starts
+   empty, server adds greeting + quoted original. `REPLY_SUBJECT` is
+   necessarily duplicated across the Deno/browser boundary, so a test asserts
+   the two copies stay identical.
+
+**Verification:** `npm run type-check` clean, `npm run build` clean, `npm test`
+136/136 across 14 files. `npm run lint` reports 38 errors both with and without
+these changes — all pre-existing on the branch, none introduced here.
+
+**Not done, deliberately:** deploy and the Linear close. Both wait on Mo.

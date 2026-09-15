@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { routeIntake } from '@/lib/portfolio-api';
 import { InlineError, WorkingNote } from '@/components/portfolio/notes';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import type { RouteResult } from '@/types/portfolio';
 
 const Q1 = {
@@ -23,7 +24,7 @@ const Q1 = {
     {
       key: 'aspiring',
       label: "I'm working toward my first PM role",
-      detail: 'No PM title yet — building the case that I can do the job.',
+      detail: 'No PM title yet, building the case that I can do the job.',
     },
     {
       key: 'practicing',
@@ -63,6 +64,8 @@ export default function StartRouter() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RouteResult | null>(null);
 
+  const detailOverLimit = isOverLimit(detail, DETAIL_MAX);
+
   const submit = async (finalDetail: string) => {
     setBusy(true);
     setError(null);
@@ -80,7 +83,7 @@ export default function StartRouter() {
       setStep(3);
     } catch {
       setError(
-        "Ada couldn't read your answers just now. Nothing is lost — try once more, or skip straight in."
+        "Ada couldn't read your answers just now. Nothing is lost, so try once more, or skip straight in."
       );
     } finally {
       setBusy(false);
@@ -108,7 +111,7 @@ export default function StartRouter() {
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-10">
         {step < 3 && (
           <p className="mb-8 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
-            {step === 2 ? 'One more — optional' : `Question ${step + 1} of 2`}
+            {step === 2 ? 'One more (optional)' : `Question ${step + 1} of 2`}
           </p>
         )}
 
@@ -153,18 +156,31 @@ export default function StartRouter() {
           <QuestionBlock question="Anything else about where you are?">
             <Textarea
               value={detail}
-              onChange={(e) => setDetail(e.target.value.slice(0, DETAIL_MAX))}
+              onChange={(e) => setDetail(e.target.value)}
               rows={4}
-              placeholder="Optional — a sentence or two helps Ada place you more confidently…"
+              placeholder="Optional. A sentence or two helps Ada place you more confidently…"
               aria-label="Anything else about where you are"
+              aria-invalid={detailOverLimit}
               autoFocus
             />
+            <div className="flex items-start justify-between gap-3">
+              {detailOverLimit ? (
+                <p className="text-xs text-destructive" role="alert">
+                  Trim it to continue. Nothing you typed is lost.
+                </p>
+              ) : (
+                <span />
+              )}
+              <CharCounter value={detail} max={DETAIL_MAX} className="shrink-0" />
+            </div>
             {error && <InlineError message={error} onRetry={() => void submit(detail)} />}
             {busy ? (
               <WorkingNote label="Ada is reading your answers…" />
             ) : (
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => void submit(detail)}>Point me to my track</Button>
+                <Button onClick={() => void submit(detail)} disabled={detailOverLimit}>
+                  Point me to my track
+                </Button>
                 <Button variant="ghost" onClick={() => void submit('')}>
                   Skip this question
                 </Button>
@@ -183,7 +199,7 @@ export default function StartRouter() {
               {result.recommended_track === 'portfolio' &&
                 'Build the portfolio that gets you hired.'}
               {result.recommended_track === 'discovery' && 'Pressure-test what you’re building.'}
-              {result.recommended_track === 'both' && 'Two doors fit — you pick.'}
+              {result.recommended_track === 'both' && 'Two doors fit. You pick.'}
             </h2>
             <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
               {result.reason}
@@ -193,7 +209,7 @@ export default function StartRouter() {
               <TrackCard
                 icon={<Sparkles size={18} strokeWidth={1.75} aria-hidden />}
                 title="Portfolio Coaching"
-                detail="Resume in, real project ideas out — then Ada coaches you through one artifact, end to end."
+                detail="Resume in, real project ideas out, then Ada coaches you through one artifact, end to end."
                 emphasized={result.recommended_track !== 'discovery'}
                 onClick={() => navigate('/portfolio')}
               />
@@ -216,7 +232,7 @@ export default function StartRouter() {
               onClick={() => navigate('/')}
               className="text-sm font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
-              Skip — take me to the platform
+              Skip, take me to the platform
             </button>
             {step > 0 && (
               <button
@@ -236,7 +252,7 @@ export default function StartRouter() {
               onClick={() => navigate('/')}
               className="text-sm font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
-              Neither right now — take me to the platform
+              Neither right now, take me to the platform
             </button>
           </div>
         )}

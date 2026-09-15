@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import { DiscoveryApiError, ingestPastedText, listSessionDocuments } from '@/lib/discovery-api';
 import type { SessionDocument } from '@/types/discovery';
 
@@ -37,9 +38,11 @@ export default function NotesDialog({
   const [flagged, setFlagged] = useState<string[]>([]);
   const [redactions, setRedactions] = useState<number | null>(null);
 
+  const overLimit = isOverLimit(pasteText, PASTE_MAX);
+
   const handleIngest = async () => {
     const text = pasteText.trim();
-    if (!text || busy) return;
+    if (!text || busy || overLimit) return;
     setBusy(true);
     setError(null);
     try {
@@ -52,7 +55,7 @@ export default function NotesDialog({
       setError(
         err instanceof DiscoveryApiError && err.detail
           ? err.detail
-          : "Couldn't save your notes. They're still in the box — try again."
+          : "Couldn't save your notes. They're still in the box, so try again."
       );
     } finally {
       setBusy(false);
@@ -65,7 +68,7 @@ export default function NotesDialog({
         <DialogHeader>
           <DialogTitle className="font-display">Ground the sprint in your notes</DialogTitle>
           <DialogDescription>
-            Paste a brief, research notes, or interview scraps — Ada coaches from what you've
+            Paste a brief, research notes, or interview scraps. Ada coaches from what you've
             actually written, not generic advice. Names and emails are stripped before anything is
             stored.
           </DialogDescription>
@@ -73,14 +76,22 @@ export default function NotesDialog({
         <div className="space-y-3">
           <Textarea
             value={pasteText}
-            onChange={(e) => setPasteText(e.target.value.slice(0, PASTE_MAX))}
+            onChange={(e) => setPasteText(e.target.value)}
             rows={6}
             placeholder="Paste a product brief, positioning doc, or raw interview notes…"
             aria-label="Paste grounding notes"
+            aria-invalid={overLimit}
           />
-          <p className="-mt-2 text-right text-[11px] text-muted-foreground">
-            {pasteText.length.toLocaleString()} / {PASTE_MAX.toLocaleString()}
-          </p>
+          <div className="-mt-2 flex items-start justify-between gap-3">
+            {overLimit ? (
+              <p className="text-xs text-destructive" role="alert">
+                Trim it to save. Nothing you pasted is lost.
+              </p>
+            ) : (
+              <span />
+            )}
+            <CharCounter value={pasteText} max={PASTE_MAX} className="shrink-0" />
+          </div>
           {error && (
             <div
               role="alert"
@@ -105,7 +116,7 @@ export default function NotesDialog({
                 : 'No personal details needed redacting.'}
               {flagged.length > 0 && (
                 <span className="mt-1 block text-warning">
-                  Couldn't confidently redact: <strong>{flagged.join(', ')}</strong> — kept in the
+                  Couldn't confidently redact: <strong>{flagged.join(', ')}</strong>, kept in the
                   text; edit and re-paste if any of these is a person.
                 </span>
               )}
@@ -123,7 +134,10 @@ export default function NotesDialog({
             </ul>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button onClick={() => void handleIngest()} disabled={!pasteText.trim() || busy}>
+            <Button
+              onClick={() => void handleIngest()}
+              disabled={!pasteText.trim() || busy || overLimit}
+            >
               Add these notes
             </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>

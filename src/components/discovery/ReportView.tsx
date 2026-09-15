@@ -156,7 +156,7 @@ export default function ReportView({
 
       {/* Risk map */}
       <section className="space-y-3">
-        <SectionTitle>Risk map — confidence by impact</SectionTitle>
+        <SectionTitle>Risk map: confidence by impact</SectionTitle>
         <p className="text-sm text-muted-foreground">
           Assumptions in the top-left corner are the ones to test first: they break the idea if
           wrong, and the evidence for them is weakest.
@@ -245,8 +245,8 @@ export default function ReportView({
           {(marketIntel.brief.partial || marketIntel.brief.summary.search_unavailable) && (
             <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
               {marketIntel.brief.summary.search_unavailable
-                ? 'Limited — web search returned nothing usable for this run; nothing was invented to fill the gap.'
-                : 'Partial — the research run reached its search budget.'}
+                ? 'Limited: web search returned nothing usable for this run; nothing was invented to fill the gap.'
+                : 'Partial: the research run reached its search budget.'}
             </p>
           )}
           <p className="text-sm leading-relaxed text-foreground">
@@ -367,7 +367,7 @@ export default function ReportView({
                 {competitiveIntel.gap.gaps.map((g, i) => (
                   <li key={i} className="text-sm leading-relaxed">
                     <span className="font-medium text-foreground">{g.gap}</span>
-                    <span className="text-muted-foreground"> — {g.rationale}</span>
+                    <span className="text-muted-foreground">: {g.rationale}</span>
                   </li>
                 ))}
               </ul>
@@ -381,7 +381,7 @@ export default function ReportView({
                       <li key={i} className="text-sm leading-relaxed text-foreground/90">
                         {t.threat}
                         <span className="text-xs text-muted-foreground">
-                          {t.competitor ? ` — ${t.competitor}` : ''}
+                          {t.competitor ? ` · ${t.competitor}` : ''}
                           {t.related_assumption_ids.length > 0 &&
                             ` · pressures assumption${t.related_assumption_ids.length === 1 ? '' : 's'} ${t.related_assumption_ids
                               .map((id) => indexOf(id))
@@ -417,7 +417,7 @@ export default function ReportView({
                     </span>
                   ) : (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      socratic — reasoning only
+                      socratic (reasoning only)
                     </span>
                   )}
                   {b.assumption_id && indexOf(b.assumption_id) > 0 && (

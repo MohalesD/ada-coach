@@ -128,7 +128,7 @@ export default function SharePortfolio() {
               <ul className="mt-2.5 space-y-1.5">
                 {plan.tools.map((t) => (
                   <li key={t.name} className="text-sm leading-relaxed text-foreground/85">
-                    <span className="font-semibold">{t.name}</span> — {t.purpose}
+                    <span className="font-semibold">{t.name}</span>: {t.purpose}
                     {t.cost_note && <span className="text-muted-foreground"> ({t.cost_note})</span>}
                   </li>
                 ))}

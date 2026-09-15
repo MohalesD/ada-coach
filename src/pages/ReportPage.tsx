@@ -163,7 +163,7 @@ export default function ReportPage() {
         {state === 'missing' && (
           <div className="mx-auto max-w-md py-16 text-center">
             <p className="text-sm text-muted-foreground">
-              No report lives here — the sprint may have been removed.
+              No report lives here. The sprint may have been removed.
             </p>
             <Button asChild variant="outline" className="mt-4">
               <Link to="/discovery">Back to Discovery</Link>
@@ -174,7 +174,7 @@ export default function ReportPage() {
         {state === 'error' && (
           <div className="mx-auto max-w-md rounded-xl border border-destructive/30 bg-destructive/10 px-5 py-4 text-center">
             <p className="text-sm text-destructive">
-              Couldn't load the report. Everything is still stored — try
+              Couldn't load the report. Everything is still stored, so try
               again.
             </p>
             <Button

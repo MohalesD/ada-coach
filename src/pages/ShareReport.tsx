@@ -71,7 +71,7 @@ export default function ShareReport() {
 
         {state === 'error' && (
           <p className="py-16 text-center text-sm text-destructive">
-            Couldn't load the report right now — try refreshing in a moment.
+            Couldn't load the report right now. Try refreshing in a moment.
           </p>
         )}
 

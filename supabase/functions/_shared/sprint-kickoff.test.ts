@@ -17,6 +17,13 @@ describe('kickoff arrival directives', () => {
     expect(bj).toMatch(/not met you/i);
   });
 
+  it('opens with a spoken greeting, not just her name', () => {
+    // A1 gets her to name herself, which "I'm Ada, and I coach discovery"
+    // satisfies while still starting mid-thought. The greeting is its own act.
+    expect(bj).toMatch(/greeting/i);
+    expect(bj).toMatch(/Hi, I'm Ada/i);
+  });
+
   it('places where the PM came from', () => {
     expect(bj).toMatch(/Builder Journal/);
     expect(bj).toMatch(/already read what they brought over/i);
@@ -45,6 +52,7 @@ describe('kickoff arrival directives', () => {
 
   it('leaves the native arrival alone — that PM is already inside Ada', () => {
     expect(DIRECTIVES.native).not.toMatch(/introduction/i);
+    expect(DIRECTIVES.native).not.toMatch(/greeting/i);
     expect(DIRECTIVES.native).toMatch(/Keep the persona's length rule/);
   });
 });

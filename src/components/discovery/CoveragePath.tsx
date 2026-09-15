@@ -67,8 +67,8 @@ export default function CoveragePath({
               )}
               <span
                 aria-current={current ? 'step' : undefined}
-                aria-label={`${goal.label}: ${STATUS_COPY[status]}${current ? ' — Ada is here now' : ''}`}
-                title={`${goal.label} — ${STATUS_COPY[status]}${current ? ' (now)' : ''}`}
+                aria-label={`${goal.label}: ${STATUS_COPY[status]}${current ? '. Ada is here now' : ''}`}
+                title={`${goal.label}: ${STATUS_COPY[status]}${current ? ' (now)' : ''}`}
                 className={cn(
                   'flex cursor-default items-center gap-1.5 rounded-full px-1.5 py-1 text-[11px]',
                   'transition-colors duration-300 motion-reduce:transition-none',
