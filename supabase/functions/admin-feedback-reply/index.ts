@@ -30,6 +30,25 @@ import {
 import { sendEmail } from "../_shared/email.ts";
 import { buildReplyEmail, validateReplyBody } from "../_shared/feedback-reply-email.ts";
 
+// Runs once per cold start. EMAIL_FROM isn't a credential (it's the visible
+// sender address on every outgoing email), so logging it plainly here is
+// safe and exactly the point: this function only works for real users once
+// EMAIL_FROM has moved off Resend's shared, unverified sender, and the
+// prior confusion about whether that had actually happened cost real time.
+// A misconfigured value will still 502 to real users, but at least it will
+// say why instead of leaving it to be re-derived from a Resend error string.
+const emailFrom = Deno.env.get("EMAIL_FROM") ?? null;
+if (!emailFrom) {
+  console.warn("admin-feedback-reply: EMAIL_FROM is not set. Every send will fail.");
+} else if (/resend\.dev/i.test(emailFrom)) {
+  console.warn(
+    `admin-feedback-reply: EMAIL_FROM is still on Resend's shared sender (${emailFrom}). ` +
+      "Sends to anyone but the Resend account's own address will 403.",
+  );
+} else {
+  console.log(`admin-feedback-reply: EMAIL_FROM is ${emailFrom}.`);
+}
+
 const SELECT_COLUMNS =
   "id, user_id, deleted_user_id, feedback_type, rating, message_id, source_surface, comment, contact_email, created_at, replied_at, reply_body";
 

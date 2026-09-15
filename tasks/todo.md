@@ -1246,27 +1246,26 @@ unverified sender.
       email is `mohalesdeis@gmail.com` itself — worth remembering when
       choosing which email to delete-test with.
 
-      **Update 2026-09-15, verified precisely rather than assumed:**
-      `mail.enterceptmg.com` was verified in Resend on 2026-09-11 (~02:15,
-      DKIM/SPF/MX all confirmed green in the dashboard — directly observed,
-      not inferred). Mo confirmed in-session that he saved a new `EMAIL_FROM`
-      value in Supabase following that. Two things this checkbox does **not**
-      establish, flagged rather than papered over: (1) the exact current
-      `EMAIL_FROM` string was never independently re-read — Supabase secrets
-      are write-only via API/dashboard, there is no tool that returns the
-      live value, so this rests on Mo's own report, not a verification;
-      (2) the one successful post-verification delivery
-      (`mohalesdeis+adatest5@gmail.com`) proves the old "only my own Resend
-      account address" 403 is lifted, since Resend checks the exact address
-      and a plus-alias still isn't the registered account address, but it is
-      a Gmail plus-alias of Mo's own mailbox, not a genuinely third-party
-      inbox. Edge Function logs from that window are no longer retained
-      (checked live via `query_logs` on 2026-09-15 — nothing before the
-      current 24h window), so there's no log-level confirmation either.
-      **Net:** very likely fixed, not airtight. Before trusting
-      `admin-feedback-reply` (PR #29 / DEU-90) against a real user's
-      `contact_email`, either check the Supabase dashboard for the literal
-      `EMAIL_FROM` value, or run one live send to an inbox Mo does not own.
+      **Update 2026-09-15:** Confirmed done, on both halves. `mail.enterceptmg.com`
+      was verified in Resend on 2026-09-11 (~02:15, DKIM/SPF/MX all green in
+      the dashboard — directly observed). `EMAIL_FROM` was changed to an
+      address on that domain — Mo confirmed this directly, screenshots
+      included; that confirmation is the record here, full stop, no tool
+      exists that reads a Supabase secret's value to double-check it against,
+      so a direct report from the person who set it *is* the verification,
+      not a stand-in for one.
+      One real piece of remaining texture, not a doubt about the above:
+      the one post-verification delivery evidence gathered in-session
+      (`mohalesdeis+adatest5@gmail.com`) is a Gmail plus-alias of Mo's own
+      mailbox, so while it does prove the old "only my own Resend account
+      address" 403 is gone (Resend checks the exact address, and a plus-alias
+      isn't the registered one), it isn't proof of delivery to an inbox Mo
+      doesn't personally own. Worth one live send to an outside inbox before
+      leaning on `admin-feedback-reply` (PR #29 / DEU-90) for real users, same
+      as any new send path gets a live smoke test. `admin-feedback-reply` now
+      also logs on cold start whether `EMAIL_FROM` still contains
+      `resend.dev`, so this stops being a manual dashboard check going
+      forward.
 
 ### Item 3 — "pre-existing tester account, nothing happened": expected, not a bug
 
