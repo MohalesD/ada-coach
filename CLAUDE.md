@@ -162,6 +162,18 @@ Migrations in `supabase/migrations/` (applied in filename order).
 - When adding a new own-rows table, decide explicitly: cascade (default, for user assets) or
   detach (only for research material). Mirror this migration for the latter.
 
+**Feedback reply tracking — `user_feedback_reply_tracking` (Spec 2 / DEU-90, 2026-09-15):**
+- Adds `user_feedback.replied_at timestamptz` and `reply_body text`, both nullable, plus a
+  `char_length(reply_body) <= 4000` CHECK mirroring the one `user_feedback_contact_email` added
+  for `comment`.
+- No RLS or grant change needed: `authenticated` holds SELECT plus INSERT on an explicit column
+  list and **no UPDATE grant on `user_feedback` at all**, so both columns are service-role-write-only
+  by construction. The write happens inside `admin-feedback-reply`.
+- Deliberate exposure: the table-wide SELECT grant means the feedback's own author can read the
+  reply sent to them via PostgREST (RLS still scopes it to `user_id = auth.uid()`). That's their
+  own reply, and column-scoping the existing SELECT grant would be a larger change than this
+  feature warrants.
+
 **Builder Journal bridge — `builder_journal_bridge` (Spec 4 Milestone 1, 2026-09-07):**
 - `bridge_identities` (`bj_user_id` UNIQUE → `user_id` CASCADE, `mode` permanent|session,
   `last_used_at`) and `bridge_handoffs` (`request_id` UNIQUE, UNIQUE `(bj_user_id, bj_idea_id)`,
@@ -201,6 +213,11 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - **`admin-conversations`** — `GET` (list with counts), `GET ?id=` (full messages), `PATCH ?id=` (update status). Requires admin/owner.
 - **`admin-prompts`** — `GET` (list), `POST` (create, auto-versions), `POST ?id=&action=activate`, `PUT ?id=` (update), `DELETE ?id=` (blocked if active). Requires admin/owner.
 - **`admin-insights`** — `GET` returns aggregated feedback analytics (totals, positive/negative rates, per-conversation, per-prompt, top 5 positive/negative messages, recent 10 events). Aggregation is in-memory using the service client; if the dataset grows, move to Postgres aggregations or a materialized view.
+- **`admin-feedback`** — `GET` returns the most recent `user_feedback` rows (capped at 200), each joined with the submitter's email/display name, or resolved through the `deleted_users` tombstone and flagged `is_deleted_user`. Rows carry `replied_at`/`reply_body` so the Feedback tab knows which are answered. Read-only; sending is `admin-feedback-reply`'s job. Requires admin/owner.
+- **`admin-feedback-reply`** — `POST { feedback_id, reply_body }`. Admin/owner. Sends one admin reply to a feedback row's `contact_email` through `_shared/email.ts` (Resend) and records it on `user_feedback`.
+  - 404 unknown row; 400 no `contact_email` (which is also what deletion leaves behind, since `delete-account` nulls it on retained rows) or an empty/over-cap body; 409 already answered; 502 if the provider rejects the send.
+  - **Ordering is claim → send → roll back on failure.** The row is claimed with a conditional `update ... where replied_at is null` *before* the send, so two admins (or one double-click through a slow Resend call) can't both pass an "already replied?" check and both send. If `sendEmail` then fails, the claim is reset to NULL so the row is retryable. Unlike the best-effort deletion/welcome emails, this send *is* the work, so a provider failure is a real error response, never a quiet 200.
+  - Email shape lives in `_shared/feedback-reply-email.ts` (unit-tested under Vitest, no Deno APIs): greeting + the admin's text as escaped paragraphs + the original feedback quoted underneath. The admin types only the reply; the greeting and quote are added server-side so there's one source of truth and no boilerplate to edit around. Its `REPLY_SUBJECT` must stay identical to the one in `src/lib/feedback-reply.ts` (the mailto fallback) or the two paths split the mail thread — a test asserts this.
 - **`admin-users`** — **Owner-only** (admin alone is rejected with 403). `GET` lists `user_profiles` with credit fields (`credits_remaining`, `last_credit_reset`). `POST ?id=<uuid>&action=reset` resets that user's credits to the current `daily_message_limit` and stamps `last_credit_reset`.
 - **`ingest`** — two modes, one pipeline (chunker/embedder shared via `_shared/ingest-core.ts`). `POST { document_id }`: downloads from Storage, extracts text (PDF via `unpdf`, plain text via `Blob.text()`), sentence-aware chunker (~300 words / ~50 overlap), embeds in batches of 96 (`text-embedding-3-small`), replaces prior chunks, transitions `'uploaded' → 'processing' → 'ready'` (`'error'` + rollback on failure; re-ingestable). Global-corpus docs (`session_id IS NULL`) remain **owner-only**; session-scoped docs only require ownership. `POST { session_id, pasted_text, title? }`: session-scoped pasted text (≤ 50k chars) — **`_shared/redact.ts` strips emails and identified names BEFORE anything is stored or embedded** (only redacted text persists; ambiguous tokens returned in `redaction.flagged` for the PM, never silently dropped). Requires `OPENAI_API_KEY` in Supabase Secrets.
 - **`products`** — `GET` / `POST { name, description? }` / `PATCH ?id=` / `DELETE ?id=`. All through the RLS-bound client; delete also removes the product's sprint conversations.
