@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { buildReplyMailto } from '@/lib/feedback-reply';
+import CharCounter, { isOverLimit } from '@/components/CharCounter';
 import {
   activatePrompt,
   createPrompt,
@@ -51,6 +52,7 @@ import {
   getInsights,
   getRecentMessages,
   getSpend,
+  replyToFeedback,
   listConversations,
   listPrompts,
   listUsers,
@@ -2431,6 +2433,134 @@ function FeedbackComment({ text }: { text: string | null }) {
   );
 }
 
+// Matches the DB's user_feedback_reply_body_len CHECK and the feedback
+// form's own cap on `comment`. Per CharCounter's contract the textarea does
+// not truncate — it lets you type past the cap and blocks Send instead.
+const REPLY_MAX = 4000;
+
+// The reply surface for one feedback row. Two states, never both:
+//   not yet replied → composer (textarea + Send)
+//   replied         → what was sent, clamped, expandable
+//
+// Only rendered when contact_email is present. A row without one has no
+// address to reply to, which is also the state account deletion leaves
+// behind (delete-account nulls contact_email on retained rows), so deleted
+// users are excluded from this surface for free.
+function FeedbackReply({
+  entry,
+  onReplied,
+}: {
+  entry: FeedbackEntry;
+  onReplied: (id: string, repliedAt: string | null, replyBody: string | null) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  if (entry.replied_at) {
+    const sent = entry.reply_body ?? '';
+    const clampable = sent.length > COMMENT_CLAMP_CHARS || sent.includes('\n');
+    return (
+      <div className="space-y-1">
+        <p className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+          ✓ Replied{' '}
+          {new Date(entry.replied_at).toLocaleDateString([], {
+            month: 'short',
+            day: 'numeric',
+          })}
+        </p>
+        {sent && (
+          <>
+            <p
+              className={cn(
+                'whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground',
+                clampable && !expanded && 'line-clamp-2'
+              )}
+            >
+              {sent}
+            </p>
+            {clampable && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+                aria-expanded={expanded}
+              >
+                {expanded ? 'Show less' : 'Show reply'}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const over = isOverLimit(draft, REPLY_MAX);
+  const canSend = draft.trim().length > 0 && !over && !isSending;
+
+  const send = async () => {
+    setIsSending(true);
+    try {
+      const result = await replyToFeedback(entry.id, draft.trim());
+      onReplied(result.id, result.replied_at, result.reply_body);
+      toast.success('Reply sent.');
+    } catch (err) {
+      // The server distinguishes "already answered" (409) from a provider
+      // failure, and both matter to the admin, so surface its own wording
+      // rather than a generic one.
+      toast.error((err as Error).message || "Couldn't send that reply.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  if (!isOpen) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setIsOpen(true)}>
+        Reply
+      </Button>
+    );
+  }
+
+  return (
+    <div className="min-w-[18rem] space-y-2">
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="Write your reply…"
+        rows={4}
+        autoFocus
+        className="text-sm"
+      />
+      {/* The greeting and the quoted original are added server-side, so the
+          admin writes only the reply itself. */}
+      <p className="text-xs text-muted-foreground">
+        Sent to {entry.contact_email} with their feedback quoted underneath.
+      </p>
+      <div className="flex items-center justify-between gap-3">
+        <CharCounter value={draft} max={REPLY_MAX} className="shrink-0" />
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setIsOpen(false);
+              setDraft('');
+            }}
+            disabled={isSending}
+          >
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => void send()} disabled={!canSend}>
+            {isSending ? 'Sending…' : 'Send'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [entries, setEntries] = useState<FeedbackEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -2456,6 +2586,22 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
     void load();
   }, [load]);
 
+  // Merge the two reply fields into the row in place. The reply endpoint
+  // returns only those, so refetching the whole log would cost a round trip
+  // to learn nothing else.
+  const handleReplied = useCallback(
+    (id: string, repliedAt: string | null, replyBody: string | null) => {
+      setEntries((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.id === id ? { ...e, replied_at: repliedAt, reply_body: replyBody } : e
+            )
+          : prev
+      );
+    },
+    []
+  );
+
   const typeBadge = (e: FeedbackEntry) => {
     if (e.feedback_type === 'message_rating') {
       return <Badge variant="outline">{e.rating === 'up' ? '👍' : '👎'} rating</Badge>;
@@ -2468,8 +2614,8 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Everything users have sent through the feedback button, Settings, and message thumbs.
-        Newest first, latest 200.
+        Everything users have sent through the feedback button, Settings, and message thumbs. Newest
+        first, latest 200.
       </p>
 
       {isLoading && (
@@ -2500,6 +2646,7 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
               <TableHead>User</TableHead>
               <TableHead>Surface</TableHead>
               <TableHead>When</TableHead>
+              <TableHead>Reply</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -2551,6 +2698,13 @@ function FeedbackTab({ onUnauthorized }: { onUnauthorized: () => void }) {
                     hour: 'numeric',
                     minute: '2-digit',
                   })}
+                </TableCell>
+                <TableCell className="align-top">
+                  {e.contact_email ? (
+                    <FeedbackReply entry={e} onReplied={handleReplied} />
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

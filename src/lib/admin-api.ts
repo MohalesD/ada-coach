@@ -373,6 +373,11 @@ export type FeedbackEntry = {
   comment: string | null;
   contact_email: string | null;
   created_at: string;
+  // Set once an admin has answered through admin-feedback-reply. Non-null
+  // replied_at is what closes the row out in the UI — a replied row shows
+  // what was sent instead of a composer, so nobody answers twice.
+  replied_at: string | null;
+  reply_body: string | null;
   user_email: string | null;
   user_display_name: string | null;
   is_deleted_user: boolean;
@@ -380,5 +385,22 @@ export type FeedbackEntry = {
 
 export async function getFeedbackLog(): Promise<FeedbackEntry[]> {
   const res = await adminFetch<{ feedback: FeedbackEntry[] }>('admin-feedback');
+  return res.feedback;
+}
+
+// The reply endpoint returns the raw user_feedback row, without the
+// submitter's email/display name that admin-feedback joins on. Only the two
+// reply fields are new information, so that is all this exposes — the caller
+// merges them into the entry it already has rather than refetching the log.
+export type FeedbackReplyResult = Pick<FeedbackEntry, 'id' | 'replied_at' | 'reply_body'>;
+
+export async function replyToFeedback(
+  feedbackId: string,
+  replyBody: string
+): Promise<FeedbackReplyResult> {
+  const res = await adminFetch<{ feedback: FeedbackReplyResult }>('admin-feedback-reply', {
+    method: 'POST',
+    body: { feedback_id: feedbackId, reply_body: replyBody },
+  });
   return res.feedback;
 }

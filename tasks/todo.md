@@ -1342,7 +1342,7 @@ reasonable call for the build session to make, not mandated either way.
 
 ### Steps
 
-- [ ] **1. Migration.** New file under `supabase/migrations/`, additive only:
+- [x] **1. Migration.** New file under `supabase/migrations/`, additive only:
       `alter table user_feedback add column replied_at timestamptz, add
       column reply_body text;` Nullable, no RLS change needed — clients have
       no UPDATE grant on `user_feedback` today and this plan doesn't add one
@@ -1352,7 +1352,7 @@ reasonable call for the build session to make, not mandated either way.
       terminal, or MCP `apply_migration` + rename-to-registered-version if
       running agentically) — check which applies before choosing.
 
-- [ ] **2. New Edge Function `admin-feedback-reply`.** Mirrors
+- [x] **2. New Edge Function `admin-feedback-reply`.** Mirrors
       `admin-feedback`'s auth (`requireAdmin`, admin/owner). `POST
       { feedback_id, reply_body }`:
       - 404 if the row doesn't exist; 400 if it has no `contact_email`; 409
@@ -1368,7 +1368,7 @@ reasonable call for the build session to make, not mandated either way.
       - On success: `update user_feedback set replied_at = now(), reply_body
         = :body where id = :feedback_id`, return the updated row.
 
-- [ ] **3. Frontend.** In `Admin.tsx`'s feedback table:
+- [x] **3. Frontend.** In `Admin.tsx`'s feedback table:
       - Row has `contact_email` and no `replied_at` → inline composer
         (textarea + Send), same `CharCounter` pattern as everywhere else in
         the app (pick a cap, e.g. 4000, matching the feedback form's own).
@@ -1379,13 +1379,13 @@ reasonable call for the build session to make, not mandated either way.
       - New wrapper in `src/lib/admin-api.ts`: `replyToFeedback(feedbackId,
         body)`.
 
-- [ ] **4. Tests.** Vitest coverage for whatever pure logic gets extracted
+- [x] **4. Tests.** Vitest coverage for whatever pure logic gets extracted
       (e.g. the reply-email content builder, if one exists server-side —
       mirror `feedback-reply.ts` / `feedback-reply.test.ts`'s pattern, this
       time on the Edge Function side). Full `npm run type-check`, `npm run
       build`, `npm test` clean before opening the PR.
 
-- [ ] **5. Docs.** Add `admin-feedback-reply` to CLAUDE.md's Edge Functions
+- [x] **5. Docs.** Add `admin-feedback-reply` to CLAUDE.md's Edge Functions
       section, and update `admin-feedback`'s own entry to note the schema
       addition, matching how every other function in that file is documented.
 
@@ -1399,4 +1399,54 @@ reasonable call for the build session to make, not mandated either way.
 
 ### Review section
 
-_(Fill in after the build session ships this.)_
+Shipped 2026-09-15 on `modeis/gifted-bardeen-xl9dqb`. Steps 1-5 done; step 6's
+deploy and Linear close are gated on Mo's review, per the repo's standing rule
+that nothing merges or deploys without a check-in.
+
+**What landed:** migration `20260915080206_user_feedback_reply_tracking`
+(applied via MCP, local filename renamed to the registered version per
+CLAUDE.md path 2 — no Supabase CLI in the agentic environment);
+`_shared/feedback-reply-email.ts` + 20 Vitest cases; `admin-feedback-reply`
+Edge Function; `admin-feedback` GET extended; `replyToFeedback()` in
+`admin-api.ts`; `FeedbackReply` composer in `Admin.tsx`.
+
+**Seven gaps found when the plan was checked against the live repo, and how
+each was resolved:**
+
+1. **The plan forgot `admin-feedback`'s GET has to change too.** Step 3's
+   replied-state UI needs `replied_at`/`reply_body` in the payload, but the
+   function's `.select()` is a hardcoded column list and step 5 only mentioned
+   updating its *docs*. Added both columns to the select and the row type.
+2. **The specified 409 was a check, not a lock.** Read-then-send-then-write
+   lets two callers both pass the "already replied?" test and both send —
+   the exact double-send the column exists to prevent. Replaced with an
+   atomic conditional claim (`update ... where replied_at is null`) before
+   the send, rolled back to NULL if the send fails.
+3. **"Escaped" alone would have shipped run-on emails.** Escaping without
+   newline handling renders a multi-paragraph reply as one blob. Added
+   paragraph/`<br>` conversion in `paragraphs()`.
+4. **No DB length cap on `reply_body`** in the plan's DDL, despite the
+   `user_feedback_contact_email` migration having added exactly that for
+   `comment` and calling it the closure of an accepted-risk item. Added the
+   matching 4,000-char CHECK plus server-side validation, which the plan also
+   omitted.
+5. **`reply_body` is readable by the feedback's author** via PostgREST, since
+   the SELECT grant is table-wide rather than column-scoped. Accepted
+   deliberately (it's their own reply) rather than by accident; documented in
+   both the migration and CLAUDE.md. Mo confirmed.
+6. **Deleted-user rows are excluded for free** — `delete-account` nulls
+   `contact_email` on retained rows, so the "composer only when
+   `contact_email` is present" gate already prevents emailing a tombstoned
+   address. No extra guard; noted so it doesn't read as an oversight later.
+7. **Email shape was underspecified.** The plan said send `reply_body`
+   escaped, but the mailto path pre-fills a greeting and quote, so keeping
+   both would have doubled the quote. Mo chose Option A: composer starts
+   empty, server adds greeting + quoted original. `REPLY_SUBJECT` is
+   necessarily duplicated across the Deno/browser boundary, so a test asserts
+   the two copies stay identical.
+
+**Verification:** `npm run type-check` clean, `npm run build` clean, `npm test`
+136/136 across 14 files. `npm run lint` reports 38 errors both with and without
+these changes — all pre-existing on the branch, none introduced here.
+
+**Not done, deliberately:** deploy and the Linear close. Both wait on Mo.
