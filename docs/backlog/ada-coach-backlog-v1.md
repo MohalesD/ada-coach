@@ -175,6 +175,39 @@ Deferred, with the specific reason for each:
 
 ---
 
+## Intel engine — direction decided 2026-09-12, sprint scoping pending
+
+Full analysis, cost model, risk register, product-brief draft, and open
+decisions D-3 through D-6 in
+`docs/analysis/2026-09-12-tavily-and-agent-architecture.md` (also .docx
+and branded .html for sharing). Decision D-1: hybrid, not swap — keep
+Anthropic `web_search` for open-ended research, add Tavily Extract for
+targeted URL reads. Linear issue not yet created (no Linear connector in
+the authoring session); create it when reordering the backlog.
+
+- [ ] **Tavily Extract spike for `competitor-profile`** (capstone lane).
+  Feature-flagged via `app_settings`, `TAVILY_API_KEY` secret,
+  `_shared/tavily.ts` wrapper, extracts fenced as untrusted data,
+  spend traced, counted against `intel_search_budget`. Blocked on
+  decisions D-3 (how non-LLM spend lands in `model_usage`) and D-4
+  (candidate-URL allowlist). Phase 1 is Extract only — no Crawl/Map/
+  Research endpoints, no search swap.
+- [ ] **A/B eval: hybrid vs current profiles** (capstone centerpiece).
+  Groundedness, confidence-label distribution, field coverage, p95
+  latency, cost per profile from `model_usage` traces; include one
+  planted prompt-injection page. Extends the RAG eval harness pattern.
+- [ ] **Self-correction retry on malformed model JSON**
+  (`assumption-mapping` first): one bounded re-attempt with the
+  validation error fed back; retry success rate as an eval metric.
+- [ ] **Prompt caching on stable system prompts** (chat/coach raw-fetch
+  calls) — token-management quick win, measurable in `model_usage`.
+- [ ] **DECIDE (D-6): coach/research agent split** — async research
+  agent as the L3 autonomy architecture; scheduled re-grounding of
+  prioritized assumptions rides on it. Beyond capstone unless time
+  allows.
+
+---
+
 ## Open product decisions, not code tasks
 
 - [x] **DECIDE: RAG similarity threshold.** Decided 2026-07-10: shipped
