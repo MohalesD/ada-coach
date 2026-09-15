@@ -1303,3 +1303,100 @@ say anything different for one email versus another.
       which lives in the Builder Journal repo.
       **Reminder:** surface this to Mo at least 24 hours before the capstone
       presentation so he can confirm it's live before then.
+
+---
+
+## Plan: DEU-90 — In-app admin feedback reply (2026-09-15)
+
+**For a separate build session.** This is the full original DEU-90 scope, Path
+B of two options discussed with Mo (the alternative was descoping the ticket
+down to just tracking columns and keeping the mailto-only flow permanently —
+Mo chose to build it properly instead).
+
+**What's already done, do not redo:** the comment-truncation fix (DEU-117)
+and the pre-composed `mailto:` quote-and-subject convenience
+(`src/lib/feedback-reply.ts`, DEU-125). Both stay as they are. This plan adds
+a real in-app send path alongside them, it does not replace them — keeping
+the mailto link as a fallback ("or reply via your own email client") is a
+reasonable call for the build session to make, not mandated either way.
+
+**What's still open, the actual scope of this plan:**
+1. In-app reply composer in the admin Feedback tab, enabled only when
+   `contact_email` is present.
+2. An Edge Function that sends the reply via the existing Resend pipeline.
+3. Schema tracking so a replied row is visibly marked and the UI can't
+   double-send.
+
+### Verified against the live repo before writing this plan
+
+- `user_feedback` (`supabase/migrations/20260711013606_user_feedback.sql`)
+  has no `replied_at` or `reply_body` columns yet. `contact_email` and
+  `deleted_user_id` already exist (added in later migrations) and are
+  already selected by `admin-feedback`.
+- `supabase/functions/admin-feedback/index.ts` is GET-only today, and its own
+  header comment says so explicitly: *"Read-only by design — triage actions
+  are a later backlog item."* This plan is that later backlog item.
+- `_shared/email.ts` (`sendEmail`) is the existing, working, verified Resend
+  pipeline (domain confirmed, live-tested this session) — reuse it, don't
+  build a second one.
+
+### Steps
+
+- [ ] **1. Migration.** New file under `supabase/migrations/`, additive only:
+      `alter table user_feedback add column replied_at timestamptz, add
+      column reply_body text;` Nullable, no RLS change needed — clients have
+      no UPDATE grant on `user_feedback` today and this plan doesn't add one
+      (the write happens service-role-side, inside the new Edge Function).
+      Apply via whichever of CLAUDE.md's two sanctioned migration paths
+      matches the build session's environment (`supabase db push` from a
+      terminal, or MCP `apply_migration` + rename-to-registered-version if
+      running agentically) — check which applies before choosing.
+
+- [ ] **2. New Edge Function `admin-feedback-reply`.** Mirrors
+      `admin-feedback`'s auth (`requireAdmin`, admin/owner). `POST
+      { feedback_id, reply_body }`:
+      - 404 if the row doesn't exist; 400 if it has no `contact_email`; 409
+        if `replied_at` is already set (no accidental double-send through
+        this path — if resending is ever wanted, that's a deliberate future
+        change, not a silent default here).
+      - Send via `sendEmail({ to: contact_email, subject: "Re: your Ada
+        Coach feedback", html: <reply_body, escaped> })` from `_shared/email.ts`.
+        Handle `{ ok: false, error }` as a real error response, not a
+        silent 200 — this is an admin-initiated send, unlike the
+        best-effort deletion/welcome emails, so the admin needs to know if
+        it failed.
+      - On success: `update user_feedback set replied_at = now(), reply_body
+        = :body where id = :feedback_id`, return the updated row.
+
+- [ ] **3. Frontend.** In `Admin.tsx`'s feedback table:
+      - Row has `contact_email` and no `replied_at` → inline composer
+        (textarea + Send), same `CharCounter` pattern as everywhere else in
+        the app (pick a cap, e.g. 4000, matching the feedback form's own).
+      - Row has `replied_at` set → replace the composer with a "Replied
+        [date]" state, `reply_body` visible on demand (mirror
+        `FeedbackComment`'s clamp-and-expand pattern rather than inventing a
+        new one).
+      - New wrapper in `src/lib/admin-api.ts`: `replyToFeedback(feedbackId,
+        body)`.
+
+- [ ] **4. Tests.** Vitest coverage for whatever pure logic gets extracted
+      (e.g. the reply-email content builder, if one exists server-side —
+      mirror `feedback-reply.ts` / `feedback-reply.test.ts`'s pattern, this
+      time on the Edge Function side). Full `npm run type-check`, `npm run
+      build`, `npm test` clean before opening the PR.
+
+- [ ] **5. Docs.** Add `admin-feedback-reply` to CLAUDE.md's Edge Functions
+      section, and update `admin-feedback`'s own entry to note the schema
+      addition, matching how every other function in that file is documented.
+
+- [ ] **6. PR, deploy, close the loop.** PR Format per CLAUDE.md (What / Why
+      / How to test). After merge, deploy `admin-feedback-reply` (and
+      `admin-feedback` if its bundle changed) and confirm by reading the
+      deployed bundle back, not just trusting the deploy call's own success
+      response — same pattern used for `delete-account` and `admin-users`
+      earlier this project. Then update DEU-90 in Linear to `Done` with a
+      short note, same style as this session's other closures.
+
+### Review section
+
+_(Fill in after the build session ships this.)_
