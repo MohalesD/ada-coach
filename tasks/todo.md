@@ -1239,12 +1239,34 @@ correctly logged the rejection and let deletion proceed (the best-effort
 contract holding exactly as designed) — it is the expected behavior of the
 unverified sender.
 
-- [ ] **To actually receive deletion emails for real test accounts:** verify a
+- [x] **To actually receive deletion emails for real test accounts:** verify a
       sending domain in Resend (`resend.com/domains`; `mail.enterceptmg.com`
       was the domain floated earlier) and change `EMAIL_FROM` to an address on
       that domain. Until then, the only address that will ever receive this
       email is `mohalesdeis@gmail.com` itself — worth remembering when
       choosing which email to delete-test with.
+
+      **Update 2026-09-15, verified precisely rather than assumed:**
+      `mail.enterceptmg.com` was verified in Resend on 2026-09-11 (~02:15,
+      DKIM/SPF/MX all confirmed green in the dashboard — directly observed,
+      not inferred). Mo confirmed in-session that he saved a new `EMAIL_FROM`
+      value in Supabase following that. Two things this checkbox does **not**
+      establish, flagged rather than papered over: (1) the exact current
+      `EMAIL_FROM` string was never independently re-read — Supabase secrets
+      are write-only via API/dashboard, there is no tool that returns the
+      live value, so this rests on Mo's own report, not a verification;
+      (2) the one successful post-verification delivery
+      (`mohalesdeis+adatest5@gmail.com`) proves the old "only my own Resend
+      account address" 403 is lifted, since Resend checks the exact address
+      and a plus-alias still isn't the registered account address, but it is
+      a Gmail plus-alias of Mo's own mailbox, not a genuinely third-party
+      inbox. Edge Function logs from that window are no longer retained
+      (checked live via `query_logs` on 2026-09-15 — nothing before the
+      current 24h window), so there's no log-level confirmation either.
+      **Net:** very likely fixed, not airtight. Before trusting
+      `admin-feedback-reply` (PR #29 / DEU-90) against a real user's
+      `contact_email`, either check the Supabase dashboard for the literal
+      `EMAIL_FROM` value, or run one live send to an inbox Mo does not own.
 
 ### Item 3 — "pre-existing tester account, nothing happened": expected, not a bug
 
