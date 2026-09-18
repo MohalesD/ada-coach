@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Builder Journal to Ada Coach, Part 2: UX, UI, and App Building</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#FAF7F0;--card:#FCF9F2;--card2:#F5F0E3;--ink:#2C2214;--muted:#6B5B3E;--ochre:#8B6324;--amber:#B8853A;
+--border:#DCCFAF;--border-soft:#E8DEC4;--olive:#4A7031;--burnt:#A34E0D;--brick:#A93226;--code-bg:#F1EAD8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1D1611;--card:#241C14;--card2:#2C2318;--ink:#F0E7D3;
+--muted:#C4B08A;--ochre:#C69A4E;--amber:#C69A4E;--border:#42351F;--border-soft:#382D1B;--olive:#8FB56A;--burnt:#E08A4A;--brick:#D06A5E;--code-bg:#31281A}}
+:root[data-theme="dark"]{--bg:#1D1611;--card:#241C14;--card2:#2C2318;--ink:#F0E7D3;--muted:#C4B08A;--ochre:#C69A4E;--amber:#C69A4E;
+--border:#42351F;--border-soft:#382D1B;--olive:#8FB56A;--burnt:#E08A4A;--brick:#D06A5E;--code-bg:#31281A}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Karla',ui-sans-serif,system-ui,sans-serif;font-size:16px;line-height:1.62;margin:0;padding:0 16px 64px}
+.page{max-width:860px;margin:0 auto}
+a{color:var(--ochre)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;background:var(--code-bg);color:var(--ochre);padding:.08em .35em;border-radius:4px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.5}
+pre code{background:none;padding:0;color:var(--ink)}
+header{border-bottom:3px solid var(--amber);padding:44px 0 28px;margin-bottom:36px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 10px}
+h1{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:clamp(30px,5.5vw,44px);line-height:1.12;margin:0 0 8px;text-wrap:balance}
+.subtitle{font-family:'Fraunces',Georgia,serif;font-size:19px;color:var(--ochre);margin:0 0 20px}
+.meta{font-size:14px;color:var(--muted)}
+h2{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:26px;line-height:1.2;margin:52px 0 14px;text-wrap:balance;border-top:1px solid var(--border-soft);padding-top:28px}
+h3{font-family:'Karla',sans-serif;font-weight:700;font-size:17px;letter-spacing:.01em;color:var(--ochre);margin:28px 0 8px}
+h4{font-weight:700;font-size:15px;margin:20px 0 6px}
+p{margin:0 0 14px;max-width:74ch}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin-bottom:7px;max-width:72ch}
+li::marker{color:var(--amber);font-weight:700}
+blockquote{background:var(--card2);border-left:4px solid var(--amber);border-radius:0 8px 8px 0;padding:12px 18px;margin:18px 0}
+blockquote p{margin:0;max-width:none}
+.twrap{overflow-x:auto;margin:18px 0 22px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);text-align:left;background:var(--card2);padding:10px 14px;border-bottom:2px solid var(--border)}
+td{padding:10px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+tr:last-child td{border-bottom:none}
+hr{border:0;border-top:1px solid var(--border);margin:32px 0}
+footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
+</style></head>
+<body><div class="page">
+<header><p class="eyebrow">Builder Journal to Ada Coach · Part 2</p><h1>Builder Journal to Ada Coach, Part 2: UX, UI, and App Building</h1><p class="subtitle">UX, UI, and app-building practices to carry over</p>
+<p class="meta">Author: Mohales "Mo" Deis · Prepared with Claude Code · 2026-09-18</p></header>
+<p><strong>Purpose.</strong> Everything outside evals, trace, tokenomics, security, and prompt engineering (those are Part 1): the features, interaction patterns, design-system discipline, documentation surfaces, and shipping practice that DaVinci Builder Journal accumulated over 218 releases, assessed for what Ada Coach should adopt, adapt, or leave alone.</p>
+<p><strong>How this was built.</strong> Read directly on 2026-09-18: Builder Journal at <code>v2.41.0</code> (every page and module under <code>src/</code>, <code>docs/design.md</code>, <code>docs/responsive-guidelines.md</code>, <code>docs/rules.md</code>, <code>docs/guide-center-content.md</code>, <code>docs/masterplan.md</code>, <code>docs/tasks.md</code>, the PRDs and addenda, the changelog, <code>src/pages/docs/*</code>, the landing components, the Supabase migrations) and Ada Coach at <code>main</code> plus the working branch (<code>src/App.tsx</code>, every page, <code>index.css</code>, <code>tailwind.config.ts</code>, <code>Settings.tsx</code>, <code>Privacy.tsx</code>, <code>FeedbackForm.tsx</code>, the sidebar, the backlog). Counts and claims cite files. Nothing here was verified in a browser; touch behavior, animation feel, and contrast are described from code and Builder Journal's own records.</p>
+<p><strong>The frame.</strong> Builder Journal is a personal capture tool with five modules and hundreds of small affordances. Ada is a turn-based coaching product with a sidebar, a sprint workspace, and a handful of generated artifacts. Most of Builder Journal's <em>features</em> do not belong in Ada (Spaces, drag-and-drop reorder, voice capture, streaks, a paywall). Most of its <em>practices</em> do. The recommendations below sort on that line. Where a feature is recommended, it is because the same job exists in Ada under a different name.</p>
+<hr />
+<h2 id="1-executive-summary-the-ten-carry-overs">1. Executive summary: the ten carry-overs</h2>
+<ol>
+<li><strong>A public landing page and a public docs site.</strong> Ada has neither; the backlog has listed the landing page as "doesn't exist yet" since July. Builder Journal's landing page is honest by construction (real recordings, click-through demos, no invented testimonials) and its <code>/docs</code> site is the artifact cohort reviewers and interviewers actually open. Ada already publishes one write-up at a public path; the docs site is the container it is missing.</li>
+<li><strong>A Guide Center with FAQ, tips, and best practices, authored in one Markdown file and served from a table.</strong> Nineteen FAQ entries, twelve tips, eight practices, searchable, tagged, with per-article helpfulness thumbs. Ada's backlog names a "how to get the most out of Ada" guidebook; this is the shape.</li>
+<li><strong>A first-run choice: quick tour, full walkthrough, or skip, against seeded starter content.</strong> Ada's <code>StartRouter</code> routes by persona; it does not teach the product. The two are complementary.</li>
+<li><strong>Design lessons written down the day they are learned.</strong> <code>docs/design.md</code> has a dated "Design lessons learned" section and <code>docs/responsive-guidelines.md</code> was written to be portable to the next project. Ada has a strong visual identity (amber, cream, espresso, Fraunces and Karla) and no document that says why or how to extend it.</li>
+<li><strong>Three themes, one accessibility menu, per-user persistence.</strong> Light, dark, and a color-blind-safe contrast theme; text scale at 100, 110, 120; saved to the profile so it follows the user across devices. Ada defines dark-mode tokens and never lets the user switch.</li>
+<li><strong>A version badge, a changelog rule, and a health page.</strong> Every Builder Journal build shows <code>vX.Y.Z</code> in the sidebar; every changelog entry bumps <code>package.json</code>; the admin health page says whether the deployed app, schema, and functions match. Ada's <code>package.json</code> still reads <code>0.0.0</code>.</li>
+<li><strong>A single edit surface, rendered three ways.</strong> One detail panel component appears as a split pane on desktop, a modal on medium screens, and a sheet on mobile. Ada's sprint page is nine hundred lines with its own layout logic; the pattern would simplify it.</li>
+<li><strong>Legibility of waiting and of failure.</strong> Holding pages, staged copy at fixed intervals, "saved offline" notices, toast actions that survive an open sheet, and error codes mapped to plain sentences. Ada's coaching turns can run six seconds and its intel calls ninety; the copy around those waits is where Builder Journal's live findings say the product is judged.</li>
+<li><strong>Universal share and export.</strong> One share sheet (native share, copy, Markdown download) on every object, with branding decided once. Ada has Markdown export and public share tokens on two object types and a backlog item about "Coached by Ada" branding on all of them.</li>
+<li><strong>Rules that record the incident that produced them.</strong> Builder Journal's <code>rules.md</code> is 437 lines and most entries name the version and the bug. Ada's <code>CLAUDE.md</code> is excellent on architecture and thin on interaction rules. The habit transfers even if the file does not.</li>
+</ol>
+<hr />
+<h2 id="2-where-each-app-stands">2. Where each app stands</h2>
+<div class="twrap"><table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Builder Journal</th>
+<th>Ada Coach</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Public landing page</td>
+<td>Yes: hero demo, spotlight carousel, module showcase, real recordings, command-K demo, pricing, footer</td>
+<td>None. <code>/</code> is the authenticated chat</td>
+<td>Backlog item since 2026-07-05</td>
+</tr>
+<tr>
+<td>Public docs site</td>
+<td><code>/docs</code> with 11 pages (overview, features, AI, architecture, components, data flow, API, dependencies, security, mockups, evals)</td>
+<td>One public write-up at <code>/the-53-second-hang</code>; Markdown and DOCX in <code>docs/</code></td>
+<td>Ada has the content, not the container</td>
+</tr>
+<tr>
+<td>In-app help</td>
+<td>Guide Center at <code>/help</code>: 39 articles in 3 tabs, search, tags, thumbs, admin editor, screenshots</td>
+<td>None</td>
+<td>Backlog: "how to get the most out of Ada"</td>
+</tr>
+<tr>
+<td>Legal</td>
+<td><code>/privacy</code>, <code>/terms</code>, <code>/refund</code>, separate pages, plain second person</td>
+<td><code>/privacy</code> is a combined "Demo Privacy Notice and Terms"</td>
+<td>Adequate for a demo; splits before pricing</td>
+</tr>
+<tr>
+<td>Onboarding</td>
+<td>Choice dialog: quick tour (6 steps), full walkthrough (13 steps against real elements), skip; seeded starter content, claim-first</td>
+<td><code>StartRouter</code> persona routing (skippable); sprint kickoff with starter questions</td>
+<td>Different jobs; Ada lacks the teaching half</td>
+</tr>
+<tr>
+<td>Auth modes</td>
+<td>Email and password, Google OAuth, magic link; branded emails; 429 countdown</td>
+<td>Email and password, magic link, password reset; welcome email via Resend; bridge magic-link arrival</td>
+<td>Parity except OAuth</td>
+</tr>
+<tr>
+<td>Password UX</td>
+<td>Reveal toggle, Caps Lock warning, strength meter, HIBP, session revocation</td>
+<td>Reveal toggle, Caps Lock, strength meter (shipped from the same prompt)</td>
+<td>HIBP and revocation still on Ada's backlog</td>
+</tr>
+<tr>
+<td>Themes</td>
+<td>Light, dark, contrast; system option; accessibility menu; text scale; profile-persisted</td>
+<td>Light tokens and dark tokens defined; no toggle, no persistence</td>
+<td>Ada is one component away</td>
+</tr>
+<tr>
+<td>Navigation</td>
+<td>Desktop sidebar, mobile bottom nav, module in <code>?m=</code> so Back works, keyboard shortcuts 1 to 5, N, /, cmd-K, ?, T</td>
+<td>Sidebar with search, pin, rename, archive, folders, DnD; header avatar menu</td>
+<td>No shortcuts, no command palette</td>
+</tr>
+<tr>
+<td>Global search</td>
+<td>cmd-K palette over four tables</td>
+<td>Sidebar filter over conversation titles</td>
+<td>Ada has fewer object types; still worth it once products and portfolios exist</td>
+</tr>
+<tr>
+<td>Feedback</td>
+<td>Bug and feature tabs, admin status workflow, new-feedback badge</td>
+<td>FAB on chat and sprint surfaces, <code>user_feedback</code> table with source surface, admin Feedback tab with email reply</td>
+<td>Ada is ahead on the reply loop</td>
+</tr>
+<tr>
+<td>Empty states and skeletons</td>
+<td><code>ModuleEmptyState</code> with filtered variant; four skeleton components; pre-React inline loader</td>
+<td>Ad hoc; no shared empty state; two skeleton usages</td>
+<td>Small, high-frequency gap</td>
+</tr>
+<tr>
+<td>Toasts</td>
+<td>Sonner with <code>visibleToasts 5</code>, 6.5 s, pointer events on, "View" actions, undo pattern</td>
+<td>Sonner used across 14 files; no undo convention</td>
+<td>Adopt the undo rule</td>
+</tr>
+<tr>
+<td>Undo</td>
+<td>Delayed-write undo (5 s) on delete and archive; preview-revert undo on AI restores</td>
+<td>Archive is a soft delete with no undo toast</td>
+<td>One hook</td>
+</tr>
+<tr>
+<td>Export and share</td>
+<td>Universal <code>ShareSheet</code>, Markdown per module, CSV for builds</td>
+<td>Markdown export of conversations, PDF for reports and portfolio, public tokens for both</td>
+<td>Ada is ahead on artifact formats, behind on the universal control</td>
+</tr>
+<tr>
+<td>Version display</td>
+<td><code>AppVersionBadge</code>, preview channel ring, tooltip with build date, click to help</td>
+<td>None; <code>package.json</code> <code>0.0.0</code></td>
+<td>Trivial to add</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td>Users, feedback, AI debug, health with deploy stamps</td>
+<td>Conversations, prompts, insights, feedback, users, spend, documents, retrieval debug</td>
+<td>Ada is broader; lacks health</td>
+</tr>
+<tr>
+<td>Offline and PWA</td>
+<td>IndexedDB queue for two modules, install page, manifest; app-shell caching retired</td>
+<td><code>site.webmanifest</code> and icons only</td>
+<td>Not recommended for Ada (section 8)</td>
+</tr>
+<tr>
+<td>Responsive rules</td>
+<td>Written guideline, overflow probe at four widths and three text sizes, per-surface checklist</td>
+<td><code>use-mobile</code> hook; sprint header adapts; nothing written</td>
+<td>Adopt the guideline as is</td>
+</tr>
+<tr>
+<td>Tests on UI</td>
+<td>Testing Library on 15 or so components; probe scripts</td>
+<td>Four frontend unit files, all pure logic</td>
+<td>Gap</td>
+</tr>
+<tr>
+<td>Error boundary</td>
+<td>None</td>
+<td>One (<code>ErrorBoundary</code> referenced in one file)</td>
+<td>Ada is ahead</td>
+</tr>
+<tr>
+<td>State management</td>
+<td>React Query provided but unused; <code>useEffect</code> fetches; window CustomEvents between modules</td>
+<td>Direct Supabase calls and typed API modules; no React Query</td>
+<td>Neither is a model; see section 7</td>
+</tr>
+<tr>
+<td>Largest page file</td>
+<td><code>Settings.tsx</code> at about 1,150 lines</td>
+<td><code>Admin.tsx</code> at 2,716 lines, <code>Index.tsx</code> at 1,144</td>
+<td>Both violate their own single-responsibility rule</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="3-public-surfaces-landing-docs-legal">3. Public surfaces: landing, docs, legal</h2>
+<h3 id="31-the-landing-page">3.1 The landing page</h3>
+<p>Builder Journal's <code>Landing.tsx</code> is worth studying for what it refuses to do. There are no testimonials, no logos, no invented numbers. The proof is interactive: a hero capture demo, a tabbed module showcase ("Don't take our word for it. Click things."), three real screen recordings ("And this is the real thing, recorded."), a command-K demo, and a pricing block that says "No credit card. The core app is free for good." The header carries the same theme toggle and accessibility menu as the app, so the landing page is the app's first screen, not a separate brochure. Signed-in users are redirected to the dashboard. It degrades under <code>prefers-reduced-motion</code> (keyframes off, demos render their final frame, nothing autoplays), and an overflow probe runs it at 360, 390, 768, and 1280 px at three text sizes.</p>
+<p><strong>For Ada.</strong> A landing page at <code>/</code> with the authenticated app moved to <code>/app</code> or kept at <code>/</code> behind a redirect. Content Ada already has: the two personas from <code>StartRouter</code> (aspiring PM, early-stage PM), the sprint flow, one real recorded coaching exchange, the "Coached by Ada" positioning, and the pilot-program disclosure the backlog says must precede any outside tester. Reuse the honesty rules verbatim: real recordings, no testimonials until there are real ones, no numbers that are not measured. The AI trust line Builder Journal added to its landing page ("Your prompts and results are never saved. We log a call happened") has a true Ada equivalent that says the opposite, and it belongs on the landing page for the same reason: the worried reader is standing right there. Effort: M. Depends on nothing.</p>
+<h3 id="32-the-docs-site">3.2 The docs site</h3>
+<p><code>/docs</code> is eleven pages behind a shared layout and a set of typographic primitives (<code>DocsPrimitives.tsx</code>). Three of its pages are generated from manifests that tests keep honest: components (every component with file, description, props), mockups (every prototype file is listed exactly once and served as a byte-exact wrapped copy), and evals (Part 1). The data-flow page renders Mermaid diagrams with pan, zoom, and fullscreen. An audience note on every page says who it is for.</p>
+<p><strong>For Ada.</strong> Ada's docs are richer than Builder Journal's in substance (five build logs, a v3 PRD with JTBD and an API injection map, an RLS audit, an agent-maturity ladder, a deletion end-to-end audit, a bridge delta audit) and invisible unless someone opens the repo. The minimum viable docs site is five pages: overview, architecture (the diagram in <code>CLAUDE.md</code> plus the injection map), security posture (from the audit), evals (Part 1, E1), and case studies (the 53-second hang, already published; the bridge story from Ada's side). Serve the existing Markdown rather than rewriting it; Builder Journal's <code>sync-case-studies.ts</code> pattern (copy a repo document to <code>public/</code> at build time, test that the copy is current) is the mechanism. Effort: M.</p>
+<h3 id="33-legal-pages">3.3 Legal pages</h3>
+<p>Builder Journal separates privacy, terms, and refund, writes them in plain second person, and forbids the "we're committed to" register in <code>rules.md</code>. Both apps name each other in their privacy pages because of the bridge. Ada's single combined page is honest about the demo trade and reads well. It should split into two pages before any paid tier, and both need the surface-by-surface consistency pass described in Part 1 (S1).</p>
+<hr />
+<h2 id="4-in-app-help-and-onboarding">4. In-app help and onboarding</h2>
+<h3 id="41-the-guide-center">4.1 The Guide Center</h3>
+<p>The content lives in <code>docs/guide-center-content.md</code> ("the document is the spec, the DB is the copy") and is loaded into <code>help_articles</code> by migration. The page has three tabs (FAQ, Hints and Tips, Best Practices), a search box scoped to the active tab, tag chips that combine with AND, a clear-filters button, an "N of M shown" count, accordion answers, and a "Was this helpful?" pair of thumbs stored per user per article. Admins edit inline. A tiny renderer (<code>help-format.ts</code>) accepts bold, bullets, colored dots and badges, images from one public bucket, and a pure-CSS before-and-after switch, and nothing else. Thirteen screenshots are captured by a script against a mocked admin session so they stay consistent. FAQ entries emit JSON-LD so search engines index them.</p>
+<p><strong>For Ada.</strong> The same shape with Ada's content. A first draft of the FAQ writes itself from <code>CLAUDE.md</code> and the backlog: what Ada is and is not (a coach, not a validator), what a Discovery Sprint does, what the assumption map means and how to read confidence and impact, what "Coached by Ada" means for ownership of the output, what happens to transcripts, what credits are and when they reset, how market and competitive intel are sourced and why some fields say "thin", what arrives when you come from Builder Journal, how to set a password after arriving by magic link, and how to delete your account. Tips: the summary sentinel, pin and folders, exporting a session, the confirm gate on competitors. Best practices: the coaching persona's own rules turned toward the PM (bring one assumption, answer the one question, do not ask Ada to validate). The helpfulness thumbs reuse Ada's existing <code>user_feedback</code> table with a new <code>source_surface</code>. Effort: M for the page, S for the first content pass.</p>
+<h3 id="42-first-run">4.2 First run</h3>
+<p>Builder Journal asks a new user to pick a quick tour, a full walkthrough, or skip. The full walkthrough points at real elements by <code>data-tour-id</code>, modules respond to a <code>tour:prepare</code> event by entering the state the step needs, the dim overlay was removed in favor of a ring around the target, and seeding runs exactly once (claim-first flag flip before insert, which fixed a double-seed bug). Starter content is a meta example: a build called "Builder Journal (yes, this app)".</p>
+<p><strong>For Ada.</strong> Ada's <code>StartRouter</code> answers "which track" and its kickoff answers "what do I say first". Neither answers "what is on this screen". A four-step quick tour of the sprint page (the thread, the assumption panel, the intel actions, the report) and a starter sprint seeded from a fictional product would do it. Claim-first seeding matters here because the bridge already creates accounts server-side and a second concurrent seed would be visible to the arriving user. Effort: M. The backlog lists "first-time-user onboarding walkthrough and guided tooltips" as deferred; this is that item.</p>
+<hr />
+<h2 id="5-design-system-and-accessibility">5. Design system and accessibility</h2>
+<h3 id="51-what-builder-journal-wrote-down">5.1 What Builder Journal wrote down</h3>
+<ul>
+<li><code>docs/design.md</code>: aesthetic ("dark workshop, warm, grounded, premium"), named anti-patterns (purple gradients, Inter, white backgrounds, cold dashboards), typography, color tables for three themes, layout, component patterns, undo patterns, swipe thresholds, iconography sizes, motion rules, keyboard shortcuts, and a dated lessons section.</li>
+<li><code>docs/responsive-guidelines.md</code>: one breakpoint for layout (1024) and one for density (768); content column <code>max-w-lg</code>; <code>dvh</code> not <code>vh</code>; chip rows wrap and labels never wrap; <code>min-w-0</code> on text children of flex rows; the native select width trap; the Radix ScrollArea <code>display: table</code> trap; text size is not zoom; phones have no hover so every hover-only action needs a phone equivalent; swipe versus long-press tuning; an eight-item checklist for any new surface.</li>
+<li><code>rules.md</code> interaction rules: cards hover by border, never by low-alpha background; a universal close-X styled once in the dialog and sheet primitives; AlertDialog for anything destructive; destructive and secondary outlines share tokens; "move to" surfaces are pill rows, never tiles; every multi-dimension filter gets a clear button; no raw color classes anywhere; every new token must exist in all three themes (a test enforces it); every status pill carries an icon so color is never the only cue; attention pulses last under three seconds; expandable chevrons are real buttons.</li>
+</ul>
+<h3 id="52-what-ada-has">5.2 What Ada has</h3>
+<p>A coherent identity: amber primary, cream background, espresso ink, olive success, brick destructive, Fraunces for display and Karla for body, a 0.75 rem radius. Light and dark token sets in <code>index.css</code>. The branded HTML analysis documents already reuse these tokens. There is no design document, no responsive guideline, no theme switch, and no contrast theme. Six files use <code>aria-live</code>; one references reduced motion.</p>
+<h3 id="53-what-to-carry-over">5.3 What to carry over</h3>
+<p><strong>D1. Write <code>docs/design.md</code> for Ada now, while the identity is still in one person's head.</strong> Aesthetic and anti-patterns, the token table, typography roles, the chat-specific patterns (assistant bubble, summary tint, feedback buttons, proposal cards, the arrival banner), and a dated lessons section seeded with what the bridge taught about first messages. Effort: S.</p>
+<p><strong>D2. Adopt <code>responsive-guidelines.md</code> unchanged and run its checklist on the sprint page and the intel view.</strong> It was written to be portable. The sprint page at 375 px is named in the v3 PRD's QA checklist and has no recorded result. Effort: S to read, M to fix what it finds.</p>
+<p><strong>D3. Ship the theme switch and the accessibility menu.</strong> Ada's dark tokens already exist. Add <code>next-themes</code> with class attribute, a contrast theme derived from light (Builder Journal's is Okabe-Ito based, blue and orange only for state colors, opaque pills), text scale on the root element applied before first paint, and persistence to <code>user_profiles</code> (which needs a new column grant, per the house rule). Effort: M.</p>
+<p><strong>D4. Port the token-completeness test.</strong> A Vitest that parses <code>index.css</code> and asserts every custom property defined under the light root is also defined under <code>.dark</code> and <code>.contrast</code>. Ten minutes, and it is the kind of test the cohort will recognize as design-system discipline. Effort: S.</p>
+<p><strong>D5. Non-color cues everywhere status is shown.</strong> Assumption status (untested, validated, challenged, abandoned), confidence labels, intel run state. Builder Journal's <code>buildStatus.ts</code> (label, icon, token classes, one source, one pill component) is the pattern; Ada's <code>risk.ts</code> is halfway there. Effort: S.</p>
+<p><strong>D6. The overflow probe.</strong> <code>scripts/probe-text-scale.mjs</code> loads every route at four widths and three text sizes and fails on any horizontal overflow. Ada has Playwright available in this environment. Effort: S to port, once routes are enumerated.</p>
+<hr />
+<h2 id="6-interaction-patterns-for-a-chat-and-sprint-product">6. Interaction patterns for a chat and sprint product</h2>
+<p>The design-and-voice reference Ada's <code>CLAUDE.md</code> points at was written for dashboards, and it warns against forcing dashboard patterns onto a conversational surface. Builder Journal is closer to Ada than that reference is, because it is also a single-column, mobile-first, text-heavy product. These are the patterns that transfer.</p>
+<p><strong>P1. One edit surface, rendered three ways.</strong> The detail panel is the only editor; on desktop it is a resizable split pane, at medium widths a modal, on mobile a sheet, and capture dialogs are creation-only. Ada's assumption editing, competitor confirmation, and portfolio artifact workspace each have their own layout code. One <code>DetailSurface</code> wrapper with the three renderings would let each of them be a content component.</p>
+<p><strong>P2. Preview where triggered, never auto-open.</strong> An AI result appears as a suggestion block at the point of the action, with a mandatory Copy button and an Apply that the user takes. In Ada the analog moments are assumption extraction (currently inserted directly), the summary, and the interview guide. A preview-then-accept step is both a UX and an eval pattern (Part 1, 7.1).</p>
+<p><strong>P3. Delayed-write undo.</strong> Delete and archive schedule the write and show a five-second toast with Undo; the write happens when the toast expires. Ada archives conversations with no undo. One hook (<code>useUndoDelete</code>, <code>useUndoArchive</code>) covers conversations, products, and folders.</p>
+<p><strong>P4. Toast discipline.</strong> Five visible, 6.5 s, pointer events on so a "View" action works behind an open sheet, never one toast per item in a batch, and no toast for routine autosaves (inline indicator only). Ada's sprint page shows a saving state on turns; the rule is worth writing down before the intel views multiply the toasts.</p>
+<p><strong>P5. Legible waits.</strong> The holding page (Part 1 tells the story) is the extreme case. The general rule from Builder Journal's live findings: a wait longer than about three seconds needs copy that says what is happening, and a wait longer than the copy promised needs a second message. Ada's intel calls routinely run 60 to 90 s. <code>intel-status.ts</code> already tracks run state; the UI should stage its copy at fixed intervals the way the holding page does (0, 14, 40 s in CSS, no script), and say what "partial" means when a call hits its search cap.</p>
+<p><strong>P6. Error codes mapped to sentences, in one table, tested.</strong> Builder Journal keeps every bridge error code beside its user sentence and a retryable flag in one module with 26 tests. Ada's <code>discovery-api.ts</code> and the sprint page have the sentences inline. Consolidate into <code>src/lib/errors.ts</code> with the same test shape.</p>
+<p><strong>P7. Keyboard shortcuts and a command palette.</strong> Ada already ships the shadcn <code>command</code> primitive and does not use it. A palette over conversations, products, and portfolio projects, opened by cmd-K and <code>/</code>, plus <code>N</code> for a new sprint and <code>?</code> for the cheat sheet, is a day of work and the kind of detail that reads as craft.</p>
+<p><strong>P8. Back button that works.</strong> Builder Journal moved the active module into a query parameter so Back and Forward navigate between modules and modules are deep-linkable. Ada's chat surface keeps the active conversation in state; the sidebar selection should be in the URL.</p>
+<p><strong>P9. Masking as a curtain, not a safe, and say so.</strong> Builder Journal's masked resources render as dots and the copy says the data is not encrypted. If Ada ever hides intake text or redaction flags behind a reveal, use the same honest copy.</p>
+<p><strong>P10. Confirmation for destructive relationship changes.</strong> Unlink, rhythm changes, and delete all confirm through AlertDialog. Ada's product delete cascades to sprint conversations; the confirm should name that.</p>
+<hr />
+<h2 id="7-app-building-practice">7. App-building practice</h2>
+<h3 id="71-versioning-and-changelog">7.1 Versioning and changelog</h3>
+<p>Builder Journal: SemVer from <code>1.0.0</code>, <code>package.json</code> is the source, Vite injects version and build date, every changelog entry bumps the version, entries are headed with the version, the date, and a title, and never edited retroactively, the badge shows a preview channel on non-production hosts, and the health page warns when the changelog head and <code>package.json</code> disagree.</p>
+<p>Ada: <code>package.json</code> is <code>0.0.0</code>, there is no changelog, and history lives in build logs, PR merges, and Linear. The build logs are better documents than any changelog, but a reviewer cannot tell which build is running.</p>
+<p><strong>A1.</strong> Adopt the version rule, add the badge to the sidebar footer, and start <code>docs/changelog.md</code> at <code>1.0.0</code> with a one-paragraph summary per past run rather than a reconstruction. Effort: S.</p>
+<h3 id="72-rules-that-carry-their-incident">7.2 Rules that carry their incident</h3>
+<p><code>rules.md</code> is the single most reusable document in Builder Journal, not for its content but for its form: one line per decision, grouped by area, each carrying the version and usually the bug that produced it ("the <code>PointerSensor</code> shadowing that killed mobile drag from v2.6.3 to v2.8.7"). Ada's <code>CLAUDE.md</code> does this for architecture and the migration workflow and not for interaction. <strong>A2.</strong> Add a <code>docs/rules.md</code> to Ada, or a "Product rules" section in <code>CLAUDE.md</code>, seeded from the decisions already scattered through the build logs and the backlog (pinned chats appear in both places; archive is soft; the confirm gate exists to protect the search budget; routing never gates). Effort: S, ongoing.</p>
+<h3 id="73-testing-the-frontend">7.3 Testing the frontend</h3>
+<p>Builder Journal tests about fifteen components with Testing Library (accessibility menu, AI mode menu, suggestion block, audio player, block editor drag, share menu propagation, detail panel resync, the Ada tab) and keeps pure logic in <code>src/lib/</code> with no React so it is trivially unit-tested. Ada's four frontend tests are all pure logic; nothing renders a component. <strong>A3.</strong> Start with the components that have bitten: the sidebar (sort order, pinned in two places), <code>ProtectedRoute</code>, the feedback form, the password strength meter, and whatever <code>DetailSurface</code> becomes. Effort: M.</p>
+<h3 id="74-probes-and-qa-notes">7.4 Probes and QA notes</h3>
+<p>Builder Journal's <code>scripts/probe-*.mjs</code> (walkthrough, text scale, report chrome, AI trust) are Playwright scripts with mocked network that assert a specific UI state was reached, and <code>docs/qa/</code> holds dated notes with a "quiz" format: files changed, logic in one sentence, questions that must pass, evidence. <strong>A4.</strong> Ada has Playwright in its environment and a QA folder that is empty. The v3 PRD calls for E2E at 375 and 1440 px with hover, loading, and error states; one probe per critical path (login, start a sprint, run assumption mapping, export) is enough to start.</p>
+<h3 id="75-state-and-data-fetching">7.5 State and data fetching</h3>
+<p>Neither app is a model. Builder Journal provides React Query and then fetches in <code>useEffect</code>, coordinating modules through window events. Ada calls Supabase and typed API modules directly with no cache. For Ada the higher-value move is consistency, not a library: one API module per object type (already the pattern for discovery, portfolio, admin, feedback), the 401 recovery wrapper on all of them (a backlog item), and a shared loading-and-error state shape. If a cache is added later, React Query is the obvious one; do not add it before there is a second consumer of the same data.</p>
+<h3 id="76-shipping-rules">7.6 Shipping rules</h3>
+<p>Builder Journal's <code>CLAUDE.md</code> ships finished work to <code>main</code> unasked, waits for CI, merges on green, never on red, and restarts the branch after a merged PR. Ada's asks for a Verification section and hands testing to Mo. Both are right for their context; the Builder Journal rule exists because Mo tests on the deployed app. The one line worth borrowing exactly: "state plainly what was and was not verified; touch behavior cannot be verified from this environment."</p>
+<h3 id="77-page-size">7.7 Page size</h3>
+<p><code>Admin.tsx</code> at 2,716 lines is the largest file in either repo and holds eight tabs. Builder Journal's admin is three routes and three files. <strong>A5.</strong> Split Ada's admin by tab into <code>src/pages/admin/*</code> before the next tab is added. Effort: M, mechanical.</p>
+<hr />
+<h2 id="8-what-not-to-carry-over">8. What not to carry over</h2>
+<ul>
+<li><strong>Offline and PWA.</strong> Builder Journal's IndexedDB queue exists because capture happens on a phone in a moment. Ada's every turn needs the model; offline coaching is not a product. Keep the manifest and icons, skip the sync queue. Builder Journal itself retired its app-shell service worker after it served stale bundles in preview tabs.</li>
+<li><strong>Spaces, drag-to-reorder, bulk selection, priority temperature.</strong> Ada's sidebar has folders, pin, and drag-to-folder already, at the right size for the number of objects a PM will have.</li>
+<li><strong>Voice capture and dictation.</strong> Not a coaching input yet; if it becomes one, Builder Journal's Dictate-versus-Transcribe naming rule is the thing to remember.</li>
+<li><strong>Build in Public, streaks, reminders, and the email queue.</strong> Different product. The one transferable idea is the "proof level" on a self-reported action, which maps loosely to Ada's assumption status history.</li>
+<li><strong>The paywall and Paddle.</strong> Ada's pricing is an open decision with a note to wait for real cost data. Builder Journal's price changes (three times) and fair-use clause are a cautionary tale, not a template.</li>
+<li><strong>Two toast systems.</strong> Builder Journal runs shadcn toast and Sonner side by side. Ada uses Sonner; keep it that way.</li>
+<li><strong>Window CustomEvents for cross-module coordination.</strong> It works in Builder Journal because modules never share a screen. Ada's sprint page shares state between the thread and the assumption panel; keep that in React state or the URL.</li>
+<li><strong>A "customization by subtraction" layer.</strong> Builder Journal's own kill criterion ("do not turn this into a super app") is the lesson; Ada does not have the surface area to need the feature.</li>
+</ul>
+<hr />
+<h2 id="9-carry-over-plan">9. Carry-over plan</h2>
+<p>Effort: S under a session, M one to two sessions, L several. "Blocks" says what it unblocks.</p>
+<div class="twrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Effort</th>
+<th>Blocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Version badge, <code>package.json</code> at 1.0.0, changelog rule</td>
+<td>S</td>
+<td>health page, release notes</td>
+</tr>
+<tr>
+<td>D1</td>
+<td><code>docs/design.md</code> for Ada</td>
+<td>S</td>
+<td>every UI item below</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Adopt <code>responsive-guidelines.md</code>, run its checklist on Sprint and Intel</td>
+<td>S then M</td>
+<td>375 px QA in the PRD</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>Product rules file, seeded from build logs</td>
+<td>S</td>
+<td>onboarding copy, FAQ</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>Undo on archive and delete</td>
+<td>S</td>
+<td>none</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>Error table with sentences and tests</td>
+<td>S</td>
+<td>intel wait copy</td>
+</tr>
+<tr>
+<td>3.1</td>
+<td>Landing page with pilot disclosure and trust line</td>
+<td>M</td>
+<td>any outside tester</td>
+</tr>
+<tr>
+<td>4.1</td>
+<td>Guide Center: page, table, first content pass</td>
+<td>M</td>
+<td>onboarding tour links</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>Theme switch, contrast theme, text scale, profile persistence</td>
+<td>M</td>
+<td>accessibility claim on landing</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>Token-completeness test</td>
+<td>S</td>
+<td>D3</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>Staged wait copy on intel runs and kickoff</td>
+<td>S</td>
+<td>none</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>Command palette and shortcuts</td>
+<td>S to M</td>
+<td>none</td>
+</tr>
+<tr>
+<td>3.2</td>
+<td>Docs site: five pages served from existing Markdown</td>
+<td>M</td>
+<td>evals page (Part 1, E1)</td>
+</tr>
+<tr>
+<td>4.2</td>
+<td>Quick tour and seeded starter sprint</td>
+<td>M</td>
+<td>4.1</td>
+</tr>
+<tr>
+<td>P1</td>
+<td><code>DetailSurface</code> rendered three ways; migrate assumption edit and competitor confirm</td>
+<td>M</td>
+<td>A5</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>Component tests for sidebar, route guard, feedback, strength meter</td>
+<td>M</td>
+<td>none</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Four Playwright probes at 375 and 1440</td>
+<td>M</td>
+<td>none</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>Split <code>Admin.tsx</code> by tab</td>
+<td>M</td>
+<td>health page</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>Icons on every status pill from one status module</td>
+<td>S</td>
+<td>none</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>Overflow probe</td>
+<td>S</td>
+<td>D2</td>
+</tr>
+</tbody>
+</table></div>
+<p>The first six rows are one focused session and change how every later screen is built. The landing page and Guide Center are the two items the cohort will see first.</p>
+<hr />
+<h2 id="10-risks-and-disagreements">10. Risks and disagreements</h2>
+<ul>
+<li><strong>Risk: copying Builder Journal's density.</strong> Builder Journal's own <code>tasks.md</code> has a debt item called "button and pill sprawl". Ada's restraint is a feature of a coaching product; add controls near the object they affect and nowhere else.</li>
+<li><strong>Risk: a landing page that overclaims.</strong> Builder Journal's rule is real recordings and no numbers that are not measured. Ada's temptation is to describe Run 5 intel as if the competitive-intelligence flow had been verified live; the backlog says it has not. Record it first.</li>
+<li><strong>Disagreement with the backlog on ordering.</strong> The backlog lists the landing page under "needs real content and judgment, not a build task". Half of it is a build task (the page, the recordings, the disclosure banner) and can proceed while the copy is judged. Treat the pilot disclosure and the trust line as blocking content and everything else as iterable.</li>
+<li><strong>Disagreement on the Guide Center's home.</strong> A public <code>/help</code> indexed by search engines (Builder Journal emits FAQ JSON-LD) does marketing work for a product with no landing page. Ada's FAQ should be public from day one, not behind login.</li>
+<li><strong>Flag: the accessibility menu adds a profile column.</strong> <code>user_profiles</code> has an explicit column-level UPDATE grant restricted to <code>display_name</code>. Theme and text scale need their own grants; do not widen the list.</li>
+</ul>
+<hr />
+<h2 id="11-questions-on-adas-direction">11. Questions on Ada's direction</h2>
+<ol>
+<li><strong>Should the landing page present one product with two tracks, or lead with Discovery and mention Portfolio?</strong> The backlog wants Portfolio promoted to a top-level tab; the landing page should match whichever wins. Assumed: two tracks, equal weight.</li>
+<li><strong>Public <code>/help</code> and <code>/docs</code>, or behind login?</strong> Assumed public for both, per section 10.</li>
+<li><strong>Is a contrast theme in scope, or is light and dark enough for now?</strong> Assumed all three, because the token work is the same and the third costs one CSS block.</li>
+<li><strong>Does "Coached by Ada" branding go on the Markdown export too, knowing it can be stripped?</strong> The backlog already accepts that; assumed yes, footer only.</li>
+<li><strong>Which sprint elements should the quick tour point at?</strong> Assumed thread, assumptions panel, intel actions, report. Needs a look at the live page.</li>
+</ol>
+<hr />
+<h2 id="appendix-a-files-consulted">Appendix A. Files consulted</h2>
+<p><strong>Builder Journal (<code>/home/user/davincibuilderjournal001</code>, v2.41.0):</strong> <code>src/App.tsx</code>; <code>src/pages/{Landing,Auth,Index,Settings,HelpCenter,Feedback,Trash,Install,NotFound}.tsx</code>; <code>src/pages/docs/*</code>; <code>src/components/{landing/*,GlobalSearch,KeyboardShortcutsOverlay,GuidedTour,OnboardingChoiceDialog,ShareSheet,ModuleEmptyState,AccessibilityMenu,AppVersionBadge,AiSuggestionBlock,ValidateWithAdaDialog}.tsx</code>; <code>src/components/modules/*</code>; <code>src/lib/{modules,priority,buildStatus,trash,adaBridge,adaHoldingPage,help-format,version,events,interaction-tokens}.ts</code>; <code>src/hooks/{use-keyboard-shortcuts,use-mobile,use-offline}.ts</code>; <code>src/index.css</code>; <code>tailwind.config.ts</code>; <code>docs/design.md</code>; <code>docs/responsive-guidelines.md</code>; <code>docs/rules.md</code>; <code>docs/guide-center-content.md</code>; <code>docs/masterplan.md</code>; <code>docs/tasks.md</code>; <code>docs/prds/*</code>; <code>docs/briefs/*</code>; <code>docs/qa/*</code>; <code>docs/releases/*</code>; <code>docs/changelog.md</code>; <code>supabase/migrations/*</code>; <code>.github/workflows/ci.yml</code>; <code>CLAUDE.md</code>.</p>
+<p><strong>Ada Coach (<code>/home/user/ada-coach</code>):</strong> <code>src/App.tsx</code>; <code>src/pages/*</code>; <code>src/components/{ConversationSidebar,FeedbackFab,FeedbackForm,FeedbackButtons,PasswordStrengthMeter,ProtectedRoute,DemoBadge}.tsx</code>; <code>src/lib/{discovery-api,portfolio-api,admin-api,export,report-pdf,session-recovery,risk}.ts</code>; <code>src/index.css</code>; <code>tailwind.config.ts</code>; <code>public/site.webmanifest</code>; <code>docs/backlog/ada-coach-backlog-v1.md</code>; <code>docs/prds/ada-discovery-coach-v3.md</code>; <code>CLAUDE.md</code>.</p>
+<footer>Ada Coach · docs/analysis · Source of truth is the Markdown file of the same name.</footer>
+</div></body></html>

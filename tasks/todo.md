@@ -7,6 +7,26 @@ platform expansion are Run 2+).
 
 ---
 
+## ✅ Done 2026-09-18 — Builder Journal → Ada carry-over reports (two parts, md/docx/html)
+
+Cohort prep (AI Engineering + AI Evals and Trace). Both repos read directly; two
+subagent surveys of Builder Journal (evals/trace/tokenomics/security; UX/UI/app
+building) plus first-hand reads of every file cited. No code changed.
+
+- [x] Part 1, evals/trace/tokenomics/security/AI engineering: docs/analysis/2026-09-18-bj-to-ada-evals-trace-tokenomics.{md,docx,html}
+- [x] Part 2, UX/UI/app building: docs/analysis/2026-09-18-bj-to-ada-ux-ui-app-building.{md,docx,html}
+- [x] Each part ends with a sequenced carry-over plan and open direction questions for Mo (answers change what gets built, not whether)
+
+## Review
+- Markdown is the source of truth; HTML uses the Ada amber/cream/espresso tokens
+  (Fraunces + Karla); DOCX generated with python-docx and reopened cleanly
+  (LibreOffice render check still unavailable in this container, as before).
+- Headline correction recorded in Part 1: Ada is ahead on tokenomics, routing,
+  retry policy, and the agent loop; Builder Journal's transferable asset is the
+  eval method, the evidence discipline, and the published catalogue.
+
+---
+
 ## ✅ Done 2026-09-12 — Tavily + agent architecture analysis sheet
 
 Direction confirmed by Mo in-session: hybrid Tavily recommendation accepted;
