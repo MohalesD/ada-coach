@@ -99,3 +99,20 @@ generated, shared), drop-off points, and UI errors, sent to an analytics store
 All current telemetry is server-side (`model_usage`, `messages.feedback`,
 `user_feedback`). The blank-page and "what do I do now" problems in the
 walkthrough are exactly what a funnel would have surfaced.
+
+**D-011. Process doctrine for this mega sprint, adopted from the playbooks.** (orchestrator, per Mo's D-003)
+- Two-tier process: a named protected core gets full rigor (red-first tests,
+  fresh-session independent review, QA doc); everything else is built in one
+  session and gated by typecheck + tests + build + Vercel preview + Mo's
+  walkthrough. The Tier 1 list for Ada is proposed in `sprint-1.md` §3 and
+  becomes canon here once Mo confirms it.
+- Three-tier verification: machine gates, Playwright pre-human pass, Mo's
+  batched walkthrough. A QA "pass" is never recorded while a named criterion
+  is unverified; record pending or failed.
+- Decisions document before any long run (this file). Review findings are
+  logged in a ledger per sprint file. Deferred acceptance gaps ship as
+  expected-fail tests, not silence.
+- Judgment-heavy UI work goes through Plan Mode with a mockup before any
+  `/goal`; `/goal` is reserved for mechanically checkable finish lines.
+- Accretive files (this ledger, sprint files, logs) are append-only. No agent
+  is ever told to overwrite one.

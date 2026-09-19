@@ -1,5 +1,40 @@
 # Ada Coach — Task Tracker
 
+## 📋 PLAN 2026-09-19 — Mega Sprint 2 / Sprint 1: Portfolio Project polish
+
+Plan: `docs/mega-sprint-2/sprint-1.md`. Decisions: `docs/mega-sprint-2/memory.md`.
+Waiting on Mo's answers to sprint-1.md §7 before any code. Nothing below starts
+until then.
+
+Pass A — reconnect the engine (Tier 1 process: red tests, fresh-session review)
+- [ ] A1 Credits gate + decrement on portfolio-ideas / portfolio-coach / portfolio-plan; 402 in portfolio-api; counter in shared shell
+- [ ] A2 `coaching_prompts.track` migration (MCP apply + filename rename); portfolio prompts as rows; `coaching_prompt_id` on portfolio assistant rows; thumbs in workspace; insights + Prompts tab by track
+- [ ] A3 `kind='summary'` for portfolio on DRAFT READY / on demand; export includes it
+- [ ] A4 `conversations.track` migration + backfill; sidebar routes portfolio rows to the workspace, sprint rows to /sprint
+- [ ] A5 `events` table + `track()` helper; portfolio funnel events; Insights funnel card
+- [ ] A6 Profile digest: retry, loud failure state, "Your background" card shows digest fields
+- [ ] Pass A review round 1 (fresh session) + round 2 (cross-model); ledger entries in sprint-1.md §9
+
+Pass B — workspace and landing UX (Tier 2; Plan Mode + HTML mockup first)
+- [ ] B1 Kickoff turn (shared with sprint-kickoff pattern) + prompt contract
+- [ ] B2 Section manifest per artifact type; roadmap in draft rail; coach prompt generated from the manifest
+- [ ] B3 App shell around portfolio pages (header, credits, avatar menu, collapsible rail, focus mode)
+- [ ] B4 Idea states parked/archived, "generate more" with steering, optional intake questions
+- [ ] B5 Hide ideation message from the workspace thread
+- [ ] B6 Layout: wider column, resizable draft rail, responsive checklist, Playwright overflow probe
+- [ ] B7 Mermaid rendering in sections + PDF
+- [ ] B8 "Export for Claude Code" markdown pack
+- [ ] Pass B review round (fresh session) + Mo walkthrough on Vercel preview
+
+Pass C — coordinator readiness
+- [ ] C1 Extract `_shared/portfolio-coach-core.ts` (context assembly / turn execution / persistence)
+- [ ] C2 `docs/architecture/portfolio-coach-seams.md`
+
+Close-out
+- [ ] Review section in sprint-1.md §10; changelog; pm-sync to Linear + Notion
+
+---
+
 Reconciled 2026-07-04 at the start of the Run 1 `/goal` build. Prior
 "Active focus" items are subsumed by the Run 1 plan below (NEXT-01
 session-scoped uploads is a Run 1 task; agent-loop redesign and further
