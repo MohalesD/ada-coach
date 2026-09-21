@@ -5,6 +5,7 @@
 // - requireAdmin → user + profile, gated to role in ('admin','owner')
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { extractDefaultKey } from "./keys.ts";
 
 // Origin allowlist for CORS. Set ALLOWED_ORIGINS in Supabase secrets as a
 // comma-separated list, e.g.:
@@ -59,22 +60,28 @@ function envOrThrow(name: string): string {
 // All queries are RLS-enforced as the calling user.
 export function getUserClient(req: Request): SupabaseClient {
   const supabaseUrl = envOrThrow("SUPABASE_URL");
-  const anonKey = envOrThrow("SUPABASE_ANON_KEY");
+  const publishableKey = extractDefaultKey(
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
+    "SUPABASE_PUBLISHABLE_KEYS",
+  );
   const authHeader = req.headers.get("Authorization") ?? "";
 
-  return createClient(supabaseUrl, anonKey, {
+  return createClient(supabaseUrl, publishableKey, {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false },
   });
 }
 
-// Service-role client. Bypasses RLS — use only for trusted writes
+// Secret-key client. Bypasses RLS — use only for trusted writes
 // (e.g. stamping assistant messages, fetching the active prompt).
 export function getServiceClient(): SupabaseClient {
   const supabaseUrl = envOrThrow("SUPABASE_URL");
-  const serviceRoleKey = envOrThrow("SUPABASE_SERVICE_ROLE_KEY");
+  const secretKey = extractDefaultKey(
+    Deno.env.get("SUPABASE_SECRET_KEYS"),
+    "SUPABASE_SECRET_KEYS",
+  );
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(supabaseUrl, secretKey, {
     auth: { persistSession: false },
   });
 }

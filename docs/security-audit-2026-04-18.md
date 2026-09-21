@@ -86,7 +86,7 @@ await supabase.from('user_profiles').update({ role: 'owner' }).eq('id', user.id)
 - **Conversation ownership is checked correctly in `chat`.** Before the service-role client writes anything, `chat/index.ts:94-108` uses the RLS-bound `userClient` to confirm the user owns the conversation_id. A user can't smuggle a `conversation_id` belonging to someone else.
 - **Anonymous role is locked out everywhere.** No table grants `anon` any policy.
 - **The good column-grant pattern exists** for `messages.feedback`. Authenticated users can update *only* the feedback column on their own assistant messages.
-- **No backend secrets in the frontend.** `ANTHROPIC_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` only appear server-side. Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are bundled.
+- **No backend secrets in the frontend.** `ANTHROPIC_API_KEY` and `SUPABASE_SECRET_KEYS` only appear server-side. Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` are bundled. *(Updated 2026-09-20 for the publishable/secret key migration — see `tasks/todo.md`; this audit's other findings are otherwise as of 2026-04-18.)*
 - **`.env.local` is properly gitignored** (`.gitignore` excludes `.env`, `.env.local`, `.env.*.local`).
 - **Auth uses bearer tokens in headers, not cookies.** Inherently CSRF-resistant — browsers don't auto-attach `Authorization` headers cross-origin.
 - **Markdown is rendered safely.** `ReactMarkdown` with only `remarkGfm` (no `rehype-raw`) doesn't render raw HTML.

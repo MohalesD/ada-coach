@@ -34,6 +34,7 @@ import {
   jsonResponse,
   requireUser,
 } from "../_shared/auth.ts";
+import { extractDefaultKey } from "../_shared/keys.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { getModelFor } from "../_shared/models.ts";
 import { recordModelUsage } from "../_shared/usage.ts";
@@ -106,7 +107,10 @@ async function invokeFunction(
     headers: {
       "content-type": "application/json",
       Authorization: req.headers.get("Authorization") ?? "",
-      apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      apikey: extractDefaultKey(
+        Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
+        "SUPABASE_PUBLISHABLE_KEYS",
+      ),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

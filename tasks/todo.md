@@ -7,6 +7,63 @@ platform expansion are Run 2+).
 
 ---
 
+## ✅ Done 2026-09-20 — Migrate to Supabase publishable/secret keys
+
+Legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (server) and
+`VITE_SUPABASE_ANON_KEY` (frontend) replaced with the new JSON-map key
+system (`SUPABASE_SECRET_KEYS`, `SUPABASE_PUBLISHABLE_KEYS`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`), no fallback to legacy names. Full-repo
+inventory (two Explore agents + graphify, cross-checked with grep) found
+readers beyond the four files originally named: `discovery-turn/index.ts`'s
+internal fan-out `apikey` header, and `scripts/rag-regression.mjs`.
+
+- [x] TDD: Test Author subagent wrote failing Vitest tests for
+      `extractDefaultKey()` first (12 cases), confirmed they failed for the
+      right reason, handed off via `.claude/handoff/navigator.md`
+- [x] New shared helper `supabase/functions/_shared/keys.ts` (+ tests) —
+      parses `{"default": "..."}` out of a JSON key-map env var, throws a
+      named error for unset/invalid-JSON/missing-default
+- [x] `supabase/functions/_shared/auth.ts` — `getServiceClient()` /
+      `getUserClient()` rewired to `SUPABASE_SECRET_KEYS` /
+      `SUPABASE_PUBLISHABLE_KEYS`
+- [x] `supabase/functions/discovery-turn/index.ts` — internal fan-out
+      `apikey` header rewired (was a silent `?? ""` fallback, now throws)
+- [x] `scripts/rag-regression.mjs` — inline-duplicated parse logic (plain
+      Node script, can't import the `.ts` helper), `SERVICE_ROLE` legacy
+      fallback name dropped
+- [x] Frontend: `src/lib/supabase.ts`, `src/lib/admin-api.ts`,
+      `src/lib/account.ts` — `VITE_SUPABASE_ANON_KEY` →
+      `VITE_SUPABASE_PUBLISHABLE_KEY`; `apikey` header only, `Authorization`
+      (session JWT) untouched
+- [x] Docs: `.env.example`, `CLAUDE.md` (Required Supabase Secrets +
+      `smoke-ingest.mjs` description), `docs/security-audit-2026-04-18.md`
+- [x] Database caller inventory (report only): zero `pg_net`/`net.http_post`/
+      `supabase_functions.http_request`/Vault references and zero hardcoded
+      keys anywhere in `supabase/migrations`; `send-welcome-email`'s only
+      caller is `src/pages/Login.tsx` (frontend, already covered)
+- [x] `scripts/smoke-ingest.mjs` confirmed not present in the repo or git
+      history — only `CLAUDE.md`'s description of it existed; fixed the
+      doc's env-var wording, did not fabricate the script
+- [ ] Canary deploy `admin-insights` alone, confirm in browser, then deploy
+      the remaining ~33 functions with each function's live `verify_jwt`
+      preserved exactly (not `config.toml`'s value)
+- [ ] Post-deploy fidelity check: `get_edge_function` on `discovery-turn`,
+      `chat`, `bridge-intake`, diff against committed source
+
+## Review
+
+Full plan: `C:\Users\mohal\.claude\plans\pasted-content-id-a5e8-migrate-ada-coac-virtual-donut.md`.
+`SUPABASE_URL` is unrelated to this migration and untouched. The stray
+`VITE_SUPABASE_ANON_KEY` Edge Function secret (dated 2026-04-15, flagged by
+Mo) is confirmed unused by any Edge Function source but left in place —
+report only, not deleted. `config.toml`'s `verify_jwt` values were not
+touched; four functions (`admin-users`, `admin-feedback`,
+`admin-feedback-reply`, `send-welcome-email`) have no `config.toml` block at
+all and were deployed with per-call `verify_jwt` via the MCP path — a
+pre-existing drift, not caused by or fixed in this change.
+
+---
+
 ## ✅ Done 2026-09-12 — Tavily + agent architecture analysis sheet
 
 Direction confirmed by Mo in-session: hybrid Tavily recommendation accepted;
@@ -1188,8 +1245,10 @@ is wrong.
          for the deletion log, we never use it to contact you, and the reply-to address you
          attached to feedback is erased.* Say that instead; a privacy notice that overstates
          protection is worse than one that is plainly true.
-      2. Mo wrote `mohallastays@gmail.com` as the contact address. `/privacy` currently lists
-         `mohalesdeis@gmail.com`. **Which is correct?** Do not guess.
+      2. ~~Mo wrote `mohallastays@gmail.com` as the contact address. `/privacy` currently lists
+         `mohalesdeis@gmail.com`. **Which is correct?** Do not guess.~~ **Resolved 2026-09-08:**
+         `mohallastays@gmail.com` was a dictation error (Typeless). `mohalesdeis@gmail.com` is
+         correct and already what `/privacy` publishes — no code change needed.
 - [ ] **Update sign-up sheet for the landing page.** So people who want to hear about changes
       have a path that does not require an account. Later, a surface inside the app too.
 - [ ] **Public "What's new" page, written as a press release rather than a changelog.**

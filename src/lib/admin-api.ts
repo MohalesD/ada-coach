@@ -23,8 +23,8 @@ async function adminFetch<T>(functionName: string, opts: RequestOptions = {}): P
   if (!token) throw new UnauthorizedError();
 
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!baseUrl || !anonKey) {
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!baseUrl || !publishableKey) {
     throw new Error('Supabase env vars missing');
   }
 
@@ -38,7 +38,7 @@ async function adminFetch<T>(functionName: string, opts: RequestOptions = {}): P
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${token}`,
-      apikey: anonKey,
+      apikey: publishableKey,
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
