@@ -62,7 +62,7 @@ Browser → React (Vite) → Supabase Edge Function
 4. Edge Functions receive the JWT in `Authorization: Bearer <token>`:
    - `requireUser()` — validates JWT, returns `{ user, userClient }` (RLS-bound)
    - `requireAdmin()` — calls `requireUser()` then checks `user_profiles.role in ('admin','owner')`
-5. `getServiceClient()` uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS for trusted writes
+5. `getServiceClient()` uses `SUPABASE_SECRET_KEYS` (JSON map, parses out `["default"]`) to bypass RLS for trusted writes
 
 All shared auth helpers live in `supabase/functions/_shared/auth.ts`.
 
@@ -208,7 +208,7 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 
 - **`chat`** — `POST { message, conversation_id? }`. Verifies ownership (RLS), fetches active prompt + last 20 messages, calls Claude, persists both turns, returns `{ reply, conversation_id, message_id, kind, credits_remaining }`. Tags assistant messages with `coaching_prompt_id` (for analytics).
   - **Credits**: calls `fn_reset_credits_if_due` before the Claude call. If credits are tracked and `<= 0`, returns 402 `{ error: "credits_exhausted", credits_remaining: 0 }`. Decrements credits (service-role write) after a successful reply and surfaces the new balance in the response. `credits_remaining: null` = unlimited.
-  - **RAG (currently disabled)**: the retrieval block calls `match_document_chunks` via the service client and prepends the top chunks to the user message, but the call is gated by an `ARM B EVAL: RAG DISABLED` flag. Re-enable by removing that gate — do not delete the block.
+  - **RAG (live in production since 2026-07-10)**: the retrieval block calls `match_document_chunks` via the service client and prepends the top chunks to the user message on every qualifying turn, at `match_threshold: 0.45`. The `ARM B EVAL: RAG DISABLED` gate was removed 2026-07-10 (see `docs/rag-architecture.md`); there is no flag left to flip.
   - **Summary sentinel**: when `message === '__SUMMARY__'`, the function swaps in `SUMMARY_SYSTEM_PROMPT`, requires an existing `conversation_id`, **does not** persist the synthetic user turn, and stores the assistant reply with `kind = 'summary'`. Anthropic requires a trailing user turn, so a non-persisted directive is appended to the request only.
 - **`admin-conversations`** — `GET` (list with counts), `GET ?id=` (full messages), `PATCH ?id=` (update status). Requires admin/owner.
 - **`admin-prompts`** — `GET` (list), `POST` (create, auto-versions), `POST ?id=&action=activate`, `PUT ?id=` (update), `DELETE ?id=` (blocked if active). Requires admin/owner.
@@ -270,7 +270,8 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - `ANTHROPIC_API_KEY` — used by `chat` (Claude calls)
 - `OPENAI_API_KEY` — used by `ingest` (embeddings)
 - `ALLOWED_ORIGINS` — comma-separated CORS allowlist
-- `SUPABASE_SERVICE_ROLE_KEY` — auto-injected; consumed by `getServiceClient()`
+- `SUPABASE_SECRET_KEYS` — JSON map, `{"default":"sb_secret_..."}`; `getServiceClient()` parses out `["default"]`
+- `SUPABASE_PUBLISHABLE_KEYS` — JSON map, `{"default":"sb_publishable_..."}`; `getUserClient()` (and `discovery-turn`'s internal fan-out) parse out `["default"]`
 - `RESEND_API_KEY` + `EMAIL_FROM` — optional; used by `_shared/email.ts` for the deletion
   confirmation. When unset, the send is skipped and logged; deletion still succeeds.
 - `BRIDGE_SHARED_SECRET` + `APP_URL` — used by `bridge-intake` (32 random bytes base64, the same
@@ -293,7 +294,7 @@ Key constraints to preserve when editing the system prompt:
 
 ## Scripts
 
-- `scripts/smoke-ingest.mjs` — end-to-end smoke test for the `ingest` Edge Function. Mints an owner JWT via `auth/admin/generate_link` (token_hash → email_otp fallback) and POSTs to `/functions/v1/ingest`. Run with `SUPABASE_URL`, `SERVICE_ROLE`, `ANON`, `OWNER_EMAIL`, `DOCUMENT_ID` env vars. Use this to verify a deployed `ingest` function before wiring it into the UI.
+- `scripts/smoke-ingest.mjs` — end-to-end smoke test for the `ingest` Edge Function. Mints an owner JWT via `auth/admin/generate_link` (token_hash → email_otp fallback) and POSTs to `/functions/v1/ingest`. Run with `SUPABASE_URL`, `SUPABASE_SECRET_KEYS`, `SUPABASE_PUBLISHABLE_KEYS`, `OWNER_EMAIL`, `DOCUMENT_ID` env vars. Use this to verify a deployed `ingest` function before wiring it into the UI.
 
 ## Docs
 

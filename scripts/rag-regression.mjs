@@ -21,7 +21,14 @@
 //
 // Required env vars (put these in .env.local or export before running):
 //   SUPABASE_URL or VITE_SUPABASE_URL   — project URL
-//   SUPABASE_SERVICE_ROLE_KEY           — bypasses RLS to read document_chunks
+//   SUPABASE_SECRET_KEYS                — JSON map, e.g. {"default":"sb_secret_..."};
+//                                          the "default" entry bypasses RLS to read
+//                                          document_chunks. Mirrors extractDefaultKey()
+//                                          in supabase/functions/_shared/keys.ts (tested
+//                                          under Vitest there) — duplicated here, not
+//                                          imported, since this is a plain Node script and
+//                                          Node can't import a .ts module without a build
+//                                          step. Keep the two in sync by hand.
 //   OPENAI_API_KEY                      — text-embedding-3-small
 //   ANTHROPIC_API_KEY                   — claude-haiku-4-5-20251001
 //
@@ -71,6 +78,29 @@ function requireEnv(name, ...fallbacks) {
   return null;
 }
 
+// Mirrors extractDefaultKey() in supabase/functions/_shared/keys.ts (tested
+// under Vitest there). Duplicated here, not imported — this is a plain Node
+// script run via `node scripts/rag-regression.mjs`, and Node can't import a
+// .ts module without a build step. Keep the two in sync by hand; if this
+// script ever needs more than this, promote the shared logic instead.
+// Returns null (rather than throwing) so the caller can collect every
+// missing/malformed var and report them all at once, matching this script's
+// existing "collect all missing vars" UX.
+function extractDefaultKey(rawValue) {
+  if (!rawValue) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch {
+    return null;
+  }
+  const value =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed["default"]
+      : undefined;
+  return typeof value === "string" && value ? value : null;
+}
+
 function parseQuestions(docText) {
   const lines = docText.split("\n");
   let tier = "unknown";
@@ -116,11 +146,13 @@ function buildInjectedSystemPrompt(basePrompt, chunks) {
 async function main() {
   const missing = [];
   const supabaseUrl = requireEnv("SUPABASE_URL", "VITE_SUPABASE_URL");
-  const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY", "SERVICE_ROLE");
+  const secretKeysRaw = requireEnv("SUPABASE_SECRET_KEYS");
+  const secretKey = extractDefaultKey(secretKeysRaw);
   const openaiKey = requireEnv("OPENAI_API_KEY");
   const anthropicKey = requireEnv("ANTHROPIC_API_KEY");
   if (!supabaseUrl) missing.push("SUPABASE_URL (or VITE_SUPABASE_URL)");
-  if (!serviceRoleKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!secretKeysRaw) missing.push("SUPABASE_SECRET_KEYS (not set)");
+  else if (!secretKey) missing.push('SUPABASE_SECRET_KEYS (invalid JSON or missing "default" key)');
   if (!openaiKey) missing.push("OPENAI_API_KEY");
   if (!anthropicKey) missing.push("ANTHROPIC_API_KEY");
 
@@ -145,7 +177,7 @@ async function main() {
   }
   console.log(`Parsed ${questions.length} questions from ${path.basename(EVAL_DOC)}`);
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+  const supabase = createClient(supabaseUrl, secretKey, { auth: { persistSession: false } });
   const openai = new OpenAI({ apiKey: openaiKey });
   const anthropic = new Anthropic({ apiKey: anthropicKey });
 

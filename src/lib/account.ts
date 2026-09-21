@@ -23,7 +23,7 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
   if (!token) return { ok: false, error: 'unauthorized' };
 
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   let response: Response;
   try {
@@ -31,7 +31,7 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
-        apikey: anonKey,
+        apikey: publishableKey,
       },
     });
   } catch {
