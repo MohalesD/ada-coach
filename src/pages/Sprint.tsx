@@ -161,7 +161,9 @@ function WorkingNote({ label }: { label: string }) {
 // A Builder Journal arrival (Spec 4 §9) announces itself once, on the visit
 // that came through /bridge: read from the URL on mount, then dropped from it
 // so a refresh or a shared link doesn't keep claiming "just signed in".
-type Arrival = { mode: 'permanent' | 'session' };
+// `self` is an admin or owner arrival: the idea came through the bridge, but
+// Ada did not sign them in (bridge-launch.ts), so the banner must not say so.
+type Arrival = { mode: 'permanent' | 'session'; self: boolean };
 
 export default function Sprint() {
   const { sessionId = '' } = useParams();
@@ -170,9 +172,13 @@ export default function Sprint() {
 
   const [arrival, setArrival] = useState<Arrival | null>(null);
   useEffect(() => {
-    if (searchParams.get('arrived') !== 'bridge') return;
+    const arrived = searchParams.get('arrived');
+    if (arrived !== 'bridge' && arrived !== 'bridge-self') return;
     const mode = searchParams.get('mode');
-    setArrival({ mode: mode === 'permanent' ? 'permanent' : 'session' });
+    setArrival({
+      mode: mode === 'permanent' ? 'permanent' : 'session',
+      self: arrived === 'bridge-self',
+    });
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -647,15 +653,19 @@ export default function Sprint() {
                 role="status"
                 className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-secondary/60 px-2.5 py-0.5 text-[11px] font-medium text-foreground"
               >
-                Signed in through Builder Journal
+                {arrival.self ? 'Arrived from Builder Journal' : 'Signed in through Builder Journal'}
                 <span className="text-muted-foreground" aria-hidden>
                   ·
                 </span>
                 <span className="text-muted-foreground">
-                  {arrival.mode === 'permanent' ? 'accounts linked' : 'this session only'}
+                  {arrival.self
+                    ? 'you signed in yourself'
+                    : arrival.mode === 'permanent'
+                      ? 'accounts linked'
+                      : 'this session only'}
                 </span>
               </span>
-              {messages.some((m) => m.role === 'assistant') && (
+              {!arrival.self && messages.some((m) => m.role === 'assistant') && (
                 <span className="text-[11px] text-muted-foreground">
                   Ada's first read used one of your daily messages.
                 </span>

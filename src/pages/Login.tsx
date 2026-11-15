@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { PasswordStrengthMeter } from '@/components/PasswordStrengthMeter';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { safeReturnTo } from '@/lib/return-to';
 import DemoBadge from '@/components/DemoBadge';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'magic';
@@ -27,6 +28,10 @@ export default function Login() {
   // Set by Settings after a successful self-serve deletion (Spec 1).
   const accountDeleted =
     (location.state as { accountDeleted?: boolean } | null)?.accountDeleted === true;
+  // Set by /bridge when an admin handoff arrives with no session (Spec 4
+  // addendum). Validated to one exact shape; anything else falls back to "/".
+  const afterSignIn =
+    safeReturnTo((location.state as { returnTo?: unknown } | null)?.returnTo) ?? '/';
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -99,7 +104,7 @@ export default function Login() {
   const isValid = Object.keys(errors).length === 0;
 
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={afterSignIn} replace />;
 
   const switchToSignIn = () => {
     setMode('signin');
@@ -123,7 +128,7 @@ export default function Login() {
           setFormError(result.error);
           return;
         }
-        navigate('/', { replace: true });
+        navigate(afterSignIn, { replace: true });
         return;
       }
 

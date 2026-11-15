@@ -7,19 +7,30 @@
 // is single-use and expires with the project's OTP window, and `sprint` is
 // only ever used as a navigation target that the sprint page itself
 // re-authorizes through RLS.
+//
+// Second arrival shape (Spec 4 addendum, 2026-11-15): `?signin=self&sprint=…`
+// with no `th`. Ada never mints a sign-in for an admin or owner account from
+// the bridge, so those handoffs carry no credential. This page then uses the
+// session the browser already has, or sends the person to /login and brings
+// them back to the sprint afterwards. It grants nothing: the URL is a sprint
+// id, and the sprint page's RLS is the only thing that decides who sees it.
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DemoBadge from '@/components/DemoBadge';
+import { bridgeReturnTo } from '@/lib/return-to';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 const STEPS = ['Idea received', 'Signed in', 'Opening your sprint'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type State = { kind: 'working'; step: number } | { kind: 'failed' };
+type State =
+  | { kind: 'working'; step: number }
+  | { kind: 'failed' }
+  | { kind: 'signin'; returnTo: string };
 
 export default function Bridge() {
   const navigate = useNavigate();
@@ -33,7 +44,36 @@ export default function Bridge() {
     const modeParam = params.get('mode');
     const mode = modeParam === 'permanent' || modeParam === 'session' ? modeParam : 'session';
 
-    if (!tokenHash || !sprint || !UUID_RE.test(sprint)) {
+    if (!sprint || !UUID_RE.test(sprint)) {
+      setState({ kind: 'failed' });
+      return;
+    }
+
+    // No credential in the URL: use the session already here, or ask for one.
+    if (!tokenHash && params.get('signin') === 'self') {
+      const returnTo = bridgeReturnTo(sprint, mode, true);
+      (async () => {
+        setState({ kind: 'working', step: 1 });
+        // A session lookup that throws is treated as "no session": the person
+        // can always sign in, and a spinner that never resolves helps nobody.
+        const session = await supabase.auth
+          .getSession()
+          .then((r) => r.data.session)
+          .catch(() => null);
+        if (cancelled) return;
+        if (!session) {
+          setState({ kind: 'signin', returnTo });
+          return;
+        }
+        setState({ kind: 'working', step: 2 });
+        navigate(returnTo, { replace: true });
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!tokenHash) {
       setState({ kind: 'failed' });
       return;
     }
@@ -104,6 +144,29 @@ export default function Bridge() {
                 })}
               </ol>
               <p className="mt-6 text-center text-xs text-muted-foreground">
+                Arriving from AI Builder Journal
+              </p>
+            </CardContent>
+          </Card>
+        ) : state.kind === 'signin' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Your sprint is ready</CardTitle>
+              <CardDescription>
+                Your idea arrived and Ada has read it. This is an admin account, so Ada does
+                not sign it in from another app. Sign in yourself and you will land straight
+                in the sprint.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                to="/login"
+                state={{ returnTo: state.returnTo }}
+                className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                Sign in to open it
+              </Link>
+              <p className="mt-4 text-center text-xs text-muted-foreground">
                 Arriving from AI Builder Journal
               </p>
             </CardContent>
