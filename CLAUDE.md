@@ -247,8 +247,8 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
   (`X-Bridge-Timestamp`, `X-Bridge-Request-Id`, `X-Bridge-Signature` over
   `timestamp.request_id.raw_body` with `BRIDGE_SHARED_SECRET`, ±300 s window, constant-time
   compare in `_shared/bridge-signature.ts`); it never calls `requireUser()`. Returns 503
-  `bridge_disabled` until `BRIDGE_SHARED_SECRET` **and** `APP_URL` are set, which is the launch
-  gate (Mo's deletion dry run + delta audit first). `POST { action: 'handoff', bj_user_id, email,
+  `bridge_disabled` unless `BRIDGE_SHARED_SECRET` **and** `APP_URL` are set. Both are set in
+  production; the bridge has been live since 2026-09-11. `POST { action: 'handoff', bj_user_id, email,
   display_name?, link_mode, idea: { id, title, brief, … } }`: daily cap 20/UTC-day per
   `bj_user_id` (429), same idea again → existing sprint (200 `resumed: true`) or 410
   `sprint_deleted`, find-or-create the Ada user by `bridge_identities` then verified email then
@@ -290,8 +290,9 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - `RESEND_API_KEY` + `EMAIL_FROM` — optional; used by `_shared/email.ts` for the deletion
   confirmation. When unset, the send is skipped and logged; deletion still succeeds.
 - `BRIDGE_SHARED_SECRET` + `APP_URL` — used by `bridge-intake` (32 random bytes base64, the same
-  value in Builder Journal's secrets; `https://ada-coach.vercel.app`). **Deliberately unset until
-  the launch gate passes**; the function returns 503 without them and writes nothing.
+  value in Builder Journal's secrets; `https://ada-coach.vercel.app`). **Set in production: the
+  bridge is live** (real handoffs since 2026-09-11; a signed request on 2026-11-15 was answered,
+  not refused with 503). The function still fails closed with 503 if either is ever removed.
 
 ## Ada's Coaching Persona (System Prompt)
 
