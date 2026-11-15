@@ -1576,3 +1576,64 @@ each was resolved:**
 these changes — all pre-existing on the branch, none introduced here.
 
 **Not done, deliberately:** deploy and the Linear close. Both wait on Mo.
+
+
+---
+
+## ✅ 2026-11-15 — Spec 4 addendum: the owner can use the bridge (no sign-in minted)
+
+Branch `claude/festive-goodall-qhvufk`. Mo approved the design in chat ("Go build it").
+Supersedes the 2026-09-07 judgment call above ("403 `privileged_account`"); that line is left
+as written because it was true on its day.
+
+**Problem.** Mo is owner on Ada and uses the same email in Builder Journal. The guard refused
+his handoffs whole, so the feature he built for himself only worked from a second account.
+
+**Decision.** Split the bridge's two jobs. Write the sprint for every role; mint a sign-in only
+for role `user`. A privileged account gets `signin: 'self'` and a URL with no credential.
+
+- [x] `_shared/bridge-launch.ts` (+ 9 Vitest): `launchSignIn` (allowlist on `user`, fails
+      closed), `buildLaunchUrl` (no token on a self launch, origin pinned to `APP_URL`),
+      `TARGET_DAILY_HANDOFF_CAP`
+- [x] `bridge-intake`: 403 removed on both paths (new sprint, resume); `mintLaunchUrl` only
+      calls `generateLink` for `magiclink`; response carries `signin`; privileged handoffs
+      logged by request id
+- [x] `src/lib/return-to.ts` (+ 5 Vitest): exact-shape allowlist for the post-login path
+- [x] `/bridge` self path, `/login` honours `returnTo`, sprint banner says "Arrived from
+      Builder Journal · you signed in yourself" for a self arrival
+- [x] CLAUDE.md updated
+
+### Review
+
+Independent review by a fresh subagent with no build context: **ship with fixes**. It found no
+path that mints a sign-in for a non-`user` role. Fixed from its findings before commit:
+
+1. Role was checked on the profile row but the link was minted for an email string, and
+   `user_profiles.email` is not kept in step with `auth.users`. Now the link is discarded
+   unless `data.user.id === profile.id`.
+2. The role snapshot was up to two model calls old at mint time. Now re-read by id inside
+   `mintLaunchUrl`.
+3. The new target cap was check-then-insert, so a concurrent burst could exceed it. Now
+   recounted after the handoff insert, with rollback when over.
+4. A self arrival showed "Signed in through Builder Journal" and the credits line. Now a
+   distinct `arrived=bridge-self`.
+5. A `getSession()` rejection left the spinner up. Now treated as "no session".
+
+Accepted, not fixed (all need the shared secret):
+- Up to 20 unwanted sprints a day can be written into the owner's account, each with a
+  classifier call and a coach turn. No access is gained.
+- `unlink` then a handoff with another email re-points a Builder Journal id. Pre-existing for
+  every role, and worse for `user` than for owner.
+- Rotating emails as well as ids creates unlimited shadow accounts. Pre-existing; the true fix
+  is DEU-92 (rate limiting).
+- Magic-link mode on `/login` drops `returnTo`; password sign-in and the already-signed-in
+  redirect honour it.
+
+**Verification:** `npm run type-check` clean; `npm test` 162/162 across 17 files; lint shows the
+same pre-existing `set-state-in-effect` errors as `main`, none new. Deno has no local runner
+here, so `bridge-intake/index.ts` itself is unexecuted until deploy; its decision logic lives in
+the two tested pure modules.
+
+**Deploy order (irreversible step last):** merge → Vercel serves the new `/bridge` → deploy
+`bridge-intake`. Deploying the function first would send an owner to a `/bridge` page that does
+not know `signin=self` and shows "This link expired".

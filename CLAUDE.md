@@ -247,21 +247,36 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
   (`X-Bridge-Timestamp`, `X-Bridge-Request-Id`, `X-Bridge-Signature` over
   `timestamp.request_id.raw_body` with `BRIDGE_SHARED_SECRET`, ±300 s window, constant-time
   compare in `_shared/bridge-signature.ts`); it never calls `requireUser()`. Returns 503
-  `bridge_disabled` until `BRIDGE_SHARED_SECRET` **and** `APP_URL` are set, which is the launch
-  gate (Mo's deletion dry run + delta audit first). `POST { action: 'handoff', bj_user_id, email,
+  `bridge_disabled` unless `BRIDGE_SHARED_SECRET` **and** `APP_URL` are set. Both are set in
+  production; the bridge has been live since 2026-09-11. `POST { action: 'handoff', bj_user_id, email,
   display_name?, link_mode, idea: { id, title, brief, … } }`: daily cap 20/UTC-day per
   `bj_user_id` (429), same idea again → existing sprint (200 `resumed: true`) or 410
   `sprint_deleted`, find-or-create the Ada user by `bridge_identities` then verified email then
-  `auth.admin.createUser` (confirmed, no password, `user_metadata.bridge_source`), **403
-  `privileged_account` if the email resolves to an admin/owner** (a leaked secret must not mint
-  an owner sign-in), handoff row inserted before any model spend (replay → 409), product with
-  `source = 'builder_journal'`, `createSprint` + `kickoffSprint`, then
-  `auth.admin.generateLink({ type: 'magiclink' })` → `hashed_token` → 201
-  `{ url: APP_URL/bridge?th=…&sprint=…&mode=…, … }`. The URL is never logged. Any failure after
+  `auth.admin.createUser` (confirmed, no password, `user_metadata.bridge_source`), a second cap
+  of 20/UTC-day per **receiving** account (429; counted before and again after the handoff
+  insert, because the sender id is chosen by whoever holds the secret), handoff row inserted
+  before any model spend (replay → 409), product with `source = 'builder_journal'`,
+  `createSprint` + `kickoffSprint`, then the launch URL → 201 `{ url, signin, … }`. The URL is
+  never logged.
+  - **Who gets signed in (addendum 2026-11-15, `_shared/bridge-launch.ts`).** The bridge does two
+    separable things: it writes a sprint, and it mints a sign-in. Only role `user` gets the
+    second: `generateLink({ type: 'magiclink' })` → `hashed_token` →
+    `APP_URL/bridge?th=…&sprint=…&mode=…`, `signin: 'magiclink'`. **Every other role, admin and
+    owner included, gets the sprint and no credential**: `APP_URL/bridge?signin=self&sprint=…`,
+    `signin: 'self'`. This replaced the old `403 privileged_account`, which protected the same
+    thing (a leaked secret must never become an owner session) by refusing the whole handoff, so
+    Ada's own owner could not use the feature. `launchSignIn` is an allowlist on `'user'`; an
+    unknown role fails to `self`. Do not turn it into a denylist.
+  - The role is re-read by id immediately before minting, and the minted link is discarded
+    unless `data.user.id === profile.id` (`user_profiles.email` is an unsynced copy of the auth
+    email, so the email alone does not prove whose link it is). Any failure after
   the handoff insert rolls back handoff + conversation + product so the request id is not
   consumed. `POST { action: 'unlink', bj_user_id }` drops the identity row. Body validation in
   `_shared/bridge-payload.ts` (manual, no Zod). Frontend: `/bridge` (public) exchanges `th` via
-  `verifyOtp` and opens `/sprint/:id?arrived=bridge&mode=…`; the sprint header shows the arrival;
+  `verifyOtp` and opens `/sprint/:id?arrived=bridge&mode=…`; with `signin=self` it uses the
+  session already in the browser, or sends the person to `/login` and back to the sprint
+  (`src/lib/return-to.ts`, an exact-shape allowlist, not "any path starting with /") with
+  `arrived=bridge-self`; the sprint header shows the arrival and words it truthfully for each;
   Settings offers bridge-created users an email link to set a password (the change-password form
   needs a current one).
 
@@ -275,8 +290,9 @@ All functions require a valid Supabase Auth JWT. CORS is gated by an allowlist �
 - `RESEND_API_KEY` + `EMAIL_FROM` — optional; used by `_shared/email.ts` for the deletion
   confirmation. When unset, the send is skipped and logged; deletion still succeeds.
 - `BRIDGE_SHARED_SECRET` + `APP_URL` — used by `bridge-intake` (32 random bytes base64, the same
-  value in Builder Journal's secrets; `https://ada-coach.vercel.app`). **Deliberately unset until
-  the launch gate passes**; the function returns 503 without them and writes nothing.
+  value in Builder Journal's secrets; `https://ada-coach.vercel.app`). **Set in production: the
+  bridge is live** (real handoffs since 2026-09-11; a signed request on 2026-11-15 was answered,
+  not refused with 503). The function still fails closed with 503 if either is ever removed.
 
 ## Ada's Coaching Persona (System Prompt)
 

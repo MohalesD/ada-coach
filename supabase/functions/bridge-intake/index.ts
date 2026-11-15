@@ -18,28 +18,39 @@
 //   body (unlink): { action: 'unlink', bj_user_id }
 //
 // ── Responses ───────────────────────────────────────────────────────────────
-//   201 { url, session_id, product_id, resumed: false, kickoff }   new sprint
-//   200 { url, session_id, product_id, resumed: true }             same idea again
+//   201 { url, signin, session_id, product_id, resumed: false, kickoff }  new sprint
+//   200 { url, signin, session_id, product_id, resumed: true }            same idea again
 //   200 { ok: true }                                               unlink
 //   400 { error: 'invalid_body', errors[] }
 //   401 { error: 'unauthorized' }           bad/expired/missing signature
-//   403 { error: 'privileged_account' }     email resolves to an admin/owner
 //   409 { error: 'replay' }                 request_id or (user, idea) already in flight
 //   410 { error: 'sprint_deleted' }         idea was sent before; its sprint is gone
-//   429 { error: 'bridge_cap' }             > DAILY_HANDOFF_CAP today for this user
+//   429 { error: 'bridge_cap' }             DAILY_HANDOFF_CAP reached today for this sender,
+//                                           or TARGET_DAILY_HANDOFF_CAP into this account
 //   503 { error: 'bridge_disabled' }        BRIDGE_SHARED_SECRET or APP_URL unset
 //   500 { error: 'bridge_failed' }          anything else; nothing half-created remains
 //
-// The `url` is a one-time magic-link exchange (`/bridge?th=…`), single-use,
-// expiring with the project's OTP window. It is returned once and never
-// logged. Nothing in the idea text is logged either.
+// `signin` says what the `url` is (addendum 2026-11-15, _shared/bridge-launch.ts):
+//   'magiclink'  a one-time magic-link exchange (`/bridge?th=…`), single-use,
+//                expiring with the project's OTP window. Role `user` only.
+//   'self'       `/bridge?signin=self&sprint=…`, which carries NO credential.
+//                Every other role, admin and owner included. The sprint is
+//                written exactly the same; Ada simply never mints a sign-in
+//                for a privileged account from the shared secret, so a leaked
+//                secret still cannot become an owner session. This replaced
+//                the 403 `privileged_account` refusal, which protected the
+//                same thing by refusing the whole handoff.
+// The `url` is returned once and never logged. Nothing in the idea text is
+// logged either.
 //
 // Order of operations (Spec 4 §7, with the handoff row inserted early so a
 // replay is rejected by the unique index BEFORE any model spend):
-//   secret + APP_URL → timestamp + signature → validate → cap → existing
-//   handoff (resume/410) → resolve user (identity → email → createUser) →
-//   privileged guard → upsert identity → insert handoff → insert product →
-//   createSprint → kickoffSprint → fill handoff → generateLink → 201.
+//   secret + APP_URL → timestamp + signature → validate → sender cap →
+//   existing handoff (resume/410) → resolve user (identity → email →
+//   createUser) → target-account cap → upsert identity → insert handoff →
+//   target-account cap recounted → insert product → createSprint →
+//   kickoffSprint → fill handoff → role re-read → launch URL
+//   (generateLink only for role `user`) → 201.
 // Any failure after the handoff insert deletes the handoff, the conversation
 // (the session cascades from it; sessions.product_id is SET NULL so deleting
 // the product alone would orphan it) and the product, so the request id is
@@ -52,9 +63,16 @@ import { verifyBridgeRequest } from "../_shared/bridge-signature.ts";
 import {
   DAILY_HANDOFF_CAP,
   type HandoffBody,
+  type LinkMode,
   parseBridgeBody,
   utcDayStart,
 } from "../_shared/bridge-payload.ts";
+import {
+  buildLaunchUrl,
+  launchSignIn,
+  type LaunchSignIn,
+  TARGET_DAILY_HANDOFF_CAP,
+} from "../_shared/bridge-launch.ts";
 import { createSprint } from "../_shared/sprint-create.ts";
 import { kickoffSprint, type KickoffResult } from "../_shared/sprint-kickoff.ts";
 
@@ -82,27 +100,54 @@ async function loadProfile(
   return (data as Profile | null) ?? null;
 }
 
+// The one place a credential can be minted. `launchSignIn` decides from the
+// role, and generateLink is not even called unless it says 'magiclink', so a
+// privileged account's sign-in is never created, not merely never returned.
+//
+// Two bindings, both from the 2026-11-15 independent review:
+//   1. The role is re-read by id HERE, not taken from the caller. Two model
+//      calls run between resolving the user and this point; a promotion in
+//      that window must not be minted against the stale `user` snapshot.
+//   2. generateLink takes an email, and `user_profiles.email` is a copy that
+//      nothing keeps in step with auth.users. The link is only used if the
+//      auth user it was minted for IS this profile; otherwise an email that
+//      changed hands could carry a sign-in to someone the role check never saw.
 async function mintLaunchUrl(
   service: SupabaseClient,
   appUrl: string,
-  email: string,
+  profileId: string,
   sessionId: string,
-  mode: string,
-): Promise<string | null> {
-  const { data, error } = await service.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-  });
-  const tokenHash = data?.properties?.hashed_token;
-  if (error || !tokenHash) {
-    console.error("bridge-intake generateLink failed:", error?.message ?? "no hashed_token");
-    return null;
+  mode: LinkMode,
+  requestId: string,
+): Promise<{ url: string; signIn: LaunchSignIn } | null> {
+  const profile = await loadProfile(service, profileId);
+  if (!profile) return null;
+  const signIn = launchSignIn(profile.role);
+  if (signIn === "self") {
+    // The audit trail a refusal used to leave. Logged here, at the decision,
+    // so the new-sprint path, the resume path and a role that changed since
+    // the request began are all covered by the one line. Request id only.
+    console.warn("bridge-intake: privileged handoff, no sign-in minted, request", requestId);
   }
-  const url = new URL("/bridge", appUrl);
-  url.searchParams.set("th", tokenHash);
-  url.searchParams.set("sprint", sessionId);
-  url.searchParams.set("mode", mode);
-  return url.toString();
+  let tokenHash: string | null = null;
+  if (signIn === "magiclink") {
+    const { data, error } = await service.auth.admin.generateLink({
+      type: "magiclink",
+      email: profile.email,
+    });
+    tokenHash = data?.properties?.hashed_token ?? null;
+    if (error || !tokenHash) {
+      console.error("bridge-intake generateLink failed:", error?.message ?? "no hashed_token");
+      return null;
+    }
+    if (data?.user?.id !== profile.id) {
+      // Never log the email or the link; the profile id is enough to trace it.
+      console.error("bridge-intake: minted link is for a different auth user than profile", profile.id);
+      return null;
+    }
+  }
+  const url = buildLaunchUrl(appUrl, { sessionId, mode, signIn, tokenHash });
+  return url ? { url, signIn } : null;
 }
 
 // Identity link by Builder Journal id → email lookup → create. Returns the
@@ -248,6 +293,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
     if ((count ?? 0) >= DAILY_HANDOFF_CAP) {
+      console.warn("bridge-intake: sender cap reached, request", requestId);
       return jsonResponse({ error: "bridge_cap" }, 429, req);
     }
 
@@ -275,9 +321,6 @@ Deno.serve(async (req) => {
 
       const profile = await loadProfile(service, existing.user_id as string);
       if (!profile) return jsonResponse({ error: "sprint_deleted" }, 410, req);
-      if (profile.role === "admin" || profile.role === "owner") {
-        return jsonResponse({ error: "privileged_account" }, 403, req);
-      }
 
       await service
         .from("bridge_identities")
@@ -291,10 +334,23 @@ Deno.serve(async (req) => {
           { onConflict: "bj_user_id" },
         );
 
-      const url = await mintLaunchUrl(service, appUrl, profile.email, session.id, body.link_mode);
-      if (!url) return jsonResponse({ error: "bridge_failed" }, 500, req);
+      const launch = await mintLaunchUrl(
+        service,
+        appUrl,
+        profile.id,
+        session.id,
+        body.link_mode,
+        requestId,
+      );
+      if (!launch) return jsonResponse({ error: "bridge_failed" }, 500, req);
       return jsonResponse(
-        { url, session_id: session.id, product_id: existing.product_id, resumed: true },
+        {
+          url: launch.url,
+          signin: launch.signIn,
+          session_id: session.id,
+          product_id: existing.product_id,
+          resumed: true,
+        },
         200,
         req,
       );
@@ -304,11 +360,27 @@ Deno.serve(async (req) => {
     const profile = await resolveUser(service, body);
     if (!profile) return jsonResponse({ error: "bridge_failed" }, 500, req);
 
-    // Guard on D2's one non-equivalent failure mode: a leaked secret must
-    // not be able to mint a sign-in to a privileged Ada account.
-    if (profile.role === "admin" || profile.role === "owner") {
-      console.warn("bridge-intake refused a privileged account for request", requestId);
-      return jsonResponse({ error: "privileged_account" }, 403, req);
+    // D2's one non-equivalent failure mode: a leaked secret must not be able
+    // to mint a sign-in to a privileged Ada account. It cannot: mintLaunchUrl
+    // only calls generateLink for role `user`, and logs every handoff it
+    // declines to mint for.
+
+    // Cap by RECEIVING account as well as by sender. The step-5 cap keys on
+    // bj_user_id, which the holder of the secret chooses; without this one a
+    // leaked secret could fill a single account (the owner's, now that the
+    // handoff is accepted) with sprints and model spend by rotating ids.
+    const { count: targetCount, error: targetErr } = await service
+      .from("bridge_handoffs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", utcDayStart());
+    if (targetErr) {
+      console.error("bridge-intake target cap count failed:", targetErr);
+      return jsonResponse({ error: "bridge_failed" }, 500, req);
+    }
+    if ((targetCount ?? 0) >= TARGET_DAILY_HANDOFF_CAP) {
+      console.warn("bridge-intake: receiving-account cap reached, request", requestId);
+      return jsonResponse({ error: "bridge_cap" }, 429, req);
     }
 
     // 8. Identity record, always written; mode recorded (D5).
@@ -353,6 +425,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
     ids.handoffId = handoff.id as string;
+
+    // The target cap again, now that this row is in. The check above is
+    // check-then-insert, so a burst of concurrent requests could all read a
+    // count under the cap. Counting after the insert closes that: every
+    // request in a burst sees the others' rows, and the ones over the line
+    // withdraw before any model spend. A tie can make two withdraw where one
+    // would do; under-admitting is the safe direction for a cap.
+    const { count: afterCount, error: afterErr } = await service
+      .from("bridge_handoffs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", utcDayStart());
+    if (afterErr || (afterCount ?? 0) > TARGET_DAILY_HANDOFF_CAP) {
+      await rollback(service, ids);
+      if (afterErr) {
+        console.error("bridge-intake target cap recount failed:", afterErr);
+        return jsonResponse({ error: "bridge_failed" }, 500, req);
+      }
+      console.warn("bridge-intake: receiving-account cap reached after insert, request", requestId);
+      return jsonResponse({ error: "bridge_cap" }, 429, req);
+    }
 
     // 10. Product, marked as a bridge arrival (service-write-only columns).
     const { data: product, error: prodErr } = await service
@@ -416,15 +509,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
 
-    // 13. One-time sign-in (D7).
-    const url = await mintLaunchUrl(
+    // 13. Launch URL: a one-time sign-in (D7) for role `user`, a plain
+    //     sprint link for everyone else.
+    const launch = await mintLaunchUrl(
       service,
       appUrl,
-      profile.email,
+      profile.id,
       created.session.id,
       body.link_mode,
+      requestId,
     );
-    if (!url) {
+    if (!launch) {
       await rollback(service, ids);
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
@@ -432,7 +527,8 @@ Deno.serve(async (req) => {
     // 14.
     return jsonResponse(
       {
-        url,
+        url: launch.url,
+        signin: launch.signIn,
         session_id: created.session.id,
         product_id: product.id,
         resumed: false,
