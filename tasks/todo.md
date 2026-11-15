@@ -1637,3 +1637,43 @@ the two tested pure modules.
 **Deploy order (irreversible step last):** merge → Vercel serves the new `/bridge` → deploy
 `bridge-intake`. Deploying the function first would send an owner to a `/bridge` page that does
 not know `signin=self` and shows "This link expired".
+
+
+---
+
+## ✅ 2026-11-15 — Dictation in the chat boxes, and emphasis in Ada's replies
+
+Asked for by Mo after the first owner handoff. Branch `claude/festive-goodall-qhvufk`.
+
+- [x] `src/lib/dictation.ts` (+ 11 Vitest): `mergeTranscript` (carried over from Builder
+      Journal's `src/lib/transcription.ts`, the defence against Android Chrome re-emitting a
+      growing prefix), `takeDictation` (new words only, so typing while the mic is on is not
+      overwritten), `appendDictated`, `dictationErrorText`
+- [x] `src/hooks/use-dictation.ts`: one browser speech-recognition session; one box listens
+      at a time; stops on unmount
+- [x] `src/components/DictationButton.tsx`: mic beside the composer in `Index.tsx` (chat) and
+      `Sprint.tsx`. Renders nothing where the browser has no speech recognition. Stops when
+      the box is disabled. Says once per page load where the audio goes.
+- [x] Emphasis: new prompt version **"Ada v4.1 - Emphasis in replies"**, active in production.
+      Ada v4's text plus an `EMPHASIS:` section (light bold for key terms, italics for stress
+      and quoted phrases, never the closing question). Inserted and activated in one
+      transaction through the Supabase connector, the same two writes the Admin panel makes.
+      **To undo: re-activate Ada v4 in Admin → Prompts.** No code or deploy involved; both
+      views already render `**bold**` and `*italics*`.
+
+### Review
+
+- Dictation uses the browser's Web Speech API, not Ada's servers. In Chrome the audio goes
+  to Google's speech service. The button says so on first use; `/privacy` does not mention
+  it yet. Flagged, not changed here.
+- Firefox has no speech recognition, so it shows no mic. That is the intended fallback.
+- Checked in Chromium with a simulated speech engine: no button without support; pressed
+  state on; "just" / "just the" / "just the test" lands as "just the test"; typing mid-session
+  is kept; disabling the box aborts the mic. A real microphone was not used.
+- No DOM test library exists in this repo, so the hook and button have no automated test;
+  the logic they depend on does.
+- The emphasis rule has not been evaluated against real replies. It is prose in a prompt:
+  watch the next few sprints and tune the section if she over-bolds.
+
+**Verification:** `npm run type-check` clean; `npm test` 173/173 across 18 files; `npm run build`
+clean; no new lint errors.

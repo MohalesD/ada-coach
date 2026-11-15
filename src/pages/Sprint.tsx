@@ -17,6 +17,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import DictationButton from '@/components/DictationButton';
+import { appendDictated } from '@/lib/dictation';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -856,6 +858,10 @@ export default function Sprint() {
             disabled={inputLocked}
             className="min-h-[44px] resize-none"
             aria-label="Message Ada"
+          />
+          <DictationButton
+            onText={(delta) => setChatInput((prev) => appendDictated(prev, delta))}
+            disabled={inputLocked}
           />
           <Button onClick={() => void handleTurn()} disabled={!chatInput.trim() || inputLocked}>
             Send
