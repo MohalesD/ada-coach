@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import DictationButton from '@/components/DictationButton';
+import { appendDictated } from '@/lib/dictation';
 import { useAutosizeTextarea } from '@/hooks/use-autosize-textarea';
 import {
   DropdownMenu,
@@ -561,6 +563,10 @@ export default function Index() {
                 rows={1}
                 disabled={isBusy || isOutOfCredits}
                 className="max-h-[200px] min-h-[44px] resize-none overflow-y-auto"
+              />
+              <DictationButton
+                onText={(delta) => setInput((prev) => appendDictated(prev, delta))}
+                disabled={isBusy || isOutOfCredits}
               />
               <Button
                 onClick={() => void send()}
