@@ -153,9 +153,9 @@ export default function Bridge() {
             <CardHeader>
               <CardTitle>Your sprint is ready</CardTitle>
               <CardDescription>
-                Your idea arrived and Ada has read it. This is an admin account, so Ada does
-                not sign it in from another app. Sign in yourself and you will land straight
-                in the sprint.
+                Your idea arrived in Ada. This is an admin or owner account, so Ada does not
+                sign it in from another app. Sign in yourself and you will land straight in
+                the sprint.
               </CardDescription>
             </CardHeader>
             <CardContent>

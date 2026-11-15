@@ -48,7 +48,8 @@
 //   secret + APP_URL → timestamp + signature → validate → sender cap →
 //   existing handoff (resume/410) → resolve user (identity → email →
 //   createUser) → target-account cap → upsert identity → insert handoff →
-//   insert product → createSprint → kickoffSprint → fill handoff → launch URL
+//   target-account cap recounted → insert product → createSprint →
+//   kickoffSprint → fill handoff → role re-read → launch URL
 //   (generateLink only for role `user`) → 201.
 // Any failure after the handoff insert deletes the handoff, the conversation
 // (the session cascades from it; sessions.product_id is SET NULL so deleting
@@ -117,10 +118,17 @@ async function mintLaunchUrl(
   profileId: string,
   sessionId: string,
   mode: LinkMode,
+  requestId: string,
 ): Promise<{ url: string; signIn: LaunchSignIn } | null> {
   const profile = await loadProfile(service, profileId);
   if (!profile) return null;
   const signIn = launchSignIn(profile.role);
+  if (signIn === "self") {
+    // The audit trail a refusal used to leave. Logged here, at the decision,
+    // so the new-sprint path, the resume path and a role that changed since
+    // the request began are all covered by the one line. Request id only.
+    console.warn("bridge-intake: privileged handoff, no sign-in minted, request", requestId);
+  }
   let tokenHash: string | null = null;
   if (signIn === "magiclink") {
     const { data, error } = await service.auth.admin.generateLink({
@@ -285,6 +293,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
     if ((count ?? 0) >= DAILY_HANDOFF_CAP) {
+      console.warn("bridge-intake: sender cap reached, request", requestId);
       return jsonResponse({ error: "bridge_cap" }, 429, req);
     }
 
@@ -325,7 +334,14 @@ Deno.serve(async (req) => {
           { onConflict: "bj_user_id" },
         );
 
-      const launch = await mintLaunchUrl(service, appUrl, profile.id, session.id, body.link_mode);
+      const launch = await mintLaunchUrl(
+        service,
+        appUrl,
+        profile.id,
+        session.id,
+        body.link_mode,
+        requestId,
+      );
       if (!launch) return jsonResponse({ error: "bridge_failed" }, 500, req);
       return jsonResponse(
         {
@@ -346,12 +362,8 @@ Deno.serve(async (req) => {
 
     // D2's one non-equivalent failure mode: a leaked secret must not be able
     // to mint a sign-in to a privileged Ada account. It cannot: mintLaunchUrl
-    // only calls generateLink for role `user`. What a privileged handoff still
-    // does is write a sprint, so it is logged (request id only) for the audit
-    // trail a refusal used to leave.
-    if (launchSignIn(profile.role) === "self") {
-      console.warn("bridge-intake: privileged handoff, no sign-in minted, request", requestId);
-    }
+    // only calls generateLink for role `user`, and logs every handoff it
+    // declines to mint for.
 
     // Cap by RECEIVING account as well as by sender. The step-5 cap keys on
     // bj_user_id, which the holder of the secret chooses; without this one a
@@ -367,6 +379,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "bridge_failed" }, 500, req);
     }
     if ((targetCount ?? 0) >= TARGET_DAILY_HANDOFF_CAP) {
+      console.warn("bridge-intake: receiving-account cap reached, request", requestId);
       return jsonResponse({ error: "bridge_cap" }, 429, req);
     }
 
@@ -430,6 +443,7 @@ Deno.serve(async (req) => {
         console.error("bridge-intake target cap recount failed:", afterErr);
         return jsonResponse({ error: "bridge_failed" }, 500, req);
       }
+      console.warn("bridge-intake: receiving-account cap reached after insert, request", requestId);
       return jsonResponse({ error: "bridge_cap" }, 429, req);
     }
 
@@ -503,6 +517,7 @@ Deno.serve(async (req) => {
       profile.id,
       created.session.id,
       body.link_mode,
+      requestId,
     );
     if (!launch) {
       await rollback(service, ids);
