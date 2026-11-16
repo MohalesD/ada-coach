@@ -1,9 +1,10 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/lib/auth-context';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import HomeRoute from '@/components/HomeRoute';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import Index from './pages/Index';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
@@ -21,6 +22,8 @@ import Privacy from './pages/Privacy';
 import Bridge from './pages/Bridge';
 import NotFound from './pages/NotFound';
 
+const Roadmap = lazy(() => import('./pages/Roadmap'));
+
 function App() {
   return (
     <Router>
@@ -37,14 +40,17 @@ function App() {
             {/* Public by design: share links open for logged-out visitors. */}
             <Route path="/share/:token" element={<ShareReport />} />
             <Route path="/portfolio/share/:token" element={<SharePortfolio />} />
+            {/* Public by design: the roadmap is the same for everyone. */}
             <Route
-              path="/"
+              path="/roadmap"
               element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
+                <Suspense fallback={<div className="h-[100dvh] bg-[#1c140b]" />}>
+                  <Roadmap />
+                </Suspense>
               }
             />
+            {/* Landing page when signed out, the chat when signed in. */}
+            <Route path="/" element={<HomeRoute />} />
             <Route
               path="/settings"
               element={

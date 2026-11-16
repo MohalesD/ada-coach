@@ -32,7 +32,10 @@ export default function Login() {
   // addendum). Validated to one exact shape; anything else falls back to "/".
   const afterSignIn =
     safeReturnTo((location.state as { returnTo?: unknown } | null)?.returnTo) ?? '/';
-  const [mode, setMode] = useState<Mode>('signin');
+  // The landing page's "Start free" links arrive asking for the sign-up form.
+  const startMode: Mode =
+    (location.state as { mode?: unknown } | null)?.mode === 'signup' ? 'signup' : 'signin';
+  const [mode, setMode] = useState<Mode>(startMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -226,7 +229,9 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-extrabold tracking-tight">
-            <span className="gradient-text">Ada</span>
+            <Link to="/" className="gradient-text" aria-label="Ada, what she does">
+              Ada
+            </Link>
           </h1>
           <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
             Customer Discovery Coach
