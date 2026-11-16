@@ -7,6 +7,35 @@ platform expansion are Run 2+).
 
 ---
 
+## 🚧 2026-11-16 — Public landing page + public roadmap
+
+Ada had no front door: a signed-out visitor saw only `/login`. This adds a
+landing page at `/` (signed-out only; signed-in still gets the chat) and a
+public roadmap at `/roadmap`. Frontend only: no schema, no Edge Function,
+no new dependency. Pattern learned from Talent Brand Studio's landing v2
+(one page, every section a working miniature, timer-driven motion with a
+CSS fill, reveal on scroll, everything still under reduced motion).
+
+- [x] `HomeRoute`: `/` shows Landing when signed out, `Index` when signed in
+- [x] `/roadmap` public route; both pages lazy-loaded so the app bundle is unchanged
+- [x] Copy and roadmap data in `src/content/` (one file each, no strings in components)
+- [x] Hero: scripted coaching exchange (labelled as scripted, no model call)
+- [x] Leading-question reframer, sprint tour (7 real steps), risk map playground
+      (uses the real `riskScore` from `src/lib/risk.ts`), two tracks, capabilities, FAQ
+- [x] Roadmap: Live / Working on / Coming soon (now, next, later), no dates anywhere
+- [x] Sample voices section, each quote marked "Sample voice" (the Talent Brand Studio pattern)
+- [x] Login accepts `state.mode = 'signup'` so "Start free" opens the sign-up form
+- [x] Test: roadmap data integrity (`src/content/roadmap.test.ts`)
+- [ ] Mo: review on the Vercel preview, phone width included
+
+### Review
+
+See the PR description. Nothing here claims a testimonial, a customer count
+or a date for unshipped work. Roadmap wording leaves out security-issue
+detail on purpose.
+
+---
+
 ## ✅ Done 2026-09-20 — Migrate to Supabase publishable/secret keys
 
 Legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (server) and
