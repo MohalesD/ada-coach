@@ -191,7 +191,6 @@ export default function Roadmap() {
                     >
                       <p className="rm-card-meta">
                         <span>{THEME_COPY[item.theme]}</span>
-                        {item.shipped && <time>{item.shipped}</time>}
                       </p>
                       <h3>{item.title}</h3>
                       <p>{item.summary}</p>
@@ -202,7 +201,6 @@ export default function Roadmap() {
             </section>
           ))}
 
-          <p className="rm-reconciled">{COPY.reconciled}</p>
         </div>
       </main>
 

@@ -11,6 +11,7 @@ import {
   FileText,
   Globe,
   GraduationCap,
+  Info,
   MessagesSquare,
   Mic,
   Pointer,
@@ -31,6 +32,7 @@ import {
   RULES,
   SPRINT,
   TRACKS,
+  VOICES,
 } from '@/content/landing';
 import { ROADMAP, STATUS_COPY, STATUS_ORDER, countByStatus } from '@/content/roadmap';
 import { Heading, SiteFooter, SiteNav, StartLink } from '@/components/landing/SiteChrome';
@@ -40,6 +42,7 @@ import SprintTour from '@/components/landing/SprintTour';
 import RiskPlayground from '@/components/landing/RiskPlayground';
 import Tracks from '@/components/landing/Tracks';
 import Faq from '@/components/landing/Faq';
+import Voices from '@/components/landing/Voices';
 import { useReveal, useSpy, useStill } from '@/components/landing/hooks';
 import '@/components/landing/landing.css';
 
@@ -241,7 +244,22 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="lp-sec lp-sec-tint" aria-labelledby="lp-road-title">
+        <section className="lp-sec lp-sec-tint" id="voices" aria-labelledby="lp-voices-title">
+          <div className="lp-wrap lp-split">
+            <div data-rv>
+              <Heading lines={VOICES.title} id="lp-voices-title" />
+              <p className="lp-vo-note">
+                <Info aria-hidden="true" />
+                <span>{VOICES.note}</span>
+              </p>
+            </div>
+            <div data-rv>
+              <Voices still={still} />
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-sec" aria-labelledby="lp-road-title">
           <div className="lp-wrap lp-split">
             <div data-rv>
               <Heading lines={ROADMAP_TEASER.title} id="lp-road-title" />
@@ -274,7 +292,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="lp-sec" id="faq" aria-labelledby="lp-faq-title">
+        <section className="lp-sec lp-sec-tint" id="faq" aria-labelledby="lp-faq-title">
           <div className="lp-wrap lp-faq-grid">
             <div data-rv>
               <h2 className="lp-h2" id="lp-faq-title">

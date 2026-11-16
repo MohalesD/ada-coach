@@ -22,7 +22,8 @@ CSS fill, reveal on scroll, everything still under reduced motion).
 - [x] Hero: scripted coaching exchange (labelled as scripted, no model call)
 - [x] Leading-question reframer, sprint tour (7 real steps), risk map playground
       (uses the real `riskScore` from `src/lib/risk.ts`), two tracks, capabilities, FAQ
-- [x] Roadmap: Live / Up next / Planned / Exploring, reconciled against Linear 2026-11-16
+- [x] Roadmap: Live / Working on / Coming soon (now, next, later), no dates anywhere
+- [x] Sample voices section, each quote marked "Sample voice" (the Talent Brand Studio pattern)
 - [x] Login accepts `state.mode = 'signup'` so "Start free" opens the sign-up form
 - [x] Test: roadmap data integrity (`src/content/roadmap.test.ts`)
 - [ ] Mo: review on the Vercel preview, phone width included

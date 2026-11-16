@@ -8,11 +8,9 @@ describe('public roadmap data', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('dates every live item and no unshipped one', () => {
-    for (const item of ROADMAP) {
-      if (item.status === 'live') expect(item.shipped, item.id).toMatch(/^[A-Z][a-z]{2} \d{4}$/);
-      else expect(item.shipped, item.id).toBeUndefined();
-    }
+  it('carries no dates: no years and no month names', () => {
+    const dated = /\b(20\d\d|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/;
+    for (const item of ROADMAP) expect(item.title + ' ' + item.summary, item.id).not.toMatch(dated);
   });
 
   it('has something at every stage, and the counts add up', () => {
@@ -28,7 +26,7 @@ describe('public roadmap data', () => {
   it('the landing teaser points at items that exist and have not shipped', () => {
     for (const id of ROADMAP_TEASER.highlights) {
       const item = ROADMAP.find((entry) => entry.id === id);
-      expect(item?.status, id).toMatch(/^(next|planned|exploring)$/);
+      expect(item?.status, id).toMatch(/^(working|soon)$/);
     }
   });
 });

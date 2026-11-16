@@ -9,6 +9,7 @@ export const NAV_LINKS = [
   { href: '#sprint', text: 'The sprint' },
   { href: '#risk', text: 'Risk map' },
   { href: '#capabilities', text: 'What she does' },
+  { href: '#voices', text: 'Voices' },
   { href: '#faq', text: 'Questions' },
 ] as const;
 
@@ -361,9 +362,70 @@ export const RULES = {
   ],
 } as const;
 
+export const VOICES = {
+  title: ['What we want PMs', 'to say.'],
+  note: 'Sample voices. Ada is an early demo, so these are the reactions we are building toward, not customer quotes yet.',
+  group: 'Sample voices',
+  chip: 'Sample voice',
+  prev: 'Previous voice',
+  next: 'Next voice',
+  of: (of: number) => `of ${of}`,
+  // [text, emphasised]
+  items: [
+    {
+      quote: [
+        ['I walked in sure about the feature. Twenty minutes later I had ', false],
+        ['three assumptions I had never said out loud', true],
+        ['.', false],
+      ],
+      who: 'An early-stage PM',
+      where: 'B2B software',
+      initials: 'PM',
+    },
+    {
+      quote: [
+        ['She would not tell me the idea was good. ', false],
+        ['That turned out to be the useful part.', true],
+      ],
+      who: 'A founder doing her own discovery',
+      where: 'Pre-seed startup',
+      initials: 'FD',
+    },
+    {
+      quote: [
+        ['My interview guide used to be a list of yes or no questions. Now ', false],
+        ['customers tell me stories', true],
+        ['.', false],
+      ],
+      who: 'A product manager',
+      where: 'Marketplace team',
+      initials: 'MT',
+    },
+    {
+      quote: [
+        ['We dropped a quarter of the roadmap before writing a line of code. ', false],
+        ['The risk map made it an easy call.', true],
+      ],
+      who: 'A head of product',
+      where: 'Growing startup',
+      initials: 'HP',
+    },
+    {
+      quote: [
+        ['I had no PM title and no portfolio. I left with ', false],
+        ['a PRD I could defend in an interview', true],
+        ['.', false],
+      ],
+      who: 'An aspiring PM',
+      where: 'Career switcher',
+      initials: 'AP',
+    },
+  ] as { quote: [string, boolean][]; who: string; where: string; initials: string }[],
+};
+
 export const ROADMAP_TEASER = {
   title: ['Built in the open.', 'Here’s what is next.'],
-  lede: 'Ada is an early build that moves fast. The roadmap is public, and the feedback button inside the product feeds straight into it.',
+  lede: 'Ada is an early build that moves fast. The roadmap is public: what is live, what is being worked on and what is coming soon.',
   link: 'Open the full roadmap',
   highlights: ['evals', 'audit', 'twin'],
 };
