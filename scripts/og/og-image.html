@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Source for public/og-image.png (1200x630). Render with scripts/og/render.cjs. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: Fraunces; font-weight: 100 900; src: url('../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2') format('woff2'); }
+@font-face { font-family: Fraunces; font-style: italic; font-weight: 100 900; src: url('../../node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-italic.woff2') format('woff2'); }
+@font-face { font-family: Karla; font-weight: 200 800; src: url('../../node_modules/@fontsource-variable/karla/files/karla-latin-wght-normal.woff2') format('woff2'); }
+* { margin: 0; box-sizing: border-box; }
+body { width: 1200px; height: 630px; overflow: hidden; position: relative; font-family: Karla, sans-serif; color: #f6efe0;
+  background:
+    radial-gradient(620px circle at 86% 46%, rgba(227,179,102,.30), transparent 68%),
+    radial-gradient(900px circle at 0% 110%, rgba(139,99,36,.35), transparent 60%),
+    #1c140b; }
+.brand { position: absolute; left: 72px; top: 60px; display: flex; align-items: center; gap: 16px; }
+.brand svg { width: 52px; height: 52px; }
+.brand b { font-family: Fraunces, serif; font-weight: 560; font-size: 40px; letter-spacing: -.01em; }
+.brand span { margin-left: 6px; padding-left: 20px; border-left: 1.5px solid rgba(246,239,224,.25); font-size: 19px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #e3b366; }
+h1 { position: absolute; left: 72px; top: 164px; width: 720px; font-family: Fraunces, serif; font-weight: 400; font-size: 78px; line-height: 1.0; letter-spacing: -.028em; font-variation-settings: 'opsz' 144, 'SOFT' 40; }
+h1 em { position: relative; display: inline-block; color: #c9b99c; white-space: nowrap; }
+h1 em svg { position: absolute; left: -3%; top: 44%; width: 106%; height: 34px; overflow: visible; }
+h1 .ask { display: block; margin-top: 12px; white-space: nowrap; color: #e3b366; font-style: italic; }
+.sub { position: absolute; left: 72px; bottom: 62px; width: 640px; font-size: 27px; line-height: 1.35; color: #d6c8ad; }
+.sub b { color: #f6efe0; font-weight: 700; }
+/* the risk map, bleeding off the right edge */
+.map { position: absolute; right: -70px; top: 96px; width: 470px; height: 470px; transform: rotate(-7deg); }
+.map svg { width: 100%; height: 100%; overflow: visible; }
+.tag { position: absolute; right: 74px; top: 78px; padding: 7px 14px; border-radius: 999px; border: 1.5px dashed #e3b366; color: #e3b366; font-size: 15px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; transform: rotate(-7deg); background: #1c140b; }
+</style>
+</head>
+<body>
+  <div class="map">
+    <svg viewBox="0 0 400 400">
+      <rect x="0" y="0" width="400" height="400" rx="26" fill="#faf7f0"/>
+      <rect x="24" y="24" width="141" height="141" rx="12" fill="rgba(169,50,38,.10)" stroke="rgba(169,50,38,.45)" stroke-dasharray="6 6" stroke-width="1.5"/>
+      <g stroke="#e4d8c0" stroke-width="1.2">
+        <line x1="24" y1="24" x2="376" y2="24"/><line x1="24" y1="94.4" x2="376" y2="94.4"/><line x1="24" y1="164.8" x2="376" y2="164.8"/><line x1="24" y1="235.2" x2="376" y2="235.2"/><line x1="24" y1="305.6" x2="376" y2="305.6"/><line x1="24" y1="376" x2="376" y2="376"/>
+        <line x1="24" y1="24" x2="24" y2="376"/><line x1="94.4" y1="24" x2="94.4" y2="376"/><line x1="164.8" y1="24" x2="164.8" y2="376"/><line x1="235.2" y1="24" x2="235.2" y2="376"/><line x1="305.6" y1="24" x2="305.6" y2="376"/><line x1="376" y1="24" x2="376" y2="376"/>
+      </g>
+      <g font-family="Karla" font-weight="800" font-size="19" fill="#faf7f0" text-anchor="middle">
+        <circle cx="129.6" cy="59.2" r="34" fill="none" stroke="#2c2214" stroke-width="2.5" opacity=".35"/>
+        <circle cx="129.6" cy="59.2" r="26" fill="none" stroke="#2c2214" stroke-width="2.5"/>
+        <circle cx="129.6" cy="59.2" r="19" fill="#b8853a"/><text x="129.6" y="65.6">1</text>
+        <circle cx="59.2" cy="129.6" r="19" fill="#a34e0d"/><text x="59.2" y="136">2</text>
+        <circle cx="129.6" cy="200" r="19" fill="#4a7031"/><text x="129.6" y="206.4">3</text>
+        <circle cx="200" cy="200" r="19" fill="#46688b"/><text x="200" y="206.4">4</text>
+        <circle cx="270.4" cy="129.6" r="19" fill="#b8853a"/><text x="270.4" y="136">5</text>
+        <circle cx="59.2" cy="270.4" r="19" fill="#46688b"/><text x="59.2" y="276.8">6</text>
+      </g>
+    </svg>
+  </div>
+  <div class="tag">Test first</div>
+
+  <div class="brand">
+    <svg viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8B6324"/><stop offset="1" stop-color="#D9A555"/></linearGradient></defs><rect width="100" height="100" rx="24" fill="url(#g)"/><path d="M48,14 L52,14 L88,88 L12,88 Z M48,44 L52,44 L63,88 L37,88 Z" fill="#FAF7F0" fill-rule="evenodd"/><rect x="40" y="57" width="20" height="13" fill="#FAF7F0"/></svg>
+    <b>Ada</b>
+    <span>AI discovery coach</span>
+  </div>
+
+  <h1>Everyone says <em>great idea.<svg viewBox="0 0 300 30" preserveAspectRatio="none"><path d="M4 20 C 70 6, 130 26, 190 12 S 270 10, 296 16" fill="none" stroke="#e3b366" stroke-width="6" stroke-linecap="round"/></svg></em>
+    <span class="ask">Ada asks how you know.</span></h1>
+
+  <p class="sub">Pressure-test the assumptions under your product idea. <b>Before you build it.</b></p>
+</body>
+</html>
